@@ -107,6 +107,29 @@
         </div>
     </div>
 
+    <!-- Edit Zone / Kasten Bearbeitungs-Modal -->
+    <div id="editZoneModal" class="modal-backdrop">
+        <div class="modal-content">
+            <div class="modal-header">Bereich / Kasten bearbeiten</div>
+            <form id="editZoneForm">
+                <input type="hidden" id="editZoneId" />
+                <div class="form-group">
+                    <label>Bereichsbezeichnung:</label>
+                    <input type="text" id="editZoneTitle" required />
+                </div>
+                <div class="form-group">
+                    <label>Rahmenfarbe anpassen:</label>
+                    <div class="color-presets-grid" id="editZoneColorPresetsContainer"></div>
+                    <input type="hidden" id="editZoneColor" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-sec" onclick="closeModal('editZoneModal')">Abbrechen</button>
+                    <button type="submit" class="btn-prim">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Admin: Rückwirkenden Zeiteintrag erstellen -->
     <div id="retroLogModal" class="modal-backdrop">
         <div class="modal-content">
@@ -244,12 +267,23 @@
     </div>
 
     <!-- Konfigurations-Modal (Block) -->
+    <!-- Konfigurations-Modal (Block) -->
     <div id="configModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header" id="modalTitle">Block konfigurieren</div>
             <form id="configForm">
                 <input type="hidden" id="editNodeId" />
                 <input type="hidden" id="editColor" value="#2b6cb0" />
+
+                <!-- NEU: Admin Status Override -->
+                <div class="form-group" id="editStatusGroup" style="display: none;">
+                    <label>Bearbeitungs-Status:</label>
+                    <select id="editCompletionStatus">
+                        <option value="open">Offen / In Bearbeitung</option>
+                        <option value="pending_approval">Wartet auf Freigabe</option>
+                        <option value="completed">✅ Erledigt</option>
+                    </select>
+                </div>
 
                 <div class="form-group">
                     <label>Typ:</label>
@@ -356,9 +390,14 @@
         </div>
     </div>
 
-    <script src="db.js"></script>
-    <script src="canvas.js"></script>
+    <!-- 1. UI & Helfer zuerst laden -->
     <script src="ui.js"></script>
+    <!-- 2. Datenhaltung & Logik -->
+    <script src="db.js"></script>
+    <!-- 3. Canvas Engine -->
+    <script src="canvas.js"></script>
+    <!-- 4. Bootstrap / Event-Initialisierung -->
     <script src="app.js"></script>
+
 </body>
 </html>

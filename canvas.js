@@ -1,8 +1,7 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Canvas Engine, Panzoom, Native SVG Splines, Zonen & Rendering
- * Zeitstempel: 2026-08-22 16:00:00 CEST
+ * Domain: Canvas Engine (Anti-Freeze, Zonen-Verschachtelung bis 5 Level)
  * =============================================================================
  */
 
@@ -17,7 +16,7 @@ function initPanzoom() {
         minScale: 0.3,
         contain: 'outside',
         canvas: true,
-        excludeClass: 'assembly-card, project-zone, zone-resize-handle'
+        excludeClass: 'no-pan'
     });
 
     const viewport = document.getElementById('viewport');
@@ -71,7 +70,6 @@ function handleCanvasContextMenu(e) {
     }
 }
 
-// Verbindungs-Logik
 window.handleEndpointClick = async function (e, nodeId, pointType) {
     e.stopPropagation();
 
@@ -148,7 +146,6 @@ window.handleDisconnectClick = async function (sourceId, targetId) {
     }
 };
 
-// Subtree-Logik
 function getDescendantNodeIds(parentId) {
     const descendants = new Set();
     const queue = [parentId];
@@ -191,7 +188,52 @@ window.toggleInlineLogs = function (nodeId) {
     renderCanvas();
 };
 
-// Canvas & Zonen & Blöcke rendern
+// --- HILFSFUNKTIONEN FÜR ZONEN-VERSCHACHTELUNG ---
+function getZoneDepth(zoneId) {
+    let depth = 0;
+    let current = currentZones.find(z => z.id === zoneId);
+    while (current && current.parent_zone_id) {
+        depth++;
+        current = currentZones.find(z => z.id === current.parent_zone_id);
+        if (depth > 10) break; // Endlosschleifen-Schutz
+    }
+    return depth;
+}
+
+function getAllDescendantZones(zoneId) {
+    const descendants = [];
+    const queue = [zoneId];
+    while (queue.length > 0) {
+        const currentId = queue.shift();
+        const children = currentZones.filter(z => z.parent_zone_id === currentId);
+        children.forEach(c => {
+            descendants.push(c.id);
+            queue.push(c.id);
+        });
+    }
+    return descendants;
+}
+
+// Findet den innersten Kasten an einer Koordinate (x, y)
+function getDeepestZoneAt(x, y, excludeZoneIds = []) {
+    let deepestZone = null;
+    let maxDepth = -1;
+
+    for (const z of currentZones) {
+        if (excludeZoneIds.includes(z.id)) continue;
+        if (x >= z.pos_x && x <= z.pos_x + z.width &&
+            y >= z.pos_y && y <= z.pos_y + z.height) {
+            const depth = getZoneDepth(z.id);
+            if (depth > maxDepth) {
+                maxDepth = depth;
+                deepestZone = z;
+            }
+        }
+    }
+    return deepestZone;
+}
+
+// --- RENDERING ---
 function renderCanvas() {
     const canvas = document.getElementById('canvas');
     const svgLayer = document.getElementById('connections-layer');
@@ -202,56 +244,167 @@ function renderCanvas() {
 
     const rollups = calculateRollups();
 
-    // 1. Zonen / Kästen rendern (z-index 2)
-    currentZones.forEach(zone => {
+    const nodeDirectStats = {};
+    currentNodes.forEach(n => {
+        const logs = currentTimeLogs.filter(l => l.node_id === n.id);
+        let dSpent = 0, drSpent = 0;
+        logs.forEach(l => {
+            if (l.task_type === 'design') dSpent += parseFloat(l.hours);
+            if (l.task_type === 'drafting') drSpent += parseFloat(l.hours);
+        });
+        nodeDirectStats[n.id] = {
+            dBudg: parseFloat(n.budget_design_hours) || 0,
+            drBudg: parseFloat(n.budget_drafting_hours) || 0,
+            dSpent,
+            drSpent
+        };
+    });
+
+    const zoneRollups = {};
+    currentZones.forEach(z => {
+        zoneRollups[z.id] = { dBudg: 0, drBudg: 0, dSpent: 0, drSpent: 0 };
+    });
+
+    currentNodes.forEach(n => {
+        if (n.zone_id && zoneRollups[n.zone_id]) {
+            zoneRollups[n.zone_id].dBudg += nodeDirectStats[n.id].dBudg;
+            zoneRollups[n.zone_id].drBudg += nodeDirectStats[n.id].drBudg;
+            zoneRollups[n.zone_id].dSpent += nodeDirectStats[n.id].dSpent;
+            zoneRollups[n.zone_id].drSpent += nodeDirectStats[n.id].drSpent;
+        }
+    });
+
+    const zonesByDepthDesc = [...currentZones].sort((a, b) => getZoneDepth(b.id) - getZoneDepth(a.id));
+    zonesByDepthDesc.forEach(z => {
+        if (z.parent_zone_id && zoneRollups[z.parent_zone_id]) {
+            zoneRollups[z.parent_zone_id].dBudg += zoneRollups[z.id].dBudg;
+            zoneRollups[z.parent_zone_id].drBudg += zoneRollups[z.id].drBudg;
+            zoneRollups[z.parent_zone_id].dSpent += zoneRollups[z.id].dSpent;
+            zoneRollups[z.parent_zone_id].drSpent += zoneRollups[z.id].drSpent;
+        }
+    });
+
+    const sortedZones = [...currentZones].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
+
+    sortedZones.forEach(zone => {
         const zoneEl = document.createElement('div');
         zoneEl.id = zone.id;
-        zoneEl.className = `project-zone ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? 'draggable-enabled' : ''}`;
+        const canMoveZone = isAdmin || (activeUserCode && activeUserCode === zone.created_by);
+        const zoneDepth = getZoneDepth(zone.id);
+
+        zoneEl.className = `project-zone no-pan ${canMoveZone ? 'draggable-enabled' : ''}`;
         zoneEl.style.left = `${zone.pos_x}px`;
         zoneEl.style.top = `${zone.pos_y}px`;
         zoneEl.style.width = `${zone.width}px`;
         zoneEl.style.height = `${zone.height}px`;
         zoneEl.style.borderColor = zone.color_hex || '#a0aec0';
+        zoneEl.style.zIndex = 2 + zoneDepth;
+
+        const zStats = zoneRollups[zone.id];
+        const zdPct = zStats.dBudg > 0 ? Math.round((zStats.dSpent / zStats.dBudg) * 100) : 0;
+        const zdrPct = zStats.drBudg > 0 ? Math.round((zStats.drSpent / zStats.drBudg) * 100) : 0;
+        const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
+        const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
         zoneEl.innerHTML = `
-      <div class="project-zone-header" style="border-bottom-color: ${zone.color_hex || '#a0aec0'};">
-        <span>📍 ${escapeHtml(zone.title)}</span>
+      <div class="project-zone-header" style="border-bottom-color: ${zone.color_hex || '#a0aec0'}; align-items: flex-start;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <span>📍 ${escapeHtml(zone.title)}</span>
+          <div style="display:flex; gap:6px; cursor:help;">
+              <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;" title="CAD: ${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}">
+                  <div class="pie-inner" style="width: 14px; height: 14px; font-size: 6px;"></div>
+              </div>
+              <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;" title="Zeichnung: ${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}">
+                  <div class="pie-inner" style="width: 14px; height: 14px; font-size: 6px;"></div>
+              </div>
+          </div>
+        </div>
         <div class="zone-actions">
-          ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
-            <button type="button" class="zone-btn" title="Bereich umbenennen" onclick="handleRenameZone('${zone.id}')">✏️</button>
+          ${canMoveZone ? `
+            <button type="button" class="zone-btn" title="Bereich bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
             <button type="button" class="zone-btn" style="color:#e53e3e;" title="Bereich löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
           ` : ''}
         </div>
       </div>
-      <div class="zone-resize-handle" title="Größe anpassen"></div>
+      <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
     `;
 
-        const canMoveZone = isAdmin || (activeUserCode && activeUserCode === zone.created_by);
         if (canMoveZone) {
             let isDragging = false;
             let startX = 0, startY = 0;
             let initLeft = 0, initTop = 0;
+            let childStartPos = [];
+            let childZonesStartPos = [];
+            let descendantZoneIds = [];
+            let allMovedZoneIds = [];
+            let descendantZones = [];
+            let childNodes = [];
 
             zoneEl.addEventListener('mousedown', (e) => {
                 if (e.target.closest('.zone-actions, .zone-resize-handle')) return;
+
+                window.isDraggingAnything = true;
                 isDragging = true;
                 const scale = panzoomInstance.getScale();
                 startX = e.clientX;
                 startY = e.clientY;
-                initLeft = parseFloat(zoneEl.style.left) || 0;
-                initTop = parseFloat(zoneEl.style.top) || 0;
+
+                initLeft = zone.pos_x;
+                initTop = zone.pos_y;
+
+                descendantZoneIds = getAllDescendantZones(zone.id);
+                allMovedZoneIds = [zone.id, ...descendantZoneIds];
+                descendantZones = currentZones.filter(z => descendantZoneIds.includes(z.id));
+                childNodes = currentNodes.filter(n => allMovedZoneIds.includes(n.zone_id));
+
+                childStartPos = childNodes.map(n => ({ id: n.id, x: n.pos_x, y: n.pos_y }));
+                childZonesStartPos = descendantZones.map(z => ({ id: z.id, x: z.pos_x, y: z.pos_y }));
+
                 e.stopPropagation();
 
                 const onMouseMove = (moveEvent) => {
                     if (!isDragging) return;
                     const dx = (moveEvent.clientX - startX) / scale;
                     const dy = (moveEvent.clientY - startY) / scale;
-                    const newX = Math.max(10, Math.round(initLeft + dx));
-                    const newY = Math.max(10, Math.round(initTop + dy));
-                    zoneEl.style.left = `${newX}px`;
-                    zoneEl.style.top = `${newY}px`;
-                    zone.pos_x = newX;
-                    zone.pos_y = newY;
+
+                    zone.pos_x = Math.max(10, Math.round(initLeft + dx));
+                    zone.pos_y = Math.max(10, Math.round(initTop + dy));
+                    zoneEl.style.left = `${zone.pos_x}px`;
+                    zoneEl.style.top = `${zone.pos_y}px`;
+
+                    descendantZones.forEach((z, idx) => {
+                        z.pos_x = Math.max(10, Math.round(childZonesStartPos[idx].x + dx));
+                        z.pos_y = Math.max(10, Math.round(childZonesStartPos[idx].y + dy));
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) {
+                            zEl.style.left = `${z.pos_x}px`;
+                            zEl.style.top = `${z.pos_y}px`;
+                        }
+                    });
+
+                    childNodes.forEach((n, idx) => {
+                        n.pos_x = Math.max(10, Math.round(childStartPos[idx].x + dx));
+                        n.pos_y = Math.max(10, Math.round(childStartPos[idx].y + dy));
+                        const nEl = document.getElementById(n.id);
+                        if (nEl) {
+                            nEl.style.left = `${n.pos_x}px`;
+                            nEl.style.top = `${n.pos_y}px`;
+                        }
+                    });
+
+                    const headerCenterX = zone.pos_x + (zone.width / 2);
+                    const headerCenterY = zone.pos_y + 20;
+                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) {
+                            if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
+                            else zEl.classList.remove('zone-hover-highlight');
+                        }
+                    });
+
+                    renderConnections();
                 };
 
                 const onMouseUp = async () => {
@@ -259,7 +412,53 @@ function renderCanvas() {
                     isDragging = false;
                     window.removeEventListener('mousemove', onMouseMove);
                     window.removeEventListener('mouseup', onMouseUp);
-                    await db.from('project_zones').update({ pos_x: zone.pos_x, pos_y: zone.pos_y }).eq('id', zone.id);
+
+                    const headerCenterX = zone.pos_x + (zone.width / 2);
+                    const headerCenterY = zone.pos_y + 20;
+                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+                    const newParentId = targetZone ? targetZone.id : null;
+
+                    if (newParentId) {
+                        const parentDepth = getZoneDepth(newParentId);
+                        let maxChildRelativeDepth = 0;
+                        descendantZoneIds.forEach(id => {
+                            let d = getZoneDepth(id) - getZoneDepth(zone.id);
+                            if (d > maxChildRelativeDepth) maxChildRelativeDepth = d;
+                        });
+
+                        if (parentDepth + 1 + maxChildRelativeDepth >= 5) {
+                            showToast('Maximale Verschachtelung von 5 Ebenen erreicht!', 'error');
+                        } else {
+                            zone.parent_zone_id = newParentId;
+                        }
+                    } else {
+                        zone.parent_zone_id = null;
+                    }
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) zEl.classList.remove('zone-hover-highlight');
+                    });
+
+                    const updates = childNodes.map(n => db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id));
+                    descendantZones.forEach(z => {
+                        updates.push(db.from('project_zones').update({ pos_x: z.pos_x, pos_y: z.pos_y }).eq('id', z.id));
+                    });
+                    updates.push(db.from('project_zones').update({
+                        pos_x: zone.pos_x,
+                        pos_y: zone.pos_y,
+                        parent_zone_id: zone.parent_zone_id
+                    }).eq('id', zone.id));
+
+                    await Promise.all(updates);
+
+                    window.isDraggingAnything = false;
+                    if (window.pendingCanvasUpdate) {
+                        window.pendingCanvasUpdate = false;
+                        fetchCanvasData();
+                    } else {
+                        renderCanvas();
+                    }
                 };
 
                 window.addEventListener('mousemove', onMouseMove);
@@ -269,10 +468,11 @@ function renderCanvas() {
             const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
             resizeHandle.addEventListener('mousedown', (e) => {
                 e.stopPropagation();
+                window.isDraggingAnything = true;
                 let isResizing = true;
                 const scale = panzoomInstance.getScale();
-                const startW = parseFloat(zoneEl.style.width) || 400;
-                const startH = parseFloat(zoneEl.style.height) || 300;
+                const startW = zone.width;
+                const startH = zone.height;
                 const startMouseX = e.clientX;
                 const startMouseY = e.clientY;
 
@@ -294,6 +494,12 @@ function renderCanvas() {
                     window.removeEventListener('mousemove', onResizeMove);
                     window.removeEventListener('mouseup', onResizeUp);
                     await db.from('project_zones').update({ width: zone.width, height: zone.height }).eq('id', zone.id);
+
+                    window.isDraggingAnything = false;
+                    if (window.pendingCanvasUpdate) {
+                        window.pendingCanvasUpdate = false;
+                        fetchCanvasData();
+                    }
                 };
 
                 window.addEventListener('mousemove', onResizeMove);
@@ -304,7 +510,7 @@ function renderCanvas() {
         canvas.appendChild(zoneEl);
     });
 
-    // 2. Baugruppen- & Bauteil-Blöcke rendern (z-index 10)
+    // 2. Blöcke rendern (z-index 10)
     currentNodes.forEach(node => {
         if (isNodeHiddenByAncestor(node.id)) return;
 
@@ -313,6 +519,7 @@ function renderCanvas() {
         const creator = node.created_by || 'COT';
         const bType = node.block_type || 'assembly';
         const typeLabel = bType === 'part' ? 'Bauteil' : 'Baugruppe';
+
         const canDrag = isAdmin || (activeUserCode && activeUserCode === creator);
 
         const dSpent = stats.totalDesign;
@@ -340,6 +547,25 @@ function renderCanvas() {
       `;
         }
 
+        // NEU: Fertigmelden UI-Logik (inklusive Admin Revision Button)
+        let completionBtnHtml = '';
+        let statusIcon = '';
+        if (node.completion_status === 'completed') {
+            statusIcon = ' <span title="Erledigt">✅</span>';
+            completionBtnHtml = `<span style="font-size: 10px; color: #38a169; font-weight: bold;">✅ Erledigt</span>`;
+            if (isAdmin) {
+                completionBtnHtml += ` <button type="button" style="margin-left:6px; background:none; border:1px solid #e53e3e; color:#e53e3e; border-radius:3px; font-size:9px; cursor:pointer; padding:1px 4px;" onclick="handleRevokeCompletion('${node.id}')">↺ Revision</button>`;
+            }
+        } else if (node.completion_status === 'pending_approval') {
+            statusIcon = ' <span title="Wartet auf Freigabe">⏳</span>';
+            completionBtnHtml = `<span style="font-size: 10px; color: #d69e2e; font-weight: bold;">⏳ Freigabe...</span>`;
+            if (isAdmin) {
+                completionBtnHtml += ` <button type="button" style="margin-left:6px; background:none; border:1px solid #e53e3e; color:#e53e3e; border-radius:3px; font-size:9px; cursor:pointer; padding:1px 4px;" onclick="handleRevokeCompletion('${node.id}')">✖ Ablehnen</button>`;
+            }
+        } else {
+            completionBtnHtml = `<button type="button" style="background:none; border:none; color:#38a169; cursor:pointer; font-size:11px; font-weight:bold;" onclick="handleRequestCompletion('${node.id}')">✔ Fertigmelden</button>`;
+        }
+
         let inlineLogsHtml = '';
         if (isExpanded) {
             if (nodeLogs.length === 0) {
@@ -353,12 +579,14 @@ function renderCanvas() {
                 nodeLogs.forEach(log => {
                     const d = new Date(log.logged_at);
                     const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                    const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
-                    const badge = log.status === 'approved'
-                        ? '<span class="badge-approved">OK</span>'
-                        : '<span class="badge-pending">Wartend</span>';
+                    const kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
+                    const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
 
-                    const timeFormatted = formatHoursToHM(log.hours);
+                    // Spezielles Icon für Revision/Fertigstellung
+                    let timeFormatted = formatHoursToHM(log.hours);
+                    if (log.task_type === 'completion') {
+                        timeFormatted = log.note.includes('Revision') || log.note.includes('Ablehnen') ? '↺' : '✔';
+                    }
 
                     let noteIconHtml = '';
                     if (log.note && log.note.trim() !== '') {
@@ -410,10 +638,12 @@ function renderCanvas() {
 
         const el = document.createElement('div');
         el.id = node.id;
-        el.className = `assembly-card ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-multi' : ''}`;
+
+        el.className = `assembly-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-multi' : ''}`;
         el.style.left = `${node.pos_x}px`;
         el.style.top = `${node.pos_y}px`;
         el.style.borderColor = nodeColor;
+        el.style.zIndex = "10";
 
         el.innerHTML = `
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
@@ -421,7 +651,7 @@ function renderCanvas() {
       <div class="assembly-header" style="background: ${nodeColor};">
         <div style="display: flex; align-items: center;">
           ${subtreeBtnHtml}
-          <span>${escapeHtml(node.name)}</span>
+          <span>${escapeHtml(node.name)}${statusIcon}</span>
         </div>
         <div class="header-meta">
           <span class="author-badge" title="Typ: ${typeLabel} | Ersteller: ${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
@@ -468,9 +698,12 @@ function renderCanvas() {
           </div>
         </form>
         
-        <button class="btn-expand-toggle" onclick="toggleInlineLogs('${node.id}')">
-          ${isExpanded ? '▲ Logs ausblenden' : '▼ Details & Logs anzeigen (' + nodeLogs.length + ')'}
-        </button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            <button class="btn-expand-toggle" onclick="toggleInlineLogs('${node.id}')">
+            ${isExpanded ? '▲ Logs ausblenden' : '▼ Details & Logs (' + nodeLogs.length + ')'}
+            </button>
+            ${completionBtnHtml}
+        </div>
 
         ${inlineLogsHtml}
       </div>
@@ -491,7 +724,7 @@ function renderCanvas() {
         });
 
         el.addEventListener('dblclick', (e) => {
-            if (!e.target.closest('.ep-handle') && !e.target.closest('.btn-delete-log') && !e.target.closest('.btn-tree-toggle')) {
+            if (!e.target.closest('.ep-handle') && !e.target.closest('.btn-delete-log') && !e.target.closest('.btn-tree-toggle') && !e.target.closest('button')) {
                 openConfigModal(node.id);
             }
         });
@@ -505,6 +738,7 @@ function renderCanvas() {
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle')) return;
                 if (e.shiftKey) return;
 
+                window.isDraggingAnything = true;
                 isDragging = true;
                 const scale = panzoomInstance.getScale();
                 startX = e.clientX;
@@ -538,6 +772,20 @@ function renderCanvas() {
                         }
                     });
 
+                    const primaryNode = nodesToMove[0];
+                    const centerX = primaryNode.pos_x + 160;
+                    const centerY = primaryNode.pos_y + 100;
+
+                    const targetZone = getDeepestZoneAt(centerX, centerY);
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) {
+                            if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
+                            else zEl.classList.remove('zone-hover-highlight');
+                        }
+                    });
+
                     renderConnections();
                 };
 
@@ -547,8 +795,29 @@ function renderCanvas() {
                     window.removeEventListener('mousemove', onMouseMove);
                     window.removeEventListener('mouseup', onMouseUp);
 
-                    for (const n of nodesToMove) {
-                        await db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id);
+                    const primaryNode = nodesToMove[0];
+                    const centerX = primaryNode.pos_x + 160;
+                    const centerY = primaryNode.pos_y + 100;
+
+                    const targetZone = getDeepestZoneAt(centerX, centerY);
+                    const targetZoneId = targetZone ? targetZone.id : null;
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) zEl.classList.remove('zone-hover-highlight');
+                    });
+
+                    const updates = nodesToMove.map(n => {
+                        n.zone_id = targetZoneId;
+                        return db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y, zone_id: targetZoneId }).eq('id', n.id);
+                    });
+
+                    await Promise.all(updates);
+
+                    window.isDraggingAnything = false;
+                    if (window.pendingCanvasUpdate) {
+                        window.pendingCanvasUpdate = false;
+                        fetchCanvasData();
                     }
                 };
 

@@ -2,7 +2,7 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Datenbank, Realtime-Sync, State & Hierarchie-Rollup Engine
- * Zeitstempel: 2026-08-22 16:00:00 CEST
+ * Zeitstempel: 2026-08-22 16:15:00 CEST
  * =============================================================================
  */
 
@@ -14,6 +14,16 @@ const ADMIN_PASS = '787456c';
 let isAdmin = false;
 let activeUserCode = '';
 let activeProjectId = 'proj_default';
+
+// Konstanten, die zuvor verloren gingen
+const COLOR_PRESETS = [
+    { name: 'Stahlblau', hex: '#2b6cb0' },
+    { name: 'Salbeigrün', hex: '#38a169' },
+    { name: 'Schiefergrau', hex: '#4a5568' },
+    { name: 'Kupfer', hex: '#c05621' },
+    { name: 'Dunkel-Petrol', hex: '#319795' },
+    { name: 'Gedämpftes Indigo', hex: '#553c9a' }
+];
 
 let currentProjects = [];
 let currentNodes = [];
@@ -27,23 +37,28 @@ let showAllAuditLogs = false;
 let selectedNodeIds = new Set();
 let expandedNodes = new Set();
 let collapsedParents = new Set();
+let dialogResolve = null;
 
 // --- Datenabruf & Realtime ---
 async function fetchUsers() {
     const { data } = await db.from('app_users').select('*').order('code', { ascending: true });
     currentUsers = data || [];
-    renderUserDropdowns();
-    if (isAdmin) renderAdminUserList();
+    if (window.renderUserDropdowns) window.renderUserDropdowns();
+    if (isAdmin && window.renderAdminUserList) window.renderAdminUserList();
 }
 
 async function fetchProjects() {
     const { data } = await db.from('projects').select('*').order('object_number', { ascending: true });
     currentProjects = data || [];
-    renderProjectDropdowns();
-    updateSidebarStats();
-    if (isAdmin) renderAdminProjectList();
-    renderArchivedProjectsList();
+    if (window.renderProjectDropdowns) window.renderProjectDropdowns();
+    if (window.updateSidebarStats) window.updateSidebarStats();
+    if (isAdmin && window.renderAdminProjectList) window.renderAdminProjectList();
+    if (window.renderArchivedProjectsList) window.renderArchivedProjectsList();
 }
+
+// --- Datenabruf & Realtime mit Anti-Freeze ---
+window.isDraggingAnything = false;
+window.pendingCanvasUpdate = false;
 
 async function fetchCanvasData() {
     const { data: nodes } = await db.from('project_nodes').select('*').eq('project_id', activeProjectId);
@@ -51,20 +66,26 @@ async function fetchCanvasData() {
     const { data: zones } = await db.from('project_zones').select('*').eq('project_id', activeProjectId);
     const { data: logs } = await db.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false });
 
+    // BUGFIX: Rendering pausieren, wenn User gerade etwas verschiebt!
+    if (window.isDraggingAnything) {
+        window.pendingCanvasUpdate = true;
+        return;
+    }
+
     currentNodes = nodes || [];
     currentEdges = edges || [];
     currentZones = zones || [];
     currentTimeLogs = logs || [];
 
-    renderCanvas();
-    updateSidebarStats();
-    if (isAdmin) renderPendingLogsTable();
+    if (window.renderCanvas) window.renderCanvas();
+    if (window.updateSidebarStats) window.updateSidebarStats();
+    if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
 }
 
 async function fetchAuditLogs() {
     const { data } = await db.from('budget_audit_logs').select('*').order('changed_at', { ascending: false }).limit(50);
     currentAuditLogs = data || [];
-    if (isAdmin) renderBudgetAuditLogs();
+    if (isAdmin && window.renderBudgetAuditLogs) window.renderBudgetAuditLogs();
 }
 
 // --- Hierarchische Rollup-Engine ---

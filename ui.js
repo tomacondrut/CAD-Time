@@ -1,13 +1,298 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: UI Controller (Modals, Dialoge, Admin-Center, Retro-Logs & Audit-Logs)
- * Zeitstempel: 2026-08-22 16:00:00 CEST
+ * Domain: UI Controller (Modals, Dialoge, Admin-Center, Retro-Logs, Revision)
  * =============================================================================
  */
 
-// --- Sidebar & Dashboard Stats ---
-function updateSidebarStats() {
+// =============================================================================
+// 1. HELPER & DIALOGE
+// =============================================================================
+window.showToast = function (msg, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = '';
+    if (type === 'error') toast.classList.add('toast-error');
+    if (type === 'success') toast.classList.add('toast-success');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+};
+
+window.customPrompt = function (title, message, defaultValue = '', isPassword = false) {
+    return new Promise((resolve) => {
+        dialogResolve = resolve;
+        document.getElementById('dialogTitle').textContent = title;
+        document.getElementById('dialogMessage').textContent = message;
+
+        const inputCont = document.getElementById('dialogInputContainer');
+        const input = document.getElementById('dialogInput');
+        inputCont.style.display = 'block';
+        input.type = isPassword ? 'password' : 'text';
+        input.value = defaultValue;
+
+        document.getElementById('dialogBtnConfirm').textContent = 'Anmelden';
+        document.getElementById('dialogBtnCancel').textContent = 'Abbrechen';
+
+        openModal('dialogModal');
+        input.focus();
+    });
+};
+
+window.customConfirm = function (title, message, confirmText = 'Bestätigen', cancelText = 'Abbrechen') {
+    return new Promise((resolve) => {
+        dialogResolve = resolve;
+        document.getElementById('dialogTitle').textContent = title;
+        document.getElementById('dialogMessage').textContent = message;
+        document.getElementById('dialogInputContainer').style.display = 'none';
+
+        document.getElementById('dialogBtnConfirm').textContent = confirmText;
+        document.getElementById('dialogBtnCancel').textContent = cancelText;
+
+        openModal('dialogModal');
+    });
+};
+
+window.closeDialog = function (isConfirmed) {
+    closeModal('dialogModal');
+    if (dialogResolve) {
+        const input = document.getElementById('dialogInput');
+        if (document.getElementById('dialogInputContainer').style.display !== 'none') {
+            dialogResolve(isConfirmed ? input.value : null);
+        } else {
+            dialogResolve(isConfirmed);
+        }
+        dialogResolve = null;
+    }
+};
+
+window.escapeHtml = function (str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag] || tag));
+};
+
+window.formatHoursToHM = function (decimalHours) {
+    const totalMinutes = Math.round((Math.max(0, decimalHours) || 0) * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m.toString().padStart(2, '0')}m`;
+};
+
+window.generatePieStyle = function (spent, budget, baseColor) {
+    const b = Math.max(0.1, parseFloat(budget) || 1);
+    const pct = Math.min((spent / b) * 100, 100);
+    const isOver = spent > b;
+    const fillCol = isOver ? '#e53e3e' : baseColor;
+    return `background: conic-gradient(${fillCol} 0% ${pct}%, #e2e8f0 ${pct}% 100%);`;
+};
+
+// =============================================================================
+// 2. DROPDOWNS, LOGIN & PROJEKTWECHSEL
+// =============================================================================
+window.renderUserDropdowns = function () {
+    const selectLogin = document.getElementById('userSelectDropdown');
+    const selectRetro = document.getElementById('retroLogUserCode');
+
+    if (!selectLogin || !selectRetro) return;
+
+    selectLogin.innerHTML = '';
+    selectRetro.innerHTML = '';
+
+    currentUsers.forEach(u => {
+        const opt1 = document.createElement('option');
+        opt1.value = u.code;
+        opt1.textContent = u.code;
+        selectLogin.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = u.code;
+        opt2.textContent = u.code;
+        selectRetro.appendChild(opt2);
+    });
+};
+
+window.renderProjectDropdowns = function () {
+    const selectLogin = document.getElementById('projectSelectLoginDropdown');
+    const selectSidebar = document.getElementById('sidebarProjectSelect');
+
+    if (!selectLogin || !selectSidebar) return;
+
+    selectLogin.innerHTML = '';
+    selectSidebar.innerHTML = '';
+
+    const activeProjects = currentProjects.filter(p => !p.is_archived);
+
+    activeProjects.forEach(p => {
+        const opt1 = document.createElement('option');
+        opt1.value = p.id;
+        opt1.textContent = `${p.object_number} - ${p.name}`;
+        selectLogin.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = p.id;
+        opt2.textContent = `${p.object_number} - ${p.name}`;
+        if (p.id === activeProjectId) opt2.selected = true;
+        selectSidebar.appendChild(opt2);
+    });
+
+    if (!activeProjects.some(p => p.id === activeProjectId) && activeProjects.length > 0) {
+        activeProjectId = activeProjects[0].id;
+    }
+};
+
+window.confirmUserLogin = function () {
+    const selectUser = document.getElementById('userSelectDropdown');
+    const selectProj = document.getElementById('projectSelectLoginDropdown');
+    if (!selectUser.value || !selectProj.value) return;
+
+    activeUserCode = selectUser.value;
+    activeProjectId = selectProj.value;
+
+    document.getElementById('sidebarUserCode').textContent = activeUserCode;
+    document.getElementById('sidebarProjectSelect').value = activeProjectId;
+    closeModal('userLoginOverlay');
+
+    showToast(`Angemeldet als ${activeUserCode}`, 'success');
+    fetchCanvasData();
+};
+
+window.handleSidebarProjectChange = function (newProjectId) {
+    activeProjectId = newProjectId;
+    fetchCanvasData();
+    showToast(`Projekt gewechselt: ${getCurrentProject().object_number}`, 'info');
+};
+
+// =============================================================================
+// 3. ARCHIV & FARBWÄHLER
+// =============================================================================
+window.openArchiveModal = function () {
+    renderArchivedProjectsList();
+    openModal('archiveModal');
+};
+
+window.archiveProject = async function (projectId, shouldArchive) {
+    const p = currentProjects.find(item => item.id === projectId);
+    if (!p) return;
+
+    const actionText = shouldArchive ? 'archivieren' : 'wiederherstellen';
+    const confirmed = await customConfirm('Projekt-Status ändern', `Möchtest du das Projekt ${p.object_number} wirklich ${actionText}?`);
+    if (confirmed) {
+        await db.from('projects').update({ is_archived: shouldArchive }).eq('id', projectId);
+        await db.from('budget_audit_logs').insert([{
+            project_id: projectId,
+            changed_by: activeUserCode || 'COT',
+            field_name: 'Status',
+            old_value: shouldArchive ? 'Aktiv' : 'Archiviert',
+            new_value: shouldArchive ? 'Archiviert' : 'Aktiv'
+        }]);
+
+        showToast(`Projekt ${p.object_number} ${shouldArchive ? 'archiviert' : 'wiederhergestellt'}`, 'success');
+        fetchProjects();
+        fetchCanvasData();
+    }
+};
+
+window.renderArchivedProjectsList = function () {
+    const container = document.getElementById('archivedProjectsListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const archived = currentProjects.filter(p => p.is_archived);
+    if (archived.length === 0) {
+        container.innerHTML = '<div style="font-size:12px; color:#718096; padding:8px 0; text-align:center;">Keine archivierten Projekte vorhanden.</div>';
+        return;
+    }
+
+    archived.forEach(p => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:6px; border-bottom:1px solid #edf2f7;';
+        row.innerHTML = `
+            <span><strong>${escapeHtml(p.object_number)}</strong> – ${escapeHtml(p.name)}</span>
+            <button class="btn-prim" style="padding:3px 8px; font-size:11px;" onclick="archiveProject('${p.id}', false)">↩ Wiederherstellen</button>
+        `;
+        container.appendChild(row);
+    });
+};
+
+window.renderColorPresets = function () {
+    const container = document.getElementById('colorPresetsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    COLOR_PRESETS.forEach(p => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = p.hex;
+        swatch.title = p.name;
+        swatch.dataset.hex = p.hex;
+        swatch.addEventListener('click', () => {
+            document.querySelectorAll('#colorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+            document.getElementById('editColor').value = p.hex;
+        });
+        container.appendChild(swatch);
+    });
+};
+
+window.renderZoneColorPresets = function () {
+    const container = document.getElementById('zoneColorPresetsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    COLOR_PRESETS.forEach(p => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = p.hex;
+        swatch.title = p.name;
+        swatch.dataset.hex = p.hex;
+        swatch.addEventListener('click', () => {
+            document.querySelectorAll('#zoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+            document.getElementById('newZoneColor').value = p.hex;
+        });
+        container.appendChild(swatch);
+    });
+};
+
+window.selectColorSwatch = function (hex) {
+    const swatches = document.querySelectorAll('#colorPresetsContainer .color-swatch');
+    swatches.forEach(s => {
+        if (s.dataset.hex.toLowerCase() === (hex || '#2b6cb0').toLowerCase()) {
+            s.classList.add('selected');
+        } else {
+            s.classList.remove('selected');
+        }
+    });
+    document.getElementById('editColor').value = hex || '#2b6cb0';
+};
+
+// =============================================================================
+// 4. SIDEBAR & MAUSRAD-ZEIT
+// =============================================================================
+window.handleTimeWheel = function (e, type) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = e.target.closest('.time-inputs-row');
+    if (!container) return;
+
+    const hourInput = container.querySelector('.input-hours');
+    const minInput = container.querySelector('.input-mins');
+    if (!hourInput || !minInput) return;
+
+    let currentHours = parseInt(hourInput.value, 10) || 0;
+    let currentMins = parseInt(minInput.value, 10) || 0;
+    let totalMinutes = (currentHours * 60) + currentMins;
+
+    const stepMinutes = (type === 'hour') ? 60 : 5;
+    const delta = (e.deltaY < 0 ? 1 : -1) * stepMinutes;
+
+    totalMinutes = Math.max(0, totalMinutes + delta);
+
+    hourInput.value = Math.floor(totalMinutes / 60);
+    minInput.value = (totalMinutes % 60).toString().padStart(2, '0');
+};
+
+window.updateSidebarStats = function () {
     const proj = getCurrentProject();
     let totalD = 0;
     let totalDr = 0;
@@ -44,10 +329,12 @@ function updateSidebarStats() {
     document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budD)}`;
 
     document.getElementById('btnAdminProjects').style.display = isAdmin ? 'inline' : 'none';
-}
+};
 
-// --- Block Erstellung & Bearbeitung ---
-function handleOpenAddBlockModal(customX = null, customY = null, parentConnectId = null) {
+// =============================================================================
+// 5. BLÖCKE & ZONEN (ERSTELLEN & BEARBEITEN)
+// =============================================================================
+window.handleOpenAddBlockModal = function (customX = null, customY = null, parentConnectId = null) {
     const budgetRow = document.getElementById('newBlockBudgetRow');
     budgetRow.style.display = isAdmin ? 'flex' : 'none';
 
@@ -56,11 +343,10 @@ function handleOpenAddBlockModal(customX = null, customY = null, parentConnectId
     } else {
         document.getElementById('newBlockCustomPos').value = '';
     }
-
     openModal('newBlockModal');
-}
+};
 
-async function handleAddBlock(e) {
+window.handleAddBlock = async function (e) {
     e.preventDefault();
     const name = document.getElementById('newBlockName').value.trim();
     const article = document.getElementById('newBlockArticle').value.trim();
@@ -124,7 +410,7 @@ async function handleAddBlock(e) {
     closeModal('newBlockModal');
     document.getElementById('newBlockForm').reset();
     showToast('Block erfolgreich hinzugefügt', 'success');
-}
+};
 
 window.openConfigModal = function (nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
@@ -150,6 +436,7 @@ window.openConfigModal = function (nodeId) {
     const bDraft = document.getElementById('editBudgetDrafting');
     const btnDel = document.getElementById('btnDeleteBlock');
     const retroBtn = document.getElementById('retroLogAdminBtnContainer');
+    const statusGroup = document.getElementById('editStatusGroup');
 
     bDesign.value = node.budget_design_hours;
     bDraft.value = node.budget_drafting_hours;
@@ -159,10 +446,19 @@ window.openConfigModal = function (nodeId) {
     btnDel.style.display = isAdmin ? 'block' : 'none';
     retroBtn.style.display = isAdmin ? 'block' : 'none';
 
+    // Status Override Dropdown (nur für Admin sichtbar)
+    if (isAdmin) {
+        if (statusGroup) statusGroup.style.display = 'block';
+        const statusSelect = document.getElementById('editCompletionStatus');
+        if (statusSelect) statusSelect.value = node.completion_status || 'open';
+    } else {
+        if (statusGroup) statusGroup.style.display = 'none';
+    }
+
     openModal('configModal');
 };
 
-async function handleSaveConfig(e) {
+window.handleSaveConfig = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editNodeId').value;
     const name = document.getElementById('editName').value;
@@ -175,14 +471,19 @@ async function handleSaveConfig(e) {
     if (isAdmin) {
         updateData.budget_design_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDesign').value) || 0);
         updateData.budget_drafting_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDrafting').value) || 0);
+
+        const statusSelect = document.getElementById('editCompletionStatus');
+        if (statusSelect) {
+            updateData.completion_status = statusSelect.value;
+        }
     }
 
     await db.from('project_nodes').update(updateData).eq('id', id);
     closeModal('configModal');
     showToast('Block aktualisiert', 'success');
-}
+};
 
-async function handleDeleteNode() {
+window.handleDeleteNode = async function () {
     if (!isAdmin) {
         showToast('Nur Administratoren können Blöcke löschen.', 'error');
         return;
@@ -194,115 +495,13 @@ async function handleDeleteNode() {
         closeModal('configModal');
         showToast('Block gelöscht', 'success');
     }
-}
-
-// --- Zeiterfassung & Logs ---
-async function handleLog(e, nodeId) {
-    e.preventDefault();
-    const form = e.target;
-    const taskType = form.elements[1].value;
-    const hours = parseInt(form.elements[2].value, 10) || 0;
-    const mins = parseInt(form.elements[3].value, 10) || 0;
-    const note = form.elements[4].value.trim();
-
-    if (hours < 0 || mins < 0 || (hours === 0 && mins === 0)) {
-        showToast('Bitte mindestens 5 Minuten positive Zeit eingeben.', 'error');
-        return;
-    }
-
-    if (!activeUserCode) {
-        showToast('Bitte wähle zuerst dein Benutzerkürzel.', 'error');
-        return;
-    }
-
-    const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
-
-    await db.from('time_logs').insert([{
-        project_id: activeProjectId,
-        node_id: nodeId,
-        user_code: activeUserCode,
-        task_type: taskType,
-        hours: decimalHours,
-        note: note,
-        status: 'pending'
-    }]);
-
-    form.elements[2].value = '0';
-    form.elements[3].value = '30';
-    form.elements[4].value = '';
-    showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
-}
-
-window.handleDeleteLog = async function (logId) {
-    const log = currentTimeLogs.find(l => l.id === logId);
-    if (!log) return;
-
-    const canDelete = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
-    if (!canDelete) {
-        showToast('Keine Berechtigung zum Löschen dieses Eintrags.', 'error');
-        return;
-    }
-
-    const confirmed = await customConfirm('Zeiteintrag löschen', 'Möchtest du diesen Zeiteintrag wirklich entfernen?');
-    if (confirmed) {
-        await db.from('time_logs').delete().eq('id', logId);
-        showToast('Zeiteintrag gelöscht', 'success');
-    }
 };
 
-// --- Retro-Logging ---
-window.openRetroLogModal = function () {
-    const id = document.getElementById('editNodeId').value;
-    const node = currentNodes.find(n => n.id === id);
-    if (!node) return;
-
-    closeModal('configModal');
-
-    document.getElementById('retroLogNodeId').value = node.id;
-    document.getElementById('retroLogBlockName').value = node.name;
-    document.getElementById('retroLogDate').valueAsDate = new Date();
-    openModal('retroLogModal');
-};
-
-async function handleSaveRetroLog(e) {
-    e.preventDefault();
-    const nodeId = document.getElementById('retroLogNodeId').value;
-    const userCode = document.getElementById('retroLogUserCode').value;
-    const dateVal = document.getElementById('retroLogDate').value;
-    const taskType = document.getElementById('retroLogTaskType').value;
-    const hours = parseInt(document.getElementById('retroLogHours').value, 10) || 0;
-    const mins = parseInt(document.getElementById('retroLogMins').value, 10) || 0;
-    const note = document.getElementById('retroLogNote').value.trim();
-
-    if (hours === 0 && mins === 0) {
-        showToast('Bitte positive Zeit eingeben.', 'error');
-        return;
-    }
-
-    const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
-    const loggedAtTimestamp = new Date(dateVal + 'T12:00:00Z').toISOString();
-
-    await db.from('time_logs').insert([{
-        project_id: activeProjectId,
-        node_id: nodeId,
-        user_code: userCode,
-        task_type: taskType,
-        hours: decimalHours,
-        note: note ? `[Rückwirkend] ${note}` : '[Rückwirkend eingetragen]',
-        status: 'approved',
-        logged_at: loggedAtTimestamp
-    }]);
-
-    closeModal('retroLogModal');
-    showToast(`Rückwirkender Eintrag für ${userCode} gespeichert`, 'success');
-}
-
-// --- Zonen / Kästen UI ---
-function handleOpenAddZoneModal() {
+window.handleOpenAddZoneModal = function () {
     openModal('newZoneModal');
-}
+};
 
-async function handleAddZone(e) {
+window.handleAddZone = async function (e) {
     e.preventDefault();
     const title = document.getElementById('newZoneTitle').value.trim();
     const color_hex = document.getElementById('newZoneColor').value;
@@ -327,18 +526,50 @@ async function handleAddZone(e) {
     document.getElementById('newZoneForm').reset();
     showToast(`Bereich "${title}" erstellt`, 'success');
     fetchCanvasData();
-}
+};
 
-window.handleRenameZone = async function (zoneId) {
+window.openEditZoneModal = function (zoneId) {
     const zone = currentZones.find(z => z.id === zoneId);
     if (!zone) return;
 
-    const newTitle = await customPrompt('Bereich umbenennen', 'Neuer Name für den Bereich:', zone.title);
-    if (newTitle && newTitle.trim()) {
-        await db.from('project_zones').update({ title: newTitle.trim() }).eq('id', zoneId);
-        showToast('Bereich umbenannt', 'success');
-        fetchCanvasData();
-    }
+    document.getElementById('editZoneId').value = zone.id;
+    document.getElementById('editZoneTitle').value = zone.title;
+
+    const container = document.getElementById('editZoneColorPresetsContainer');
+    container.innerHTML = '';
+    COLOR_PRESETS.forEach(p => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = p.hex;
+        swatch.title = p.name;
+        swatch.dataset.hex = p.hex;
+
+        if (p.hex.toLowerCase() === (zone.color_hex || '#a0aec0').toLowerCase()) {
+            swatch.classList.add('selected');
+        }
+
+        swatch.addEventListener('click', () => {
+            document.querySelectorAll('#editZoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+            document.getElementById('editZoneColor').value = p.hex;
+        });
+        container.appendChild(swatch);
+    });
+
+    document.getElementById('editZoneColor').value = zone.color_hex || '#a0aec0';
+    openModal('editZoneModal');
+};
+
+window.handleSaveZoneConfig = async function (e) {
+    e.preventDefault();
+    const id = document.getElementById('editZoneId').value;
+    const title = document.getElementById('editZoneTitle').value.trim();
+    const color_hex = document.getElementById('editZoneColor').value;
+
+    await db.from('project_zones').update({ title, color_hex }).eq('id', id);
+    closeModal('editZoneModal');
+    showToast('Bereich erfolgreich aktualisiert', 'success');
+    fetchCanvasData();
 };
 
 window.handleDeleteZone = async function (zoneId) {
@@ -350,7 +581,195 @@ window.handleDeleteZone = async function (zoneId) {
     }
 };
 
-// --- Admin Kontrollzentrum & Audit Trail ---
+// =============================================================================
+// 6. ZEITERFASSUNG, FERTIGSTELLUNG, REVISION & LÖSCHEN
+// =============================================================================
+window.handleLog = async function (e, nodeId) {
+    e.preventDefault();
+    const form = e.target;
+    const taskType = form.elements[1].value;
+    const hours = parseInt(form.elements[2].value, 10) || 0;
+    const mins = parseInt(form.elements[3].value, 10) || 0;
+    const note = form.elements[4].value.trim();
+
+    if (hours < 0 || mins < 0 || (hours === 0 && mins === 0)) {
+        showToast('Bitte mindestens 5 Minuten positive Zeit eingeben.', 'error');
+        return;
+    }
+
+    if (!activeUserCode) {
+        showToast('Bitte wähle zuerst dein Benutzerkürzel.', 'error');
+        return;
+    }
+
+    const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+
+    const { error } = await db.from('time_logs').insert([{
+        project_id: activeProjectId,
+        node_id: nodeId,
+        user_code: activeUserCode,
+        task_type: taskType,
+        hours: decimalHours,
+        note: note,
+        status: 'pending'
+    }]);
+
+    if (error) {
+        showToast('Fehler: ' + error.message, 'error');
+        return;
+    }
+
+    form.elements[2].value = '0';
+    form.elements[3].value = '30';
+    form.elements[4].value = '';
+    showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
+};
+
+window.handleRequestCompletion = async function (nodeId) {
+    if (!activeUserCode) {
+        showToast('Bitte wähle zuerst dein Benutzerkürzel.', 'error');
+        return;
+    }
+
+    const confirmed = await customConfirm('Fertigstellung melden', 'Möchtest du diesen Block als "Erledigt" zur Freigabe einreichen?');
+    if (confirmed) {
+        const { error } = await db.from('time_logs').insert([{
+            project_id: activeProjectId,
+            node_id: nodeId,
+            user_code: activeUserCode,
+            task_type: 'completion',
+            hours: 0,
+            note: 'Fertigstellung beantragt',
+            status: 'pending'
+        }]);
+
+        if (error) {
+            showToast('Fehler bei der Fertigmeldung: ' + error.message, 'error');
+            return;
+        }
+
+        await db.from('project_nodes').update({ completion_status: 'pending_approval' }).eq('id', nodeId);
+
+        showToast('Fertigstellung zur Freigabe eingereicht', 'success');
+        fetchCanvasData();
+    }
+};
+
+window.handleRevokeCompletion = async function (nodeId) {
+    if (!isAdmin) return;
+
+    const confirmed = await customConfirm('Revision / Status zurücksetzen', 'Möchtest du den Status wieder auf "Offen" setzen (Revision / Zurückweisen)?');
+    if (confirmed) {
+        await db.from('project_nodes').update({ completion_status: 'open' }).eq('id', nodeId);
+
+        await db.from('time_logs').insert([{
+            project_id: activeProjectId,
+            node_id: nodeId,
+            user_code: activeUserCode || 'ADM',
+            task_type: 'completion',
+            hours: 0,
+            note: '🔄 [Revision] Freigabe aufgehoben / Zurückgewiesen',
+            status: 'approved'
+        }]);
+
+        showToast('Block auf Revision (Offen) gesetzt', 'info');
+        fetchCanvasData();
+    }
+};
+
+window.handleDeleteLog = async function (logId) {
+    const log = currentTimeLogs.find(l => l.id === logId);
+    if (!log) return;
+
+    const canDelete = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
+    if (!canDelete) {
+        showToast('Keine Berechtigung zum Löschen dieses Eintrags.', 'error');
+        return;
+    }
+
+    const confirmed = await customConfirm('Zeiteintrag löschen', 'Möchtest du diesen Eintrag wirklich entfernen?');
+    if (confirmed) {
+        await db.from('time_logs').delete().eq('id', logId);
+
+        if (log.task_type === 'completion') {
+            await db.from('project_nodes').update({ completion_status: 'open' }).eq('id', log.node_id);
+        }
+        showToast('Eintrag gelöscht', 'success');
+        fetchCanvasData();
+    }
+};
+
+window.approveLog = async function (logId) {
+    const log = currentTimeLogs.find(l => l.id === logId);
+    if (!log) return;
+
+    await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
+
+    if (log.task_type === 'completion') {
+        await db.from('project_nodes').update({ completion_status: 'completed' }).eq('id', log.node_id);
+    }
+
+    showToast('Freigabe erfolgreich erteilt', 'success');
+    fetchCanvasData();
+};
+
+// =============================================================================
+// 7. RETRO-LOGGING (ADMIN)
+// =============================================================================
+window.openRetroLogModal = function () {
+    const id = document.getElementById('editNodeId').value;
+    const node = currentNodes.find(n => n.id === id);
+    if (!node) return;
+
+    closeModal('configModal');
+
+    document.getElementById('retroLogNodeId').value = node.id;
+    document.getElementById('retroLogBlockName').value = node.name;
+    document.getElementById('retroLogDate').valueAsDate = new Date();
+    openModal('retroLogModal');
+};
+
+window.handleSaveRetroLog = async function (e) {
+    e.preventDefault();
+    const nodeId = document.getElementById('retroLogNodeId').value;
+    const userCode = document.getElementById('retroLogUserCode').value;
+    const dateVal = document.getElementById('retroLogDate').value;
+    const taskType = document.getElementById('retroLogTaskType').value;
+    const hours = parseInt(document.getElementById('retroLogHours').value, 10) || 0;
+    const mins = parseInt(document.getElementById('retroLogMins').value, 10) || 0;
+    const note = document.getElementById('retroLogNote').value.trim();
+
+    if (hours === 0 && mins === 0) {
+        showToast('Bitte positive Zeit eingeben.', 'error');
+        return;
+    }
+
+    const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+    const loggedAtTimestamp = new Date(dateVal + 'T12:00:00Z').toISOString();
+
+    const { error } = await db.from('time_logs').insert([{
+        project_id: activeProjectId,
+        node_id: nodeId,
+        user_code: userCode,
+        task_type: taskType,
+        hours: decimalHours,
+        note: note ? `[Rückwirkend] ${note}` : '[Rückwirkend eingetragen]',
+        status: 'approved',
+        logged_at: loggedAtTimestamp
+    }]);
+
+    if (error) {
+        showToast('Fehler: ' + error.message, 'error');
+        return;
+    }
+
+    closeModal('retroLogModal');
+    showToast(`Rückwirkender Eintrag für ${userCode} gespeichert`, 'success');
+};
+
+// =============================================================================
+// 8. ADMIN KONTROLLZENTRUM & AUDIT-LOGS
+// =============================================================================
 window.handleAdminIconClick = async function () {
     if (isAdmin) {
         const wantLogout = await customConfirm(
@@ -398,7 +817,7 @@ window.openAdminModal = function () {
     openModal('adminModal');
 };
 
-function renderAdminProjectList() {
+window.renderAdminProjectList = function () {
     const container = document.getElementById('projectListContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -422,7 +841,7 @@ function renderAdminProjectList() {
     `;
         container.appendChild(row);
     });
-}
+};
 
 window.startEditProject = function (projectId) {
     const p = currentProjects.find(item => item.id === projectId);
@@ -526,7 +945,7 @@ window.toggleAuditScope = function () {
     renderBudgetAuditLogs();
 };
 
-function renderBudgetAuditLogs() {
+window.renderBudgetAuditLogs = function () {
     const container = document.getElementById('budgetAuditLogsContainer');
     if (!container) return;
 
@@ -572,7 +991,7 @@ function renderBudgetAuditLogs() {
 
     html += '</tbody></table>';
     container.innerHTML = html;
-}
+};
 
 window.handleDeleteProject = async function (projectId) {
     if (currentProjects.length <= 1) {
@@ -589,7 +1008,7 @@ window.handleDeleteProject = async function (projectId) {
     }
 };
 
-function renderPendingLogsTable() {
+window.renderPendingLogsTable = function () {
     const container = document.getElementById('pendingLogsTableContainer');
     const pendingLogs = currentTimeLogs.filter(l => l.status === 'pending');
 
@@ -616,14 +1035,21 @@ function renderPendingLogsTable() {
     pendingLogs.forEach(log => {
         const node = currentNodes.find(n => n.id === log.node_id);
         const nodeName = node ? node.name : 'Unbekannt';
-        const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
+        let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
+
+        // Revision/Fertigstellung optisch abheben
+        let timeFormatted = formatHoursToHM(log.hours);
+        if (log.task_type === 'completion') {
+            kat = 'Status';
+            timeFormatted = log.note.includes('Revision') || log.note.includes('Ablehnen') ? '↺' : '✔';
+        }
 
         html += `
       <tr>
         <td><strong>${escapeHtml(log.user_code)}</strong></td>
         <td>${escapeHtml(nodeName)}</td>
         <td>${kat}</td>
-        <td>${formatHoursToHM(log.hours)}</td>
+        <td><span style="color:#38a169; font-weight:bold;">${timeFormatted}</span></td>
         <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
         <td>
           <button class="btn-prim" style="padding: 2px 8px; font-size: 10px;" onclick="approveLog('${log.id}')">Freigeben</button>
@@ -634,14 +1060,9 @@ function renderPendingLogsTable() {
 
     html += '</tbody></table>';
     container.innerHTML = html;
-}
-
-window.approveLog = async function (logId) {
-    await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
-    showToast('Zeiteintrag freigegeben', 'success');
 };
 
-function renderAdminUserList() {
+window.renderAdminUserList = function () {
     const container = document.getElementById('userListContainer');
     container.innerHTML = '';
     currentUsers.forEach(u => {
@@ -653,7 +1074,7 @@ function renderAdminUserList() {
     `;
         container.appendChild(tag);
     });
-}
+};
 
 window.handleAddUserCode = async function () {
     const input = document.getElementById('newCodeInput');
@@ -675,17 +1096,12 @@ window.handleDeleteUserCode = async function (userId) {
     }
 };
 
-// --- Modals & Helpers ---
 window.openModal = function (modalId) {
-    document.getElementById(modalId).style.display = 'flex';
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'flex';
 };
 
 window.closeModal = function (modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'none';
 };
-
-function escapeHtml(str) {
-    return str.replace(/[&<>'"]/g, tag => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[tag] || tag));
-}

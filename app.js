@@ -15,6 +15,8 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btnOpenAddZoneModal').addEventListener('click', handleOpenAddZoneModal);
     document.getElementById('newBlockForm').addEventListener('submit', handleAddBlock);
     document.getElementById('newZoneForm').addEventListener('submit', handleAddZone);
+    // NEU: Listener für das Editieren von Kästen
+    document.getElementById('editZoneForm').addEventListener('submit', handleSaveZoneConfig);
     document.getElementById('configForm').addEventListener('submit', handleSaveConfig);
     document.getElementById('btnDeleteBlock').addEventListener('click', handleDeleteNode);
     document.getElementById('retroLogForm').addEventListener('submit', handleSaveRetroLog);

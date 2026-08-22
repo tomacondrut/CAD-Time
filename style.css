@@ -833,3 +833,13 @@ html, body {
     text-decoration: underline;
     font-weight: 600;
 }
+
+/* =============================================================================
+ * Highlight-Effekt beim Zuweisen von Blöcken in einen Kasten
+ * ============================================================================= */
+.zone-hover-highlight {
+    border-color: #3182ce !important;
+    background-color: rgba(49, 130, 206, 0.15) !important;
+    box-shadow: 0 0 15px rgba(49, 130, 206, 0.4) !important;
+    transition: all 0.2s ease;
+}
