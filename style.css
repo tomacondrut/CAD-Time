@@ -469,11 +469,10 @@ html, body {
 }
 
 .log-input {
-  padding: 4px 6px;
-  font-size: 11px;
-  border: 1px solid #cbd5e0;
-  border-radius: 4px;
-  outline: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #2d3748;
 }
 
 .btn-log {
@@ -749,4 +748,88 @@ html, body {
   border-radius: 3px;
   font-weight: bold;
   font-size: 9px;
+}
+
+#retroLogModal {
+    z-index: 3000 !important; /* Liegt über #configModal (2000) */
+}
+
+/* =============================================================================
+ * Gruppen-Zonen / Hallenbereiche & Archiv-Styling
+ * Zeitstempel: 2026-08-22 15:55:00 UTC
+ * ============================================================================= */
+
+/* Gruppen-Kasten (liegt hinter den Baugruppen-Blöcken auf z-index 2) */
+.project-zone {
+    position: absolute;
+    border: 2px dashed #a0aec0;
+    border-radius: 10px;
+    background-color: rgba(237, 242, 247, 0.45);
+    z-index: 2;
+    user-select: none;
+    cursor: grab;
+    box-sizing: border-box;
+}
+
+    .project-zone.draggable-enabled {
+        cursor: move !important;
+    }
+
+.project-zone-header {
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #4a5568;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    background: rgba(255, 255, 255, 0.7);
+    border-bottom: 1px dashed #cbd5e0;
+}
+
+.zone-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.zone-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: #718096;
+}
+
+    .zone-btn:hover {
+        color: #2b6cb0;
+    }
+
+/* Resize-Handle unten rechts am Kasten */
+.zone-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, #a0aec0 50%);
+    border-bottom-right-radius: 8px;
+}
+
+/* Modals */
+#archiveModal {
+    z-index: 2500;
+}
+
+.audit-toggle-btn {
+    background: none;
+    border: none;
+    color: #3182ce;
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+    font-weight: 600;
 }
