@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAD Hierarchy & Drafting Tracker</title>
+  <!-- jsPlumb for connecting lines & drag/drop -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/css/jsplumbtoolkit-defaults.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
+  <!-- Supabase JS Client via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body, html {
+      width: 100%; height: 100%; margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden; background-color: #f7fafc;
+    }
+    #canvas {
+      width: 100%; height: 100%; position: relative;
+      background-size: 20px 20px;
+      background-image: radial-gradient(circle, #cbd5e0 1px, rgba(0, 0, 0, 0) 1px);
+    }
+    #toolbar {
+      position: absolute; top: 15px; left: 15px; z-index: 1000;
+    }
+    .btn-main {
+      background: #2b6cb0; color: #fff; border: none; padding: 10px 16px;
+      border-radius: 6px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .btn-main:hover { background: #2c5282; }
+
+    /* Assembly Card */
+    .assembly-card {
+      position: absolute; width: 260px; background: #fff;
+      border: 2px solid #2b6cb0; border-radius: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      cursor: grab; z-index: 10;
+    }
+    .assembly-header {
+      background: #2b6cb0; color: #fff; padding: 8px 12px;
+      border-top-left-radius: 6px; border-top-right-radius: 6px;
+      font-size: 13px; font-weight: 600;
+    }
+    .assembly-body { padding: 10px 12px; font-size: 12px; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    .stat-label { color: #4a5568; font-weight: 600; }
+    .stat-val { font-weight: 700; color: #2d3748; }
+    .divider { border: 0; border-top: 1px solid #e2e8f0; margin: 8px 0; }
+    .log-form { display: flex; gap: 4px; margin-top: 6px; }
+    .log-input {
+      padding: 4px 6px; font-size: 11px; border: 1px solid #cbd5e0;
+      border-radius: 4px; outline: none;
+    }
+    .btn-log {
+      background: #3182ce; color: #fff; border: none; border-radius: 4px;
+      font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px 8px;
+    }
+    .btn-log:hover { background: #2b6cb0; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button class="btn-main" id="btnAddBlock">+ Add Assembly Block</button>
+  </div>
+  <div id="canvas"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
