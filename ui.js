@@ -90,54 +90,70 @@ window.generatePieStyle = function (spent, budget, baseColor) {
 // =============================================================================
 // 2. DROPDOWNS, LOGIN & PROJEKTWECHSEL
 // =============================================================================
-window.renderUserDropdowns = function () {
+window.renderUserDropdowns = function() {
     const selectLogin = document.getElementById('userSelectDropdown');
     const selectRetro = document.getElementById('retroLogUserCode');
 
-    if (!selectLogin || !selectRetro) return;
+    if (selectLogin) {
+        selectLogin.innerHTML = '';
+        if (currentUsers.length === 0) {
+            selectLogin.innerHTML = '<option value="">Keine Benutzer</option>';
+        } else {
+            currentUsers.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.code;
+                opt.textContent = u.code;
+                if (activeUserCode && u.code === activeUserCode) opt.selected = true;
+                selectLogin.appendChild(opt);
+            });
+        }
+    }
 
-    selectLogin.innerHTML = '';
-    selectRetro.innerHTML = '';
-
-    currentUsers.forEach(u => {
-        const opt1 = document.createElement('option');
-        opt1.value = u.code;
-        opt1.textContent = u.code;
-        selectLogin.appendChild(opt1);
-
-        const opt2 = document.createElement('option');
-        opt2.value = u.code;
-        opt2.textContent = u.code;
-        selectRetro.appendChild(opt2);
-    });
+    if (selectRetro) {
+        selectRetro.innerHTML = '';
+        currentUsers.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.code;
+            opt.textContent = u.code;
+            selectRetro.appendChild(opt);
+        });
+    }
 };
 
-window.renderProjectDropdowns = function () {
+window.renderProjectDropdowns = function() {
     const selectLogin = document.getElementById('projectSelectLoginDropdown');
     const selectSidebar = document.getElementById('sidebarProjectSelect');
 
-    if (!selectLogin || !selectSidebar) return;
-
-    selectLogin.innerHTML = '';
-    selectSidebar.innerHTML = '';
-
     const activeProjects = currentProjects.filter(p => !p.is_archived);
 
-    activeProjects.forEach(p => {
-        const opt1 = document.createElement('option');
-        opt1.value = p.id;
-        opt1.textContent = `${p.object_number} - ${p.name}`;
-        selectLogin.appendChild(opt1);
+    if (selectLogin) {
+        selectLogin.innerHTML = '';
+        if (activeProjects.length === 0) {
+            selectLogin.innerHTML = '<option value="">Keine aktiven Projekte</option>';
+        } else {
+            activeProjects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = `${p.object_number} - ${p.name}`;
+                if (p.id === activeProjectId) opt.selected = true;
+                selectLogin.appendChild(opt);
+            });
+        }
+    }
 
-        const opt2 = document.createElement('option');
-        opt2.value = p.id;
-        opt2.textContent = `${p.object_number} - ${p.name}`;
-        if (p.id === activeProjectId) opt2.selected = true;
-        selectSidebar.appendChild(opt2);
-    });
-
-    if (!activeProjects.some(p => p.id === activeProjectId) && activeProjects.length > 0) {
-        activeProjectId = activeProjects[0].id;
+    if (selectSidebar) {
+        selectSidebar.innerHTML = '';
+        if (activeProjects.length === 0) {
+            selectSidebar.innerHTML = '<option value="">Keine aktiven Projekte</option>';
+        } else {
+            activeProjects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = `${p.object_number} - ${p.name}`;
+                if (p.id === activeProjectId) opt.selected = true;
+                selectSidebar.appendChild(opt);
+            });
+        }
     }
 };
 
@@ -266,9 +282,9 @@ window.selectColorSwatch = function (hex) {
 };
 
 // =============================================================================
-// 4. SIDEBAR & MAUSRAD-ZEIT
+// 4. SIDEBAR, MAUSRAD-ZEIT & ZONEN-ANSICHT
 // =============================================================================
-window.handleTimeWheel = function (e, type) {
+window.handleTimeWheel = function(e, type) {
     e.preventDefault();
     e.stopPropagation();
 
@@ -292,7 +308,7 @@ window.handleTimeWheel = function (e, type) {
     minInput.value = (totalMinutes % 60).toString().padStart(2, '0');
 };
 
-window.updateSidebarStats = function () {
+window.updateSidebarStats = function() {
     const proj = getCurrentProject();
     let totalD = 0;
     let totalDr = 0;
@@ -329,12 +345,97 @@ window.updateSidebarStats = function () {
     document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budD)}`;
 
     document.getElementById('btnAdminProjects').style.display = isAdmin ? 'inline' : 'none';
+
+    // NEU: Rahmenliste in der Sidebar aktualisieren
+    if (window.renderSidebarZones) window.renderSidebarZones();
+};
+
+/**
+ * =============================================================================
+ * Funktion: window.renderSidebarZones
+ * ERSETZEN IN: app.js (oder ui.js, wo auch immer sie zuletzt stand)
+ * Update: Sortierung nach Fläche (Breite x Höhe) absteigend.
+ * =============================================================================
+ */
+window.renderSidebarZones = function() {
+    const container = document.getElementById('sidebarZonesContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    // Top-Level Zonen nach Größe (Fläche: Breite * Höhe) ABSTEIGEND sortieren
+    const topZones = currentZones.filter(z => !z.parent_zone_id)
+        .sort((a, b) => {
+            const areaA = (parseFloat(a.width) || 0) * (parseFloat(a.height) || 0);
+            const areaB = (parseFloat(b.width) || 0) * (parseFloat(b.height) || 0);
+            return areaB - areaA;
+        });
+
+    if (topZones.length === 0) {
+        container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Bereiche definiert.</div>';
+        return;
+    }
+
+    topZones.forEach(zone => {
+        const isHidden = window.hiddenTopZoneIds && window.hiddenTopZoneIds.has(zone.id);
+        const el = document.createElement('div');
+
+        el.style.display = 'flex';
+        el.style.justifyContent = 'space-between';
+        el.style.alignItems = 'center';
+        el.style.padding = '6px 10px';
+        el.style.background = '#2d3748';
+        el.style.borderRadius = '4px';
+        el.style.fontSize = '12px';
+        el.style.color = isHidden ? '#718096' : '#e2e8f0';
+
+        el.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="color:${zone.color_hex || '#a0aec0'}; font-size:14px;">■</span>
+                <span style="cursor:pointer; ${isHidden ? 'text-decoration:line-through;' : ''}" onclick="centerViewOnVisible('${zone.id}')">${escapeHtml(zone.title)}</span>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button title="Sichtbarkeit umschalten" onclick="toggleZoneVisibility('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.5' : '1'};">👁️</button>
+                <button title="Nur diesen Bereich isolieren" onclick="toggleIsolateZone('${zone.id}')" style="background:none; border:none; cursor:pointer;">🎯</button>
+            </div>
+        `;
+        container.appendChild(el);
+    });
+};
+
+window.isolateZone = function(zoneId) {
+    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+    window.hiddenTopZoneIds.clear();
+    currentZones.filter(z => !z.parent_zone_id && z.id !== zoneId).forEach(z => window.hiddenTopZoneIds.add(z.id));
+
+    if (window.renderCanvas) window.renderCanvas();
+    if (window.renderSidebarZones) window.renderSidebarZones();
+
+    requestAnimationFrame(() => {
+        if (window.centerViewOnVisible) window.centerViewOnVisible(zoneId);
+    });
+};
+
+window.toggleZoneVisibility = function(zoneId) {
+    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+    if (window.hiddenTopZoneIds.has(zoneId)) {
+        window.hiddenTopZoneIds.delete(zoneId);
+    } else {
+        window.hiddenTopZoneIds.add(zoneId);
+    }
+
+    if (window.renderCanvas) window.renderCanvas();
+    if (window.renderSidebarZones) window.renderSidebarZones();
+
+    requestAnimationFrame(() => {
+        if (window.centerViewOnVisible) window.centerViewOnVisible();
+    });
 };
 
 // =============================================================================
 // 5. BLÖCKE & ZONEN (ERSTELLEN & BEARBEITEN)
 // =============================================================================
-window.handleOpenAddBlockModal = function (customX = null, customY = null, parentConnectId = null) {
+window.handleOpenAddBlockModal = function(customX = null, customY = null, parentConnectId = null) {
     const budgetRow = document.getElementById('newBlockBudgetRow');
     budgetRow.style.display = isAdmin ? 'flex' : 'none';
 
@@ -346,7 +447,7 @@ window.handleOpenAddBlockModal = function (customX = null, customY = null, paren
     openModal('newBlockModal');
 };
 
-window.handleAddBlock = async function (e) {
+window.handleAddBlock = async function(e) {
     e.preventDefault();
     const name = document.getElementById('newBlockName').value.trim();
     const article = document.getElementById('newBlockArticle').value.trim();
@@ -412,12 +513,33 @@ window.handleAddBlock = async function (e) {
     showToast('Block erfolgreich hinzugefügt', 'success');
 };
 
-window.openConfigModal = function (nodeId) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Config Modal (Getrennte Zuweisung CAD & Zeichnung)
+ * ERSETZEN IN: ui.js
+ * Breadcrumb: [2026-08-23 15:50:00 CEST] Getrennte Speicherung für 
+ *   assigned_design_user und assigned_drafting_user implementiert.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Berechtigung: Ersteller & Admin können zuweisen)
+ * ERSETZEN IN: ui.js
+ * Breadcrumbs:
+ *   - [2026-08-23 15:53:00 CEST]: Zuweisungs-Dropdowns für Admin UND Ersteller freigeschaltet.
+ *     Fremde Benutzer können die Zuweisungen nicht ändern oder einsehen.
+ * =============================================================================
+ */
+window.openConfigModal = function(nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
 
+    const nodeLogs = currentTimeLogs.filter(l => l.node_id === nodeId);
     const creator = node.created_by || 'COT';
     const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
+    const canDelete = isAdmin || ((activeUserCode && activeUserCode === creator) && nodeLogs.length === 0);
 
     document.getElementById('editNodeId').value = node.id;
     document.getElementById('editName').value = node.name;
@@ -434,19 +556,39 @@ window.openConfigModal = function (nodeId) {
 
     const bDesign = document.getElementById('editBudgetDesign');
     const bDraft = document.getElementById('editBudgetDrafting');
+    const assignGroup = document.getElementById('editAssignedUserGroup');
+    const selDesign = document.getElementById('editAssignedDesignUser');
+    const selDraft = document.getElementById('editAssignedDraftingUser');
+
+    bDesign.value = node.budget_design_hours;
+    bDraft.value = node.budget_drafting_hours;
+    bDesign.disabled = !isAdmin;
+    bDraft.disabled = !isAdmin;
+
+    // Ersteller & Admin dürfen die Zuweisung festlegen / anpassen
+    if (isCreatorOrAdmin) {
+        if (assignGroup) assignGroup.style.display = 'flex';
+
+        const populateSelect = (selectEl, currentVal) => {
+            if (!selectEl) return;
+            selectEl.innerHTML = '<option value="">-- Offen --</option>';
+            currentUsers.forEach(u => selectEl.add(new Option(u.code, u.code)));
+            selectEl.value = currentVal || '';
+        };
+
+        populateSelect(selDesign, node.assigned_design_user);
+        populateSelect(selDraft, node.assigned_drafting_user);
+    } else {
+        if (assignGroup) assignGroup.style.display = 'none';
+    }
+
     const btnDel = document.getElementById('btnDeleteBlock');
     const retroBtn = document.getElementById('retroLogAdminBtnContainer');
     const statusGroup = document.getElementById('editStatusGroup');
 
-    bDesign.value = node.budget_design_hours;
-    bDraft.value = node.budget_drafting_hours;
-
-    bDesign.disabled = !isAdmin;
-    bDraft.disabled = !isAdmin;
-    btnDel.style.display = isAdmin ? 'block' : 'none';
+    btnDel.style.display = canDelete ? 'block' : 'none';
     retroBtn.style.display = isAdmin ? 'block' : 'none';
 
-    // Status Override Dropdown (nur für Admin sichtbar)
     if (isAdmin) {
         if (statusGroup) statusGroup.style.display = 'block';
         const statusSelect = document.getElementById('editCompletionStatus');
@@ -458,9 +600,23 @@ window.openConfigModal = function (nodeId) {
     openModal('configModal');
 };
 
-window.handleSaveConfig = async function (e) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Config Speicherung)
+ * ERSETZEN IN: ui.js (Funktion handleSaveConfig)
+ * Breadcrumb: [2026-08-23 15:45:00 CEST] Syntaxfehler und redundante Statusabfrage behoben.
+ * =============================================================================
+ */
+window.handleSaveConfig = async function(e) {
     e.preventDefault();
     const id = document.getElementById('editNodeId').value;
+    const node = currentNodes.find(n => n.id === id);
+    if (!node) return;
+
+    const creator = node.created_by || 'COT';
+    const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
+
     const name = document.getElementById('editName').value;
     const article_number = document.getElementById('editArticleNumber').value;
     const color_hex = document.getElementById('editColor').value;
@@ -468,6 +624,16 @@ window.handleSaveConfig = async function (e) {
 
     const updateData = { name, article_number, color_hex, block_type };
 
+    // Zuweisungen speichern, wenn Admin oder Ersteller
+    if (isCreatorOrAdmin) {
+        const selDesign = document.getElementById('editAssignedDesignUser');
+        const selDraft = document.getElementById('editAssignedDraftingUser');
+
+        if (selDesign) updateData.assigned_design_user = selDesign.value || null;
+        if (selDraft) updateData.assigned_drafting_user = selDraft.value || null;
+    }
+
+    // Budgets & Fertigstellung bleiben exklusiv beim Admin
     if (isAdmin) {
         updateData.budget_design_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDesign').value) || 0);
         updateData.budget_drafting_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDrafting').value) || 0);
@@ -483,33 +649,55 @@ window.handleSaveConfig = async function (e) {
     showToast('Block aktualisiert', 'success');
 };
 
-window.handleDeleteNode = async function () {
-    if (!isAdmin) {
-        showToast('Nur Administratoren können Blöcke löschen.', 'error');
+window.handleDeleteNode = async function() {
+    const id = document.getElementById('editNodeId').value;
+    const node = currentNodes.find(n => n.id === id);
+    if (!node) return;
+
+    const nodeLogs = currentTimeLogs.filter(l => l.node_id === id);
+    const isCreator = (activeUserCode && activeUserCode === node.created_by);
+    const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
+
+    // Hard-Check Backend (falls Jemand trickst)
+    if (!canDelete) {
+        showToast('Nur Admins können Blöcke löschen, auf die bereits Zeiten gebucht wurden.', 'error');
         return;
     }
+
     const confirmed = await customConfirm('Block löschen', 'Möchtest du diesen Block und alle Unterverknüpfungen wirklich entfernen?');
     if (confirmed) {
-        const id = document.getElementById('editNodeId').value;
         await db.from('project_nodes').delete().eq('id', id);
         closeModal('configModal');
         showToast('Block gelöscht', 'success');
     }
 };
 
-window.handleOpenAddZoneModal = function () {
+window.handleOpenAddZoneModal = function(customX = null, customY = null) {
+    if (customX !== null && customY !== null) {
+        document.getElementById('newZoneCustomPos').value = JSON.stringify({ x: customX, y: customY });
+    } else {
+        document.getElementById('newZoneCustomPos').value = '';
+    }
     openModal('newZoneModal');
 };
 
-window.handleAddZone = async function (e) {
+window.handleAddZone = async function(e) {
+    // ... bleibt identisch
     e.preventDefault();
     const title = document.getElementById('newZoneTitle').value.trim();
     const color_hex = document.getElementById('newZoneColor').value;
+    const customPosVal = document.getElementById('newZoneCustomPos').value;
 
     if (!title) return;
 
-    const posX = Math.round(Math.random() * 200 + 100);
-    const posY = Math.round(Math.random() * 150 + 100);
+    let posX = Math.round(Math.random() * 200 + 100);
+    let posY = Math.round(Math.random() * 150 + 100);
+
+    if (customPosVal) {
+        const posObj = JSON.parse(customPosVal);
+        posX = Math.round(posObj.x);
+        posY = Math.round(posObj.y);
+    }
 
     await db.from('project_zones').insert([{
         project_id: activeProjectId,
@@ -528,7 +716,7 @@ window.handleAddZone = async function (e) {
     fetchCanvasData();
 };
 
-window.openEditZoneModal = function (zoneId) {
+window.openEditZoneModal = function(zoneId) {
     const zone = currentZones.find(z => z.id === zoneId);
     if (!zone) return;
 
@@ -560,7 +748,7 @@ window.openEditZoneModal = function (zoneId) {
     openModal('editZoneModal');
 };
 
-window.handleSaveZoneConfig = async function (e) {
+window.handleSaveZoneConfig = async function(e) {
     e.preventDefault();
     const id = document.getElementById('editZoneId').value;
     const title = document.getElementById('editZoneTitle').value.trim();
@@ -572,7 +760,7 @@ window.handleSaveZoneConfig = async function (e) {
     fetchCanvasData();
 };
 
-window.handleDeleteZone = async function (zoneId) {
+window.handleDeleteZone = async function(zoneId) {
     const confirmed = await customConfirm('Bereich löschen', 'Möchtest du diesen Kasten entfernen? (Die darin liegenden Blöcke bleiben erhalten)');
     if (confirmed) {
         await db.from('project_zones').delete().eq('id', zoneId);
@@ -770,12 +958,12 @@ window.handleSaveRetroLog = async function (e) {
 // =============================================================================
 // 8. ADMIN KONTROLLZENTRUM & AUDIT-LOGS
 // =============================================================================
-window.handleAdminIconClick = async function () {
+window.handleAdminIconClick = async function() {
     if (isAdmin) {
         const wantLogout = await customConfirm(
-            'Administrator-Sitzung',
-            'Du bist als Administrator angemeldet. Möchtest du dich abmelden oder das Kontrollzentrum öffnen?',
-            'Abmelden',
+            'Erweiterte Optionen',
+            'Die erweiterten Optionen sind freigeschaltet. Möchtest du diese sperren oder das Kontrollzentrum öffnen?',
+            'Sperren',
             'Kontrollzentrum'
         );
 
@@ -788,18 +976,18 @@ window.handleAdminIconClick = async function () {
             selectedNodeIds.clear();
             renderCanvas();
             updateSidebarStats();
-            showToast('Erfolgreich als Administrator abgemeldet', 'info');
+            showToast('Erweiterte Optionen gesperrt', 'info');
         } else if (wantLogout === false) {
             openAdminModal();
         }
     } else {
-        const pwd = await customPrompt('Administrator-Login', 'Bitte Admin-Passwort eingeben:', '', true);
+        const pwd = await customPrompt('Erweiterte Optionen freischalten', 'Bitte Freischalt-Passwort eingeben:', '', true);
         if (pwd === ADMIN_PASS) {
             isAdmin = true;
             const btn = document.getElementById('adminLockBtn');
             btn.classList.add('logged-in');
             btn.textContent = '🔓';
-            showToast('Als Administrator eingeloggt', 'success');
+            showToast('Erweiterte Optionen freigeschaltet', 'success');
             renderCanvas();
             updateSidebarStats();
             openAdminModal();
@@ -1104,4 +1292,24 @@ window.openModal = function (modalId) {
 window.closeModal = function (modalId) {
     const el = document.getElementById(modalId);
     if (el) el.style.display = 'none';
+};
+
+/**
+* Breadcrumb: [2026-08-23] Persönlicher Sichtbarkeits-Filter
+*/
+window.personalFilterActive = false;
+
+window.togglePersonalFilter = function() {
+    window.personalFilterActive = !window.personalFilterActive;
+    const tag = document.getElementById('sidebarUserCode');
+
+    if (window.personalFilterActive) {
+        tag.classList.add('filter-active');
+        showToast('Filter aktiv: Nur eigene Zuweisungen hervorgehoben', 'info');
+    } else {
+        tag.classList.remove('filter-active');
+        showToast('Filter deaktiviert: Alle Blöcke sichtbar', 'info');
+    }
+
+    if (typeof renderCanvas === 'function') renderCanvas();
 };

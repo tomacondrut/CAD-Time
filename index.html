@@ -7,9 +7,30 @@
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom/dist/panzoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
+    <!-- =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: Kontextmenü Steuerung
+     * ERSETZEN IN: index.html
+     * Breadcrumb: [2026-08-23 15:40:00 CEST] HTML-Kommentarsyntax korrigiert
+     * ============================================================================= -->
     <div id="toast"></div>
+
+    <!-- Canvas Rechtsklick-Kontextmenü -->
+    <!-- =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: Canvas & Node Kontextmenü
+     * ERSETZEN IN: index.html
+     * Breadcrumb: [2026-08-23 15:58:00 CEST] Menüpunkt für Rechtsklick-Löschen ergänzt
+     * ============================================================================= -->
+    <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 175px; padding: 4px 0;">
+        <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Block hinzufügen</div>
+        <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">📍 Bereich / Kasten</div>
+        <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
+        <div id="ctxMenuDeleteNode" class="context-menu-item" style="display: none; color: #e53e3e;" onclick="handleContextMenuAction('delete')">✕ Block löschen</div>
+    </div>
 
     <!-- Dialog-Modal (z-index 3500) -->
     <div id="dialogModal" class="modal-backdrop">
@@ -26,17 +47,45 @@
         </div>
     </div>
 
+    <!-- Info & Leitfaden Modal -->
+    <div id="infoGuideModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 520px;">
+            <div class="modal-header">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
+            <div style="font-size: 12px; color: #4a5568; line-height: 1.6; max-height: 380px; overflow-y: auto; padding-right: 4px;">
+                <strong style="color: #2b6cb0;">Blöcke & Bereiche erstellen:</strong><br>
+                • <strong>Rechtsklick auf Canvas:</strong> Öffnet das Menü zum Hinzufügen von Blöcken oder Bereichen direkt an der Mausposition.<br>
+                • <strong>Live-Verbindung:</strong> Klicke auf den Verbindungspunkt eines Blocks und ziehe die Linie. Ein Rechtsklick auf den Canvas erstellt direkt einen verbundenen Unterblock.<br><br>
+
+                <strong style="color: #2b6cb0;">Bereiche / Kästen & Panzoom:</strong><br>
+                • <strong>Positions-Sperre (🔒 / 🔓):</strong> Über das Schloss im Header eines Kastens kann dessen Position gesperrt werden, um ungehindertes Pan-Verschieben innerhalb großer Rahmen zu ermöglichen.<br>
+                • <strong>Skalieren:</strong> Die Größe kann jederzeit an der rechten unteren Ecke gezogen werden.<br>
+                • <strong>Verschachtelung:</strong> Blöcke und kleinere Kästen werden beim Hineinziehen automatisch der innersten Zone zugewiesen und bewegen sich mit.<br><br>
+
+                <strong style="color: #2b6cb0;">Zeiterfassung & Fertigstellung:</strong><br>
+                • <strong>Mausrad-Steuerung:</strong> Schnelles Justieren der Stunden (+/- 1h) und Minuten (+/- 5m).<br>
+                • <strong>Fertigmelden:</strong> Schließt einen Block ab und reicht ihn zur Freigabe ein (gekennzeichnet mit ⏳ bzw. ✅).
+            </div>
+            <div class="modal-actions" style="margin-top: 15px;">
+                <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Verstanden</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Initiales Login-Modal -->
     <div id="userLoginOverlay" class="modal-backdrop" style="display: flex;">
         <div class="modal-content" style="width: 380px;">
             <div class="modal-header" style="text-align: center;">CAD Time Manager</div>
             <div class="form-group">
                 <label>Projekt / Objekt wählen:</label>
-                <select id="projectSelectLoginDropdown"></select>
+                <select id="projectSelectLoginDropdown">
+                    <option value="">Daten werden geladen...</option>
+                </select>
             </div>
             <div class="form-group">
                 <label>Benutzerkürzel:</label>
-                <select id="userSelectDropdown"></select>
+                <select id="userSelectDropdown">
+                    <option value="">Daten werden geladen...</option>
+                </select>
             </div>
             <button class="btn-prim" style="width: 100%; padding: 10px; margin-top: 10px;" onclick="confirmUserLogin()">Manager betreten</button>
         </div>
@@ -90,6 +139,7 @@
         <div class="modal-content">
             <div class="modal-header">Bereich / Kasten anlegen</div>
             <form id="newZoneForm">
+                <input type="hidden" id="newZoneCustomPos" value="" />
                 <div class="form-group">
                     <label>Bereichsbezeichnung:</label>
                     <input type="text" id="newZoneTitle" required placeholder="z.B. Schlackenhalle oder Kesselhaus" />
@@ -133,7 +183,7 @@
     <!-- Admin: Rückwirkenden Zeiteintrag erstellen -->
     <div id="retroLogModal" class="modal-backdrop">
         <div class="modal-content">
-            <div class="modal-header">Rückwirkende Zeiterfassung (Admin)</div>
+            <div class="modal-header">Rückwirkende Zeiterfassung (Erweiterte Optionen)</div>
             <form id="retroLogForm">
                 <input type="hidden" id="retroLogNodeId" />
                 <div class="form-group">
@@ -190,12 +240,76 @@
         </div>
     </div>
 
+    <!-- Reporting & Auswertung Modal -->
+    <div id="reportModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 850px; max-width: 95%;">
+            <div class="modal-header">📊 Reporting & Auswertung</div>
+
+            <div style="background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #edf2f7; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                <div class="form-group" style="margin-bottom: 0; min-width: 120px;" id="repUserGroup">
+                    <label>Mitarbeiter:</label>
+                    <select id="repFilterUser" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+                    <label>Zeitraum:</label>
+                    <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
+                        <option value="week">Diese Woche</option>
+                        <option value="month">Dieser Monat</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="repCustomDates" style="display: none; margin-bottom: 0; align-items: flex-end; gap: 6px;">
+                    <div>
+                        <label>Von:</label>
+                        <input type="date" id="repStartDate" onchange="updateReportData()" style="padding: 3px; font-size: 11px;" />
+                    </div>
+                    <div>
+                        <label>Bis (Stichtag):</label>
+                        <input type="date" id="repEndDate" onchange="updateReportData()" style="padding: 3px; font-size: 11px;" />
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                    <label>Bereich / Kasten:</label>
+                    <select id="repFilterZone" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                    <label>Block / Baugruppe:</label>
+                    <select id="repFilterBlock" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                <strong style="font-size: 12px; color: var(--primary);">Projekt-Status (Gesamtprojekt zum Stichtag)</strong>
+            </div>
+            <div id="repProjectStatusContainer" style="display: flex; gap: 15px; margin-bottom: 15px; background: #fff; border: 1px solid #edf2f7; padding: 10px; border-radius: 6px;"></div>
+
+            <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                <strong style="font-size: 12px; color: var(--primary);">Gefilterter Aufwand (Summe in Stunden)</strong>
+            </div>
+            <div id="repSummaryContainer" style="display: flex; gap: 15px; margin-bottom: 15px;"></div>
+
+            <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                <strong style="font-size: 12px; color: var(--primary);">Detail-Einträge</strong>
+            </div>
+            <div id="repDetailsContainer" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px;"></div>
+
+            <div class="modal-actions" style="margin-top: 10px; display: flex; justify-content: space-between;">
+                <button type="button" id="btnExportPDF" class="btn-prim" style="background: #dd6b20; display: none;" onclick="generatePDF()">📄 PDF Generieren</button>
+                <button type="button" class="btn-sec" onclick="closeModal('reportModal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
     <div id="app-container">
         <!-- Linke Sidebar -->
         <div id="sidebar">
             <div class="sidebar-header">
                 <span class="sidebar-title">CAD TIME MANAGER</span>
-                <span class="user-tag" id="sidebarUserCode">---</span>
+                <span class="user-tag" id="sidebarUserCode" onclick="togglePersonalFilter()" title="Klick = Nur meine Aufgaben hervorheben">---</span>
             </div>
             <div class="sidebar-content">
                 <div class="sidebar-section-title">Aktives Projekt</div>
@@ -204,8 +318,9 @@
                     <div class="sidebar-stat-label">
                         <span>Projekt / Objekt</span>
                         <div style="display: flex; gap: 6px;">
+                            <span style="cursor: pointer; font-size: 11px; color: #f6ad55;" onclick="openReportModal()" title="Auswertung & Reporting öffnen">📊 Auswertung</span>
                             <span style="cursor: pointer; font-size: 11px; color: #63b3ed;" onclick="openArchiveModal()" title="Projekt-Archiv öffnen">🗄️ Archiv</span>
-                            <span id="btnAdminProjects" style="cursor: pointer; display: none; font-size: 11px; color: #68d391;" onclick="openAdminModal()" title="Projekte verwalten">+ Admin</span>
+                            <span id="btnAdminProjects" style="cursor: pointer; display: none; font-size: 11px; color: #68d391;" onclick="openAdminModal()" title="Erweiterte Optionen">+ Admin</span>
                         </div>
                     </div>
                     <select id="sidebarProjectSelect" style="width: 100%; padding: 6px; font-size: 12px; font-weight: normal; background: #1a202c; color: #fff; border: 1px solid #4a5568; border-radius: 4px; margin-top: 4px;" onchange="handleSidebarProjectChange(this.value)"></select>
@@ -231,28 +346,27 @@
                     </div>
                 </div>
 
+
                 <div class="sidebar-stat">
                     <div class="sidebar-stat-label">Offene Freigaben</div>
                     <div class="sidebar-stat-val" id="sbPendingLogs" style="color: #ecc94b;">0 Einträge</div>
                 </div>
 
-                <div class="sidebar-section-title" style="margin-top: 20px;">Bedienung & Zonen</div>
-                <p style="font-size: 11px; color: #718096; line-height: 1.4;">
-                    • <strong>+ Kasten / Bereich:</strong> Erzeuge optische Zonen (z. B. Schlackenhalle)<br>
-                    • <strong>Kasten skalieren:</strong> Am rechten unteren Eck ziehen<br>
-                    • <strong>Live-Spline + Rechtsklick:</strong> Neuer Block direkt verbunden
-                </p>
+                <!-- NEU: DIESEN ABSCHNITT HINZUFÜGEN -->
+                <div class="sidebar-section-title" style="margin-top: 20px;">Top-Bereiche (Ansicht)</div>
+                <div id="sidebarZonesContainer" style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px;">
+                    <!-- Wird dynamisch mit Rahmen und 👁️-Icons befüllt -->
+                </div>
+                <!-- ENDE NEUER ABSCHNITT -->
             </div>
         </div>
 
         <!-- Canvas Bereich -->
         <div id="viewport">
-            <div class="top-toolbar">
-                <button class="btn-main" id="btnOpenAddBlockModal">+ Block hinzufügen</button>
-                <button class="btn-main" id="btnOpenAddZoneModal" style="background: #4a5568;">+ Bereich / Kasten</button>
-            </div>
-
-            <button id="adminLockBtn" title="Admin Login / Verwaltung" onclick="handleAdminIconClick()">🔒</button>
+            <!-- Buttons links oben entfernt -->
+            <!-- Info-Leitfaden Button links vom Schloss -->
+            <button id="infoGuideBtn" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
+            <button id="adminLockBtn" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
 
             <div class="zoom-controls">
                 <button class="btn-zoom" id="btnZoomIn">+</button>
@@ -267,7 +381,6 @@
     </div>
 
     <!-- Konfigurations-Modal (Block) -->
-    <!-- Konfigurations-Modal (Block) -->
     <div id="configModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header" id="modalTitle">Block konfigurieren</div>
@@ -275,7 +388,6 @@
                 <input type="hidden" id="editNodeId" />
                 <input type="hidden" id="editColor" value="#2b6cb0" />
 
-                <!-- NEU: Admin Status Override -->
                 <div class="form-group" id="editStatusGroup" style="display: none;">
                     <label>Bearbeitungs-Status:</label>
                     <select id="editCompletionStatus">
@@ -294,6 +406,26 @@
                         <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="editBlockType" value="part" style="width: auto;" /> Bauteil
                         </label>
+                    </div>
+                </div>
+
+                <!-- =============================================================================
+                * Projekt: CAD Time Manager
+                * Domain: Zuweisungs-Dropdowns nach Fachbereich (CAD / Zeichnung)
+                * ERSETZEN IN: index.html (im configModal)
+                * ============================================================================= -->
+                <div id="editAssignedUserGroup" style="display: none; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung CAD:</label>
+                        <select id="editAssignedDesignUser">
+                            <option value="">-- Offen --</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung Zeichnung:</label>
+                        <select id="editAssignedDraftingUser">
+                            <option value="">-- Offen --</option>
+                        </select>
                     </div>
                 </div>
 
@@ -324,7 +456,7 @@
                 </div>
 
                 <div id="retroLogAdminBtnContainer" style="display: none; margin-top: 10px;">
-                    <button type="button" class="btn-sec" style="width: 100%; border: 1px dashed #2b6cb0; color: #2b6cb0;" onclick="openRetroLogModal()">+ Rückwirkenden Zeiteintrag hinzufügen (Admin)</button>
+                    <button type="button" class="btn-sec" style="width: 100%; border: 1px dashed #2b6cb0; color: #2b6cb0;" onclick="openRetroLogModal()">+ Rückwirkenden Zeiteintrag hinzufügen</button>
                 </div>
 
                 <div class="modal-actions">
@@ -339,7 +471,7 @@
     <!-- Admin Kontrollzentrum Modal -->
     <div id="adminModal" class="modal-backdrop">
         <div class="modal-content" style="width: 700px; max-width: 95%;">
-            <div class="modal-header">Admin-Verwaltung</div>
+            <div class="modal-header">Erweiterte Optionen</div>
 
             <div style="margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                 <strong style="font-size: 12px; color: var(--primary);">Projekte verwalten & Budgets anpassen</strong>
@@ -361,20 +493,17 @@
 
             <div id="projectListContainer" style="max-height: 120px; overflow-y: auto; margin-bottom: 14px; border: 1px solid #edf2f7; border-radius: 4px; padding: 4px;"></div>
 
-            <!-- Budget-Änderungshistorie (mit Toggle) -->
             <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
                 <strong style="font-size: 12px; color: var(--primary);">Budget-Änderungshistorie (Audit-Protokoll)</strong>
                 <button type="button" id="btnToggleAuditScope" class="audit-toggle-btn" onclick="toggleAuditScope()">Alle Einträge anzeigen</button>
             </div>
             <div id="budgetAuditLogsContainer" style="max-height: 110px; overflow-y: auto; margin-bottom: 14px;"></div>
 
-            <!-- Offene Freigaben -->
             <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                 <strong style="font-size: 12px; color: var(--primary);">Offene Freigaben</strong>
             </div>
             <div id="pendingLogsTableContainer" style="max-height: 100px; overflow-y: auto; margin-bottom: 14px;"></div>
 
-            <!-- Benutzerkürzel verwalten -->
             <div style="margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
                 <strong style="font-size: 12px; color: var(--primary);">Benutzerkürzel verwalten</strong>
             </div>
@@ -390,14 +519,11 @@
         </div>
     </div>
 
-    <!-- 1. UI & Helfer zuerst laden -->
+    <!-- Skripte -->
     <script src="ui.js"></script>
-    <!-- 2. Datenhaltung & Logik -->
     <script src="db.js"></script>
-    <!-- 3. Canvas Engine -->
+    <script src="report.js"></script>
     <script src="canvas.js"></script>
-    <!-- 4. Bootstrap / Event-Initialisierung -->
     <script src="app.js"></script>
-
 </body>
 </html>

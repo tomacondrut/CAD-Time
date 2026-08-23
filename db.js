@@ -2,7 +2,7 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Datenbank, Realtime-Sync, State & Hierarchie-Rollup Engine
- * Zeitstempel: 2026-08-22 16:15:00 CEST
+ * Zeitstempel: 2026-08-23 10:00:00 CEST
  * =============================================================================
  */
 
@@ -15,7 +15,6 @@ let isAdmin = false;
 let activeUserCode = '';
 let activeProjectId = 'proj_default';
 
-// Konstanten, die zuvor verloren gingen
 const COLOR_PRESETS = [
     { name: 'Stahlblau', hex: '#2b6cb0' },
     { name: 'Salbeigrün', hex: '#38a169' },
@@ -24,6 +23,9 @@ const COLOR_PRESETS = [
     { name: 'Dunkel-Petrol', hex: '#319795' },
     { name: 'Gedämpftes Indigo', hex: '#553c9a' }
 ];
+
+// Globales Set für ausgeblendete Zonen sicher an window binden
+window.hiddenTopZoneIds = new Set();
 
 let currentProjects = [];
 let currentNodes = [];
@@ -39,34 +41,80 @@ let expandedNodes = new Set();
 let collapsedParents = new Set();
 let dialogResolve = null;
 
+// NEU: Lokaler State für das Ausblenden/Isolieren von Zonen
+window.hiddenTopZoneIds = new Set();
+
 // --- Datenabruf & Realtime ---
 async function fetchUsers() {
-    const { data } = await db.from('app_users').select('*').order('code', { ascending: true });
-    currentUsers = data || [];
-    if (window.renderUserDropdowns) window.renderUserDropdowns();
-    if (isAdmin && window.renderAdminUserList) window.renderAdminUserList();
+    try {
+        const { data, error } = await db.from('app_users').select('*').order('code', { ascending: true });
+        if (error) throw error;
+        currentUsers = data || [];
+    } catch (err) {
+        console.error("Fehler beim Laden der Benutzer:", err);
+        currentUsers = []; // Fallback bei Fehler
+    } finally {
+        // Wird IMMER ausgeführt, auch wenn die Abfrage fehlschlägt
+        if (typeof window.renderUserDropdowns === 'function') {
+            window.renderUserDropdowns();
+        }
+        if (isAdmin && typeof window.renderAdminUserList === 'function') {
+            window.renderAdminUserList();
+        }
+    }
 }
-
 async function fetchProjects() {
-    const { data } = await db.from('projects').select('*').order('object_number', { ascending: true });
-    currentProjects = data || [];
-    if (window.renderProjectDropdowns) window.renderProjectDropdowns();
-    if (window.updateSidebarStats) window.updateSidebarStats();
-    if (isAdmin && window.renderAdminProjectList) window.renderAdminProjectList();
-    if (window.renderArchivedProjectsList) window.renderArchivedProjectsList();
+    try {
+        const { data, error } = await db.from('projects').select('*').order('object_number', { ascending: true });
+        if (error) throw error;
+        currentProjects = data || [];
+
+        // Erstes aktives Projekt als Standard setzen, falls noch keines gewählt
+        const activeProjects = currentProjects.filter(p => !p.is_archived);
+        if (activeProjects.length > 0 && !activeProjects.some(p => p.id === activeProjectId)) {
+            activeProjectId = activeProjects[0].id;
+        }
+    } catch (err) {
+        console.error("Fehler beim Laden der Projekte:", err);
+        currentProjects = []; // Fallback bei Fehler
+    } finally {
+        // Wird IMMER ausgeführt
+        if (typeof window.renderProjectDropdowns === 'function') {
+            window.renderProjectDropdowns();
+        }
+        if (typeof window.updateSidebarStats === 'function') {
+            window.updateSidebarStats();
+        }
+        if (isAdmin && typeof window.renderAdminProjectList === 'function') {
+            window.renderAdminProjectList();
+        }
+        if (typeof window.renderArchivedProjectsList === 'function') {
+            window.renderArchivedProjectsList();
+        }
+    }
 }
 
-// --- Datenabruf & Realtime mit Anti-Freeze ---
 window.isDraggingAnything = false;
 window.pendingCanvasUpdate = false;
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & State
+ * ERSETZEN IN: db.js
+ * Funktion: fetchCanvasData
+ * Breadcrumbs:
+ *   - [2026-08-23 10:00:00 CEST]: Initialer Datenabruf für Nodes, Edges, Zones, Logs
+ *   - [2026-08-23 10:55:00 CEST]: Aufruf von window.renderSidebarZones hinzugefügt, 
+ *     um Zonen-Liste & Isolierungs-Status in der Sidebar synchron zu halten.
+ * =============================================================================
+ */
 async function fetchCanvasData() {
     const { data: nodes } = await db.from('project_nodes').select('*').eq('project_id', activeProjectId);
     const { data: edges } = await db.from('project_edges').select('*').eq('project_id', activeProjectId);
     const { data: zones } = await db.from('project_zones').select('*').eq('project_id', activeProjectId);
     const { data: logs } = await db.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false });
 
-    // BUGFIX: Rendering pausieren, wenn User gerade etwas verschiebt!
     if (window.isDraggingAnything) {
         window.pendingCanvasUpdate = true;
         return;
@@ -79,6 +127,7 @@ async function fetchCanvasData() {
 
     if (window.renderCanvas) window.renderCanvas();
     if (window.updateSidebarStats) window.updateSidebarStats();
+    if (window.renderSidebarZones) window.renderSidebarZones();
     if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
 }
 

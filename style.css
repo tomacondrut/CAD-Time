@@ -150,26 +150,30 @@ html, body {
 
 /* Canvas Viewport */
 #viewport {
-  flex: 1;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-  cursor: grab;
+    flex: 1;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+    /* Raster als unendlichen Hintergrund setzen */
+    background-color: var(--bg-canvas);
+    background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
 }
 
-#viewport:active {
-  cursor: grabbing;
-}
+    #viewport:active {
+        cursor: grabbing;
+    }
 
 #canvas {
-  width: 6000px;
-  height: 6000px;
-  position: absolute;
-  top: 0;
-  left: 0;
-  background-size: 24px 24px;
-  background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
-  transform-origin: 0 0;
+    width: 6000px;
+    height: 6000px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* Hintergrund entfernt -> Der Viewport scheint jetzt durch! */
+    background: transparent;
+    transform-origin: 0 0;
 }
 
 /* Native SVG Connection Layer */
@@ -843,3 +847,116 @@ html, body {
     box-shadow: 0 0 15px rgba(49, 130, 206, 0.4) !important;
     transition: all 0.2s ease;
 }
+
+/* =============================================================================
+ * Kontextmenü, Info-Modal & Zonen-Lock
+ * ============================================================================= */
+
+/* Rechtsklick-Kontextmenü auf dem Canvas */
+#canvasContextMenu {
+    position: fixed;
+    display: none;
+    background: #ffffff;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    z-index: 5000;
+    min-width: 170px;
+    padding: 4px 0;
+}
+
+.context-menu-item {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #2d3748;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    .context-menu-item:hover {
+        background-color: #edf2f7;
+        color: #2b6cb0;
+    }
+
+/* Gesperrte Zone (Klicks gehen durch zum Panzoom) */
+.project-zone.zone-locked {
+    pointer-events: none !important;
+    border-style: solid !important;
+}
+
+    /* Header & Resize-Handle bleiben bei gesperrter Zone bedienbar */
+    .project-zone.zone-locked .project-zone-header,
+    .project-zone.zone-locked .zone-resize-handle {
+        pointer-events: auto !important;
+    }
+
+/* Info-Button neben dem Schloss */
+#infoGuideBtn {
+    position: absolute;
+    top: 16px;
+    right: 68px;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-size: 16px;
+}
+
+    #infoGuideBtn:hover {
+        background: #edf2f7;
+    }
+
+/* =============================================================================
+ * Highlight-Effekt für Instanz-Verknüpfungen
+ * ============================================================================= */
+.linked-highlight {
+    outline: 3px solid #f6ad55 !important;
+    box-shadow: 0 0 15px rgba(246, 173, 85, 0.6) !important;
+    /* WICHTIG: Nur outline und box-shadow animieren, NICHT 'all' ! 
+       Sonst ruckelt das Drag & Drop, weil left/top ebenfalls animiert werden. */
+    transition: outline 0.2s ease, box-shadow 0.2s ease !important;
+    z-index: 50 !important;
+}
+
+.linked-icon {
+    font-size: 10px;
+    margin-left: 6px;
+    color: #dd6b20;
+    cursor: help;
+}
+
+/* =============================================================================
+ * Breadcrumb: [2026-08-23] Personal Filter & Dimming-Effekte
+ * ============================================================================= */
+.node-dimmed {
+    opacity: 0.25 !important;
+    filter: grayscale(100%) !important;
+    z-index: 5 !important;
+    transition: all 0.3s ease;
+}
+
+.user-tag {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+    .user-tag:hover {
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+    }
+
+    .user-tag.filter-active {
+        background: #dd6b20 !important;
+        box-shadow: 0 0 12px rgba(221, 107, 32, 0.7);
+        color: #fff;
+    }
