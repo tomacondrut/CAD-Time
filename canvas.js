@@ -1,8 +1,14 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: NATIVE Canvas Engine (Ohne Panzoom)
- * Update: Komplett eigenständige CSS-Transform Engine à la "index_3.html"
+ * Domain: NATIVE Canvas Engine, 4-Seiten Handles & Flow-Arrows
+ * ERSETZEN IN: canvas.js (Gesamte Datei)
+ * Zeitstempel: 2026-08-23 19:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-23 10:00:00 CEST]: Native CSS-Transform Canvas Engine.
+ *   - [2026-08-23 15:15:00 CEST]: Instanz-Duplizierung & Kontextmenü.
+ *   - [2026-08-23 19:40:00 CEST]: 4 Handles pro Block, Materialfluss-Pfeile 
+ *     zwischen Rahmen und flüssige Spline-Verbindungen.
  * =============================================================================
  */
 
@@ -11,26 +17,17 @@ window.currentScale = 1;
 window.currentPanX = 100;
 window.currentPanY = 100;
 
-// Dummy-Proxy, damit dein bestehender Drag&Drop Code nicht umgeschrieben werden muss
+// Dummy-Proxy, damit bestehender Drag&Drop Code kompatibel bleibt
 window.panzoomInstance = { getScale: () => window.currentScale };
 
 let connectingFirstNodeId = null;
 let connectingFirstPoint = null;
+let connectingFlowZoneId = null;
 let contextMenuCoords = { x: 100, y: 100 };
+let contextTargetNodeId = null;
 
 /**
- * Wendet die Zoom- und Pan-Werte nativ als CSS-Matrix an
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Transform Engine & Infinite Grid
- * ERSETZEN IN: canvas.js
- * Breadcrumbs:
- *   - [2026-08-23] Infinite Grid: Raster wurde vom Canvas gelöst und wird nun
- *     auf dem Viewport in Echtzeit mit Pan & Zoom synchronisiert. Die Dot-Größe
- *     skaliert dabei ebenfalls proportional mit.
- * =============================================================================
+ * Wendet Zoom- und Pan-Werte nativ an und synchronisiert das Viewport-Punktraster
  */
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
@@ -48,29 +45,17 @@ function applyCanvasTransform(animate = false) {
         viewportEl.style.transition = 'none';
     }
 
-    // Ursprung ist und bleibt OBEN LINKS (0 0)
     canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate(${window.currentPanX}px, ${window.currentPanY}px) scale(${window.currentScale})`;
 
-    // =========================================================================
-    // Viewport-Raster synchron halten
-    // =========================================================================
+    // Viewport-Raster (Infinite Grid) synchronisieren
     const scaledGridSize = 24 * window.currentScale;
     viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
     viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
 
-    // Punktgröße (Dot-Radius) proportional mitskalieren
     const dotSize = Math.max(1, 1.5 * window.currentScale);
     viewportEl.style.backgroundImage = `radial-gradient(circle, #cbd5e0 ${dotSize}px, transparent ${dotSize}px)`;
 }
-
-
-/**
- * =============================================================================
- * FEHLENDE FUNKTIONEN FÜR PANZOOM UND DRAG-EVENTS
- * Breadcrumb: [2026-08-23] Hinzugefügt, da ReferenceErrors den App-Start blockierten
- * =============================================================================
- */
 
 window.handleLiveSplineMove = function(e) {
     if (connectingFirstNodeId) {
@@ -79,33 +64,8 @@ window.handleLiveSplineMove = function(e) {
     }
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Kontextmenü Steuerung & Rechtsklick-Duplizierung
- * ERSETZEN IN: canvas.js
- * Breadcrumbs:
- *   - [2026-08-23 10:00:00 CEST]: Canvas-weites Kontextmenü für Block/Zone
- *   - [2026-08-23 15:10:00 CEST]: Rechtsklick auf Karte erkennt node_id und 
- *     schaltet "Als Instanz duplizieren" frei.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Kontextmenü Steuerung (Duplizieren & Berechtigtes Löschen)
- * ERSETZEN IN: canvas.js
- * Breadcrumbs:
- *   - [2026-08-23 15:58:00 CEST]: Rechtsklick-Löschen mit dynamischer Rechteprüfung
- *     (Admin oder Ersteller ohne Zeitbuchungen) integriert.
- * =============================================================================
- */
-let contextTargetNodeId = null;
-
 window.handleCanvasContextMenu = function(e) {
     e.preventDefault();
-
-    // UI-Elemente ignorieren
     if (e.target.closest('button, input, select, .sidebar')) return;
 
     const menu = document.getElementById('canvasContextMenu');
@@ -114,7 +74,6 @@ window.handleCanvasContextMenu = function(e) {
     const itemAddBlock = document.getElementById('ctxMenuAddBlock');
     const itemAddZone = document.getElementById('ctxMenuAddZone');
 
-    // Prüfen, ob der Rechtsklick auf eine Baugruppen-Karte erfolgte
     const cardEl = e.target.closest('.assembly-card');
     if (cardEl) {
         contextTargetNodeId = cardEl.id;
@@ -154,32 +113,25 @@ window.cancelConnectionMode = function() {
     renderConnections();
 };
 
-
 function initPanzoom() {
     const viewport = document.getElementById('viewport');
-
-    // 1. Initial anwenden
     applyCanvasTransform();
 
-    // 2. EXAKTES MAUSRAD-ZOOMEN AUF DEN CURSOR
+    // Zooming
     viewport.addEventListener('wheel', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
         e.preventDefault();
 
-        // 1.15 für rein, 0.85 für raus
         const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
         const newScale = Math.min(Math.max(window.currentScale * zoomFactor, 0.05), 5.0);
 
-        // Maus-Position im Bildschirm
         const rect = viewport.getBoundingClientRect();
         const clientX = e.clientX - rect.left;
         const clientY = e.clientY - rect.top;
 
-        // Position relativ zur unskalierten 0/0-Koordinate
         const pivotX = (clientX - window.currentPanX) / window.currentScale;
         const pivotY = (clientY - window.currentPanY) / window.currentScale;
 
-        // Neuen Pan berechnen, damit das Element genau unter der Maus bleibt
         window.currentPanX = window.currentPanX - (pivotX * (newScale - window.currentScale));
         window.currentPanY = window.currentPanY - (pivotY * (newScale - window.currentScale));
         window.currentScale = newScale;
@@ -187,14 +139,12 @@ function initPanzoom() {
         applyCanvasTransform();
     }, { passive: false });
 
-    // 3. PANNEN (Auch außerhalb des Canvas möglich, da wir den Viewport tracken!)
+    // Panning
     let isDraggingCanvas = false;
     let startMouseX = 0, startMouseY = 0;
 
     viewport.addEventListener('mousedown', (e) => {
-        // Nur pannen, wenn wir keinen Button, Input oder die Baugruppe selbst greifen
         const isControl = e.target.closest('button, input, select, .assembly-card, .project-zone-header, .zone-resize-handle');
-
         if (!isControl || e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             isDraggingCanvas = true;
             startMouseX = e.clientX - window.currentPanX;
@@ -216,7 +166,6 @@ function initPanzoom() {
         viewport.style.cursor = 'grab';
     });
 
-    // 4. Standard-Events
     viewport.addEventListener('mousemove', handleLiveSplineMove);
     viewport.addEventListener('contextmenu', handleCanvasContextMenu);
 
@@ -226,15 +175,16 @@ function initPanzoom() {
                 cancelConnectionMode();
                 showToast('Verbindungsvorgang abgebrochen', 'info');
             }
+            if (connectingFlowZoneId) {
+                connectingFlowZoneId = null;
+                showToast('Materialfluss abgebrochen', 'info');
+            }
             if (selectedNodeIds.size > 0) {
                 selectedNodeIds.clear();
                 renderCanvas();
             }
         }
 
-        /**
-         * Breadcrumb: [2026-08-23] Kopieren (Strg+C) und Einfügen (Strg+V)
-         */
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
             if (selectedNodeIds.size > 0) {
                 window.copiedNodeIds = Array.from(selectedNodeIds);
@@ -249,7 +199,6 @@ function initPanzoom() {
         }
     });
 
-    // Toolbar-Buttons mit nativer Skalierung
     document.getElementById('btnZoomIn').addEventListener('click', () => {
         const newScale = Math.min(window.currentScale * 1.2, 5.0);
         const rect = viewport.getBoundingClientRect();
@@ -286,19 +235,6 @@ function getCanvasCoords(clientX, clientY) {
     };
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Kontextmenü Steuerung & Duplizierung (Fix für Sichtbarkeit & Supabase-Sync)
- * ERSETZEN IN: canvas.js
- * Breadcrumbs:
- *   - [2026-08-23 15:10:00 CEST]: Rechtsklick-Duplizierung initial hinzugefügt.
- *   - [2026-08-23 15:15:00 CEST]: Fix für Block-Sichtbarkeit: Explizites Abwarten von 
- *     Supabase-Inserts mit Fehlerbehandlung und sauberem zone_id Re-Calc.
- *   - [Vorherige Logik archiviert]: db.from().insert() ohne Error-Catching und mit 
- *     statischer Zuweisung von originalNode.zone_id führte zu Rendering-Ausblendungen.
- * =============================================================================
- */
 window.handleContextMenuAction = async function(type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
@@ -378,23 +314,31 @@ window.handleContextMenuAction = async function(type) {
     }
 };
 
-window.handleEndpointClick = async function(e, nodeId, pointType) {
-    e.stopPropagation();
-
-    const node = currentNodes.find(n => n.id === nodeId);
-    if (!node) return;
-
+function getNodeHandleCoords(node, handleType) {
     const nodeEl = document.getElementById(node.id);
     const w = nodeEl ? nodeEl.offsetWidth : 320;
     const h = nodeEl ? nodeEl.offsetHeight : 200;
 
-    const pointX = node.pos_x + w / 2;
-    const pointY = pointType === 'top' ? node.pos_y : node.pos_y + h;
+    switch (handleType) {
+        case 'top': return { x: node.pos_x + w / 2, y: node.pos_y };
+        case 'bottom': return { x: node.pos_x + w / 2, y: node.pos_y + h };
+        case 'left': return { x: node.pos_x, y: node.pos_y + h / 2 };
+        case 'right': return { x: node.pos_x + w, y: node.pos_y + h / 2 };
+        default: return { x: node.pos_x + w / 2, y: node.pos_y + h };
+    }
+}
+
+window.handleEndpointClick = async function(e, nodeId, pointType) {
+    e.stopPropagation();
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const pt = getNodeHandleCoords(node, pointType);
 
     if (!connectingFirstNodeId) {
         connectingFirstNodeId = nodeId;
-        connectingFirstPoint = { x: pointX, y: pointY };
-        showToast('Block gewählt. Klicke 2. Block an oder Rechtsklick zum Neuerstellen.', 'info');
+        connectingFirstPoint = { x: pt.x, y: pt.y, handle: pointType };
+        showToast(`Verbindungspunkt [${pointType.toUpperCase()}] gewählt. Ziel anklicken.`, 'info');
         renderCanvas();
     } else {
         if (connectingFirstNodeId === nodeId) {
@@ -405,24 +349,31 @@ window.handleEndpointClick = async function(e, nodeId, pointType) {
 
         const firstNode = currentNodes.find(n => n.id === connectingFirstNodeId);
         const secondNode = node;
-
-        let parentNode, childNode;
-        if (firstNode.pos_y <= secondNode.pos_y) {
-            parentNode = firstNode;
-            childNode = secondNode;
-        } else {
-            parentNode = secondNode;
-            childNode = firstNode;
-        }
+        const firstHandle = connectingFirstPoint.handle;
+        const secondHandle = pointType;
 
         cancelConnectionMode();
 
-        const exists = currentEdges.some(edge => edge.source === parentNode.id && edge.target === childNode.id);
+        let parentNode = firstNode, childNode = secondNode;
+        let sHandle = firstHandle, tHandle = secondHandle;
+
+        if (firstHandle === 'top' || (firstHandle === 'left' && secondHandle === 'right')) {
+            parentNode = secondNode; childNode = firstNode;
+            sHandle = secondHandle; tHandle = firstHandle;
+        }
+
+        const exists = currentEdges.some(edge =>
+            (edge.source === parentNode.id && edge.target === childNode.id) ||
+            (edge.source === childNode.id && edge.target === parentNode.id)
+        );
+
         if (!exists) {
             const newEdge = {
                 project_id: activeProjectId,
                 source: parentNode.id,
                 target: childNode.id,
+                source_handle: sHandle,
+                target_handle: tHandle,
                 created_by: activeUserCode || 'COT'
             };
             currentEdges.push(newEdge);
@@ -432,6 +383,75 @@ window.handleEndpointClick = async function(e, nodeId, pointType) {
         } else {
             showToast('Diese Verbindung existiert bereits.', 'info');
         }
+    }
+};
+
+window.handleStartZoneFlow = function(e, zoneId) {
+    e.stopPropagation();
+    if (!connectingFlowZoneId) {
+        connectingFlowZoneId = zoneId;
+        const z = currentZones.find(item => item.id === zoneId);
+        showToast(`Materialfluss von "${z ? z.title : ''}" gewählt. Klicke Ziel-Rahmen ➔ an.`, 'info');
+    } else {
+        if (connectingFlowZoneId === zoneId) {
+            connectingFlowZoneId = null;
+            showToast('Materialfluss abgebrochen', 'info');
+            return;
+        }
+        createZoneFlowArrow(connectingFlowZoneId, zoneId);
+        connectingFlowZoneId = null;
+    }
+};
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Materialfluss-Pfeile Rendering & Typen-Fix
+ * ERSETZEN IN: canvas.js
+ * Breadcrumbs:
+ *   - [2026-08-23 20:00:00 CEST]: ID-Vergleich (String-Cast) korrigiert, Pfeilspitzen-Marker
+ *     sicher initialisiert und Koordinaten-Parsing auf Float abgesichert.
+ * =============================================================================
+ */
+async function createZoneFlowArrow(sourceId, targetId) {
+    const srcZone = currentZones.find(z => String(z.id) === String(sourceId));
+    const tgtZone = currentZones.find(z => String(z.id) === String(targetId));
+    if (!srcZone || !tgtZone) return;
+
+    const newArrow = {
+        project_id: activeProjectId,
+        source_zone_id: String(sourceId),
+        target_zone_id: String(targetId),
+        source_side: 'right',
+        source_ratio: 0.5,
+        target_side: 'left',
+        target_ratio: 0.5,
+        created_by: activeUserCode || 'COT'
+    };
+
+    const { data, error } = await db.from('zone_flow_arrows').insert([newArrow]).select().single();
+    if (error) {
+        console.error("Fehler beim Speichern des Pfeils:", error);
+        showToast('Fehler beim Speichern des Pfeils', 'error');
+        return;
+    }
+
+    if (!window.currentFlowArrows) window.currentFlowArrows = [];
+    if (data) window.currentFlowArrows.push(data);
+
+    showToast(`Materialfluss: ${srcZone.title} ➔ ${tgtZone.title}`, 'success');
+    renderConnections();
+}
+
+window.handleDeleteFlowArrow = async function(arrowId) {
+    const confirmed = await customConfirm('Materialfluss löschen', 'Möchtest du diesen Materialfluss-Pfeil entfernen?');
+    if (confirmed) {
+        await db.from('zone_flow_arrows').delete().eq('id', arrowId);
+        if (window.currentFlowArrows) {
+            window.currentFlowArrows = window.currentFlowArrows.filter(a => String(a.id) !== String(arrowId));
+        }
+        showToast('Pfeil entfernt', 'info');
+        renderConnections();
     }
 };
 
@@ -570,13 +590,11 @@ window.centerViewOnVisible = function(targetZoneId = null) {
     };
 
     if (targetZoneId) {
-        // PERFEKTE ISOLIERUNG: Nur die Maße des ausgewählten Rahmens nehmen
         const specific = currentZones.find(z => z.id === targetZoneId);
         if (specific) {
             updateBounds(parseFloat(specific.pos_x) || 0, parseFloat(specific.pos_y) || 0, parseFloat(specific.width) || 400, parseFloat(specific.height) || 300);
         }
     } else {
-        // ALLES SICHTBARE ZENTRIEREN
         const visibleZones = currentZones.filter(z => !window.isZoneHidden(z.id));
         visibleZones.forEach(z => {
             updateBounds(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 400, parseFloat(z.height) || 300);
@@ -588,10 +606,9 @@ window.centerViewOnVisible = function(targetZoneId = null) {
         });
     }
 
-    // Falls alles leer ist, setze sauber auf Standard zurück
     if (!hasElements || !isFinite(minX) || !isFinite(minY)) {
-        window.currentScale = 1; 
-        window.currentPanX = 50; 
+        window.currentScale = 1;
+        window.currentPanX = 50;
         window.currentPanY = 50;
         applyCanvasTransform(true);
         return;
@@ -601,7 +618,7 @@ window.centerViewOnVisible = function(targetZoneId = null) {
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
 
-    const padding = 100; // Echter Abstand in Pixeln zum Bildschirmrand
+    const padding = 100;
     const bboxW = maxX - minX;
     const bboxH = maxY - minY;
 
@@ -633,17 +650,6 @@ window.toggleZoneLock = async function(e, zoneId) {
     renderCanvas();
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Canvas Rendering Engine (Bereinigt)
- * ERSETZEN IN: canvas.js
- * Breadcrumbs:
- *   - [2026-08-23 10:00:00 CEST]: Node/Zone-Rendering mit Splines & Rollups.
- *   - [2026-08-23 15:35:00 CEST]: Duplizierte Initialisierungsblöcke bereinigt, 
- *     Personal Filter, Zuweisungs-Badge & Instanz-Kopplung konsolidiert.
- * =============================================================================
- */
 function renderCanvas() {
     const canvas = document.getElementById('canvas');
     const svgLayer = document.getElementById('connections-layer');
@@ -730,6 +736,7 @@ function renderCanvas() {
           </div>
         </div>
         <div class="zone-actions">
+          <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil zu anderem Rahmen ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
           <button type="button" class="zone-btn" title="${zone.is_locked ? 'Position entsperren' : 'Position sperren (Panzoom aktiv)'}" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
           ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
             <button type="button" class="zone-btn" title="Bereich bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
@@ -946,7 +953,6 @@ function renderCanvas() {
 
         const isExpanded = expandedNodes.has(node.id);
 
-        // Logs über alle verknüpften Instanzen hinweg bündeln
         const relatedNodeIds = node.linked_id
             ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
             : [node.id];
@@ -1048,33 +1054,6 @@ function renderCanvas() {
             }
         }
 
-        /**
-         * =============================================================================
-         * Projekt: CAD Time Manager
-         * Domain: Node Header & Dual-Zuweisung Filter
-         * ERSETZEN IN: canvas.js (innerhalb renderCanvas)
-         * Breadcrumbs:
-         *   - [2026-08-23 15:52:00 CEST]: Zuweisungs-Prüfung auf CAD (assigned_design_user) 
-         *     und Zeichnung (assigned_drafting_user) aufgeteilt. Badges für beide Rollen 
-         *     werden im Header getrennt farblich dargestellt (Blau für CAD, Grün für Zeichnung).
-         *   - [Vorherige Logik archiviert]: Prüfung auf einfache assigned_user-Zuweisung 
-         *     wurde abgelöst.
-         * =============================================================================
-         */
-        // Dual-Filter prüfen: Dimmen, wenn Filter aktiv und der eingeloggte User weder CAD noch Zeichnung hat
-
-        /**
-         * =============================================================================
-         * Projekt: CAD Time Manager
-         * Domain: Node Header Badges (Icon-Update)
-         * ERSETZEN IN: canvas.js (innerhalb renderCanvas)
-         * Breadcrumbs:
-         *   - [2026-08-23 16:00:00 CEST]: Badges auf 🆛 (3D-Button) und 📄 (Zeichnungsblatt) 
-         *     aktualisiert für eine klare fachliche Trennung.
-         *   - [Vorherige Logik archiviert]: Vorherige Icons (🧊 / ✏️) wurden abgelöst.
-         * =============================================================================
-         */
-        // Dual-Filter prüfen: Dimmen, wenn Filter aktiv und der eingeloggte User weder CAD noch Zeichnung hat
         const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
         const isDimmed = window.personalFilterActive && !isUserAssigned;
 
@@ -1086,7 +1065,6 @@ function renderCanvas() {
         el.id = node.id;
         if (isLinked) el.dataset.linkedId = node.linked_id;
 
-        // Hier wird die "node-dimmed" Klasse dynamisch hinzugefügt
         el.className = `assembly-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-multi' : ''} ${isDimmed ? 'node-dimmed' : ''}`;
         el.style.left = `${node.pos_x}px`;
         el.style.top = `${node.pos_y}px`;
@@ -1105,7 +1083,10 @@ function renderCanvas() {
 
         el.innerHTML = `
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
-      
+      <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
+      <div id="ep-left-${node.id}" class="ep-handle ep-left ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
+      <div id="ep-right-${node.id}" class="ep-handle ep-right ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
+
       <div class="assembly-header" style="background: ${nodeColor};">
         <div style="display: flex; align-items: center;">
           ${subtreeBtnHtml}
@@ -1165,11 +1146,8 @@ function renderCanvas() {
 
         ${inlineLogsHtml}
       </div>
-
-      <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
     `;
 
-        // Synchrones Hover-Highlighting aller gleichen Instanzen
         el.addEventListener('mouseenter', () => {
             if (node.linked_id) {
                 document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
@@ -1319,10 +1297,64 @@ function renderCanvas() {
     renderConnections();
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Materialfluss (Automatische Kantenwahl Vertikal / Horizontal)
+ * ERSETZEN IN: canvas.js (Funktion renderConnections)
+ * Breadcrumbs:
+ *   - [2026-08-23 20:25:00 CEST]: Automatische Wahl der optimalen Kanten
+ *     (Top, Bottom, Left, Right) anhand der relativen Rahmenposition.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Splines & Flow-Arrows (Direkte Linienführung & kleine Pfeilspitze)
+ * ERSETZEN IN: canvas.js (Funktion renderConnections)
+ * Breadcrumbs:
+ *   - [2026-08-23 20:30:00 CEST]: 
+ *     1. Pfeilspitze auf 6x4 px verkleinert.
+ *     2. Strikte Kantenwahl anhand der Box-Abstände (Bounding-Boxes).
+ *     3. Tangentenhebel stark gekürzt für dezente, direkte Bögen.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Materialfluss Splines (Tangentiale Kurvenführung)
+ * ERSETZEN IN: canvas.js (Funktion renderConnections)
+ * Breadcrumbs:
+ *   - [2026-08-23 20:45:00 CEST]: Tangenten-Hebel von 20px auf 80px erhöht. 
+ *     Dadurch treten die Linien orthogonal aus den Kanten aus und der Pfeil 
+ *     sitzt sauber im 90-Grad-Winkel auf der Zielkante.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Materialfluss Splines (Gerade Stutzen für perfekte Pfeilspitzen)
+ * ERSETZEN IN: canvas.js (Funktion renderConnections)
+ * Breadcrumbs:
+ *   - [2026-08-23 20:55:00 CEST]: "Stub"-Logik (gerade Linienstücke) eingebaut.
+ *     Jede Linie tritt nun exakt 10px gerade aus dem Kasten aus und 10px gerade
+ *     in die Pfeilspitze ein, bevor der Spline-Bogen gerechnet wird. 
+ *     Das verhindert schiefe Pfeilspitzen bei sehr knappen Abständen.
+ * =============================================================================
+ */
 function renderConnections(mouseCoords = null) {
     const svgLayer = document.getElementById('connections-layer');
-    svgLayer.innerHTML = '';
+    if (!svgLayer) return;
 
+    svgLayer.innerHTML = `
+        <defs>
+            <marker id="arrowhead" markerWidth="7" markerHeight="5" refX="1.5" refY="2.5" orient="auto">
+                <polygon points="0 0, 7 2.5, 0 5" fill="#dd6b20" />
+            </marker>
+        </defs>
+    `;
+
+    // 1. Hierarchische Kanten (Block zu Block)
     currentEdges.forEach(edge => {
         const srcNode = currentNodes.find(n => n.id === edge.source);
         const tgtNode = currentNodes.find(n => n.id === edge.target);
@@ -1333,45 +1365,110 @@ function renderConnections(mouseCoords = null) {
         if (srcHidden || tgtHidden || collapsedParents.has(edge.source)) return;
 
         if (srcNode && tgtNode) {
-            const srcEl = document.getElementById(srcNode.id);
-            const tgtEl = document.getElementById(tgtNode.id);
+            const p1 = getNodeHandleCoords(srcNode, edge.source_handle || 'bottom');
+            const p2 = getNodeHandleCoords(tgtNode, edge.target_handle || 'top');
 
-            const srcW = srcEl ? srcEl.offsetWidth : 320;
-            const srcH = srcEl ? srcEl.offsetHeight : 200;
-            const tgtW = tgtEl ? tgtEl.offsetWidth : 320;
+            const isHorizontal = (edge.source_handle === 'right' || edge.source_handle === 'left') &&
+                (edge.target_handle === 'right' || edge.target_handle === 'left');
 
-            const x1 = srcNode.pos_x + srcW / 2;
-            const y1 = srcNode.pos_y + srcH;
-            const x2 = tgtNode.pos_x + tgtW / 2;
-            const y2 = tgtNode.pos_y;
-
-            const dy = Math.max(50, Math.abs(y2 - y1) * 0.5);
-            const pathD = `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
+            let pathD = '';
+            if (isHorizontal) {
+                const dx = Math.max(30, Math.abs(p2.x - p1.x) * 0.4);
+                pathD = `M ${p1.x} ${p1.y} C ${p1.x + (p2.x >= p1.x ? dx : -dx)} ${p1.y}, ${p2.x + (p2.x >= p1.x ? -dx : dx)} ${p2.y}, ${p2.x} ${p2.y}`;
+            } else {
+                const dy = Math.max(30, Math.abs(p2.y - p1.y) * 0.4);
+                pathD = `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + (p2.y >= p1.y ? dy : -dy)}, ${p2.x} ${p2.y + (p2.y >= p1.y ? -dy : dy)}, ${p2.x} ${p2.y}`;
+            }
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', pathD);
             path.setAttribute('class', 'connection-line');
-            path.setAttribute('title', `Verbindung (Erstellt von: ${edge.created_by || 'COT'}) - Klick zum Trennen`);
+            path.setAttribute('title', `Verbindung (${srcNode.name} ➔ ${tgtNode.name}) - Klick zum Trennen`);
             path.addEventListener('click', () => handleDisconnectClick(edge.source, edge.target));
 
             svgLayer.appendChild(path);
         }
     });
 
+    // 2. Materialfluss-Pfeile (Straffere, tangentiale Bogenführung mit geradem Start/Ziel)
+    const arrowsToRender = window.currentFlowArrows || [];
+    arrowsToRender.forEach(arrow => {
+        const srcZone = currentZones.find(z => String(z.id) === String(arrow.source_zone_id));
+        const tgtZone = currentZones.find(z => String(z.id) === String(arrow.target_zone_id));
+
+        if (!srcZone || !tgtZone || window.isZoneHidden(srcZone.id) || window.isZoneHidden(tgtZone.id)) return;
+
+        const srcX1 = parseFloat(srcZone.pos_x) || 0;
+        const srcY1 = parseFloat(srcZone.pos_y) || 0;
+        const srcW = parseFloat(srcZone.width) || 400;
+        const srcH = parseFloat(srcZone.height) || 300;
+        const srcX2 = srcX1 + srcW;
+        const srcY2 = srcY1 + srcH;
+
+        const tgtX1 = parseFloat(tgtZone.pos_x) || 0;
+        const tgtY1 = parseFloat(tgtZone.pos_y) || 0;
+        const tgtW = parseFloat(tgtZone.width) || 400;
+        const tgtH = parseFloat(tgtZone.height) || 300;
+        const tgtX2 = tgtX1 + tgtW;
+        const tgtY2 = tgtY1 + tgtH;
+
+        let x1, y1, x2, y2, cp1X, cp1Y, cp2X, cp2Y;
+
+        const isTargetBelow = tgtY1 >= srcY2 - 20;
+        const isTargetAbove = tgtY2 <= srcY1 + 20;
+        const isTargetLeft = tgtX2 <= srcX1 + 20;
+
+        // "Stutzen": Die Linie verläuft erst 10px gerade, bevor sie abbiegt
+        const stub = 10;
+        const minTangent = 50;
+        let pathD = '';
+
+        if (isTargetBelow) {
+            x1 = srcX1 + srcW / 2; y1 = srcY2;
+            x2 = tgtX1 + tgtW / 2; y2 = tgtY1;
+            const dist = Math.max(minTangent, Math.abs(y2 - y1) * 0.4);
+            // M = Start | L = Gerade zu | C = Kurve ab hier | L = Gerade in Pfeil
+            pathD = `M ${x1} ${y1} L ${x1} ${y1 + stub} C ${x1} ${y1 + stub + dist}, ${x2} ${y2 - stub - dist}, ${x2} ${y2 - stub} L ${x2} ${y2}`;
+        } else if (isTargetAbove) {
+            x1 = srcX1 + srcW / 2; y1 = srcY1;
+            x2 = tgtX1 + tgtW / 2; y2 = tgtY2;
+            const dist = Math.max(minTangent, Math.abs(y1 - y2) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1} ${y1 - stub} C ${x1} ${y1 - stub - dist}, ${x2} ${y2 + stub + dist}, ${x2} ${y2 + stub} L ${x2} ${y2}`;
+        } else if (isTargetLeft) {
+            x1 = srcX1; y1 = srcY1 + srcH / 2;
+            x2 = tgtX2; y2 = tgtY1 + tgtH / 2;
+            const dist = Math.max(minTangent, Math.abs(x1 - x2) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1 - stub} ${y1} C ${x1 - stub - dist} ${y1}, ${x2 + stub + dist} ${y2}, ${x2 + stub} ${y2} L ${x2} ${y2}`;
+        } else {
+            // Rechts (Default)
+            x1 = srcX2; y1 = srcY1 + srcH / 2;
+            x2 = tgtX1; y2 = tgtY1 + tgtH / 2;
+            const dist = Math.max(minTangent, Math.abs(x2 - x1) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1 + stub} ${y1} C ${x1 + stub + dist} ${y1}, ${x2 - stub - dist} ${y2}, ${x2 - stub} ${y2} L ${x2} ${y2}`;
+        }
+
+        const flowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        flowPath.setAttribute('d', pathD);
+        flowPath.setAttribute('class', 'flow-arrow-line');
+        flowPath.setAttribute('marker-end', 'url(#arrowhead)');
+        flowPath.setAttribute('title', `Materialfluss: ${srcZone.title} ➔ ${tgtZone.title} (Klick zum Löschen)`);
+        flowPath.addEventListener('click', () => handleDeleteFlowArrow(arrow.id));
+
+        svgLayer.appendChild(flowPath);
+    });
+
+    // 3. Live Spline Preview
     if (connectingFirstPoint && mouseCoords) {
-        const x1 = connectingFirstPoint.x;
-        const y1 = connectingFirstPoint.y;
-        const x2 = mouseCoords.x;
-        const y2 = mouseCoords.y;
+        const p1 = connectingFirstPoint;
+        const p2 = mouseCoords;
+        const dx = Math.max(30, Math.abs(p2.x - p1.x) * 0.4);
+        const dy = Math.max(30, Math.abs(p2.y - p1.y) * 0.4);
 
-        const dy = Math.max(40, Math.abs(y2 - y1) * 0.5);
-        const pathD = `M ${x1} ${y1} C ${x1} ${y1 + (y2 >= y1 ? dy : -dy)}, ${x2} ${y2 + (y2 >= y1 ? -dy : dy)}, ${x2} ${y2}`;
-
-        const previewPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        previewPath.setAttribute('d', pathD);
-        previewPath.setAttribute('class', 'preview-connection-line');
-
-        svgLayer.appendChild(previewPath);
+        const pathD = `M ${p1.x} ${p1.y} C ${p1.x + dy}, ${p2.x - dy}, ${p2.x} ${p2.y}`;
+        const preview = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        preview.setAttribute('d', pathD);
+        preview.setAttribute('class', 'preview-connection-line');
+        svgLayer.appendChild(preview);
     }
 }
 
@@ -1393,11 +1490,6 @@ window.adjustCanvasBounds = function() {
     canvasEl.style.height = Math.max(3000, maxY + 3000) + 'px';
 };
 
-/**
-* =============================================================================
-* Breadcrumb: [2026-08-23] Globale Maus-Verfolgung & Instanz-Duplizierung (Strg+V)
-* =============================================================================
-*/
 window.lastClientX = 0;
 window.lastClientY = 0;
 window.addEventListener('mousemove', (e) => {
@@ -1415,7 +1507,6 @@ window.handlePasteNodes = async function() {
         const originalNode = currentNodes.find(n => n.id === originalId);
         if (!originalNode) continue;
 
-        // Stelle sicher, dass das Original eine linked_id hat, um sie zu verbinden
         let linkedId = originalNode.linked_id;
         if (!linkedId) {
             linkedId = 'inst_' + crypto.randomUUID();
@@ -1423,7 +1514,6 @@ window.handlePasteNodes = async function() {
             await db.from('project_nodes').update({ linked_id: linkedId }).eq('id', originalNode.id);
         }
 
-        // Neue Instanz in der DB anlegen
         await db.from('project_nodes').insert([{
             project_id: activeProjectId,
             name: originalNode.name,
@@ -1433,13 +1523,15 @@ window.handlePasteNodes = async function() {
             budget_drafting_hours: originalNode.budget_drafting_hours,
             color_hex: originalNode.color_hex,
             created_by: activeUserCode || 'COT',
+            assigned_design_user: originalNode.assigned_design_user || null,
+            assigned_drafting_user: originalNode.assigned_drafting_user || null,
             pos_x: Math.round(coords.x + offsetX),
             pos_y: Math.round(coords.y),
             linked_id: linkedId,
-            zone_id: null // Zuerst neutral platzieren
+            zone_id: null
         }]);
 
-        offsetX += 340; // Nächsten kopierten Block leicht versetzt platzieren
+        offsetX += 340;
     }
 
     showToast(`${window.copiedNodeIds.length} verknüpfte Instanz(en) eingefügt`, 'success');

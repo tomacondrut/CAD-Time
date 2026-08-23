@@ -2,7 +2,10 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Datenbank, Realtime-Sync, State & Hierarchie-Rollup Engine
- * Zeitstempel: 2026-08-23 10:00:00 CEST
+ * Zeitstempel: 2026-08-23 21:10:00 CEST
+ * Breadcrumbs:
+ *   - Komplette Bereinigung redundanter Fetch-Funktionen.
+ *   - Paralleles Laden aller Projektdaten inkl. Materialfluss-Pfeile (zone_flow_arrows).
  * =============================================================================
  */
 
@@ -11,9 +14,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_9XeDSb2HEkzK8yDL1ralIQ_HERPIq3C';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const ADMIN_PASS = '787456c';
-let isAdmin = false;
-let activeUserCode = '';
-let activeProjectId = 'proj_default';
+window.isAdmin = false;
+window.activeUserCode = '';
+window.activeProjectId = 'proj_default';
 
 const COLOR_PRESETS = [
     { name: 'Stahlblau', hex: '#2b6cb0' },
@@ -24,27 +27,33 @@ const COLOR_PRESETS = [
     { name: 'Gedämpftes Indigo', hex: '#553c9a' }
 ];
 
-// Globales Set für ausgeblendete Zonen sicher an window binden
+// Globale State-Arrays
+window.currentProjects = [];
+window.currentNodes = [];
+window.currentEdges = [];
+window.currentZones = [];
+window.currentTimeLogs = [];
+window.currentUsers = [];
+window.currentAuditLogs = [];
+window.currentFlowArrows = [];
+
+window.showAllAuditLogs = false;
+
+// Globale Sets für UI-Status
+window.selectedNodeIds = new Set();
+window.expandedNodes = new Set();
+window.collapsedParents = new Set();
 window.hiddenTopZoneIds = new Set();
+window.dialogResolve = null;
 
-let currentProjects = [];
-let currentNodes = [];
-let currentEdges = [];
-let currentZones = [];
-let currentTimeLogs = [];
-let currentUsers = [];
-let currentAuditLogs = [];
-let showAllAuditLogs = false;
+window.isDraggingAnything = false;
+window.pendingCanvasUpdate = false;
 
-let selectedNodeIds = new Set();
-let expandedNodes = new Set();
-let collapsedParents = new Set();
-let dialogResolve = null;
 
-// NEU: Lokaler State für das Ausblenden/Isolieren von Zonen
-window.hiddenTopZoneIds = new Set();
+// =============================================================================
+// 1. GLOBALE DATEN-ABFRAGEN (User & Projekte)
+// =============================================================================
 
-// --- Datenabruf & Realtime ---
 async function fetchUsers() {
     try {
         const { data, error } = await db.from('app_users').select('*').order('code', { ascending: true });
@@ -52,84 +61,82 @@ async function fetchUsers() {
         currentUsers = data || [];
     } catch (err) {
         console.error("Fehler beim Laden der Benutzer:", err);
-        currentUsers = []; // Fallback bei Fehler
+        currentUsers = [];
     } finally {
-        // Wird IMMER ausgeführt, auch wenn die Abfrage fehlschlägt
-        if (typeof window.renderUserDropdowns === 'function') {
-            window.renderUserDropdowns();
-        }
-        if (isAdmin && typeof window.renderAdminUserList === 'function') {
-            window.renderAdminUserList();
-        }
+        if (typeof window.renderUserDropdowns === 'function') window.renderUserDropdowns();
+        if (isAdmin && typeof window.renderAdminUserList === 'function') window.renderAdminUserList();
     }
 }
+
 async function fetchProjects() {
     try {
         const { data, error } = await db.from('projects').select('*').order('object_number', { ascending: true });
         if (error) throw error;
         currentProjects = data || [];
 
-        // Erstes aktives Projekt als Standard setzen, falls noch keines gewählt
         const activeProjects = currentProjects.filter(p => !p.is_archived);
         if (activeProjects.length > 0 && !activeProjects.some(p => p.id === activeProjectId)) {
             activeProjectId = activeProjects[0].id;
         }
     } catch (err) {
         console.error("Fehler beim Laden der Projekte:", err);
-        currentProjects = []; // Fallback bei Fehler
+        currentProjects = [];
     } finally {
-        // Wird IMMER ausgeführt
-        if (typeof window.renderProjectDropdowns === 'function') {
-            window.renderProjectDropdowns();
-        }
-        if (typeof window.updateSidebarStats === 'function') {
-            window.updateSidebarStats();
-        }
-        if (isAdmin && typeof window.renderAdminProjectList === 'function') {
-            window.renderAdminProjectList();
-        }
-        if (typeof window.renderArchivedProjectsList === 'function') {
-            window.renderArchivedProjectsList();
-        }
+        if (typeof window.renderProjectDropdowns === 'function') window.renderProjectDropdowns();
+        if (typeof window.updateSidebarStats === 'function') window.updateSidebarStats();
+        if (isAdmin && typeof window.renderAdminProjectList === 'function') window.renderAdminProjectList();
+        if (typeof window.renderArchivedProjectsList === 'function') window.renderArchivedProjectsList();
     }
 }
 
-window.isDraggingAnything = false;
-window.pendingCanvasUpdate = false;
+function getCurrentProject() {
+    return currentProjects.find(p => p.id === activeProjectId) || {
+        object_number: 'OBJ-2026-01',
+        name: 'Standard',
+        total_budget_design: 100,
+        total_budget_drafting: 60
+    };
+}
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Datenbank & State
- * ERSETZEN IN: db.js
- * Funktion: fetchCanvasData
- * Breadcrumbs:
- *   - [2026-08-23 10:00:00 CEST]: Initialer Datenabruf für Nodes, Edges, Zones, Logs
- *   - [2026-08-23 10:55:00 CEST]: Aufruf von window.renderSidebarZones hinzugefügt, 
- *     um Zonen-Liste & Isolierungs-Status in der Sidebar synchron zu halten.
- * =============================================================================
- */
-async function fetchCanvasData() {
-    const { data: nodes } = await db.from('project_nodes').select('*').eq('project_id', activeProjectId);
-    const { data: edges } = await db.from('project_edges').select('*').eq('project_id', activeProjectId);
-    const { data: zones } = await db.from('project_zones').select('*').eq('project_id', activeProjectId);
-    const { data: logs } = await db.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false });
+
+// =============================================================================
+// 2. CANVAS-SPEZIFISCHE DATEN-ABFRAGEN (Nodes, Edges, Zones, Logs, Pfeile)
+// =============================================================================
+
+window.fetchCanvasData = async function() {
+    if (!activeProjectId) return;
+
+    // Parallel-Fetch für maximale Performance
+    const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
+        db.from('project_nodes').select('*').eq('project_id', activeProjectId),
+        db.from('project_edges').select('*').eq('project_id', activeProjectId),
+        db.from('project_zones').select('*').eq('project_id', activeProjectId),
+        db.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false }),
+        db.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId)
+    ]);
+
+    if (arrowsRes.error) {
+        console.error("Supabase Fehler beim Pfeile laden:", arrowsRes.error);
+    }
 
     if (window.isDraggingAnything) {
         window.pendingCanvasUpdate = true;
         return;
     }
 
-    currentNodes = nodes || [];
-    currentEdges = edges || [];
-    currentZones = zones || [];
-    currentTimeLogs = logs || [];
+    // State updaten
+    currentNodes = nodesRes.data || [];
+    currentEdges = edgesRes.data || [];
+    currentZones = zonesRes.data || [];
+    currentTimeLogs = logsRes.data || [];
+    window.currentFlowArrows = arrowsRes.data || [];
 
+    // UI Trigger
     if (window.renderCanvas) window.renderCanvas();
     if (window.updateSidebarStats) window.updateSidebarStats();
     if (window.renderSidebarZones) window.renderSidebarZones();
     if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
-}
+};
 
 async function fetchAuditLogs() {
     const { data } = await db.from('budget_audit_logs').select('*').order('changed_at', { ascending: false }).limit(50);
@@ -137,14 +144,12 @@ async function fetchAuditLogs() {
     if (isAdmin && window.renderBudgetAuditLogs) window.renderBudgetAuditLogs();
 }
 
-// --- Hierarchische Rollup-Engine ---
-function calculateRollups() {
-    const childrenMap = {};
-    currentEdges.forEach(e => {
-        if (!childrenMap[e.source]) childrenMap[e.source] = [];
-        childrenMap[e.source].push(e.target);
-    });
 
+// =============================================================================
+// 3. HIERARCHISCHE ROLLUP ENGINE (Child -> Parent Zeit-Aggregation)
+// =============================================================================
+
+function calculateRollups() {
     const directMap = {};
     currentTimeLogs.forEach(l => {
         if (!directMap[l.node_id]) directMap[l.node_id] = { design: 0, drafting: 0, logs: [] };
@@ -152,6 +157,13 @@ function calculateRollups() {
         if (l.task_type === 'design') directMap[l.node_id].design += hrs;
         if (l.task_type === 'drafting') directMap[l.node_id].drafting += hrs;
         directMap[l.node_id].logs.push(l);
+    });
+
+    // Gerichteter Baum für Rollup (Child -> Parent Verknüpfung)
+    const childrenMap = {};
+    currentEdges.forEach(e => {
+        if (!childrenMap[e.source]) childrenMap[e.source] = [];
+        childrenMap[e.source].push(e.target);
     });
 
     const memo = {};
@@ -165,9 +177,9 @@ function calculateRollups() {
 
         const children = childrenMap[nodeId] || [];
         children.forEach(childId => {
-            const totals = aggregate(childId, new Set(visited));
-            totalDesign += totals.totalDesign;
-            totalDrafting += totals.totalDrafting;
+            const childTotals = aggregate(childId, new Set(visited));
+            totalDesign += childTotals.totalDesign;
+            totalDrafting += childTotals.totalDrafting;
         });
 
         memo[nodeId] = { totalDesign, totalDrafting, logs: direct.logs };
@@ -176,13 +188,4 @@ function calculateRollups() {
 
     currentNodes.forEach(n => aggregate(n.id));
     return memo;
-}
-
-function getCurrentProject() {
-    return currentProjects.find(p => p.id === activeProjectId) || {
-        object_number: 'OBJ-2026-01',
-        name: 'Standard',
-        total_budget_design: 100,
-        total_budget_drafting: 60
-    };
 }
