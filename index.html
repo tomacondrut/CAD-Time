@@ -25,9 +25,21 @@
      * ERSETZEN IN: index.html
      * Breadcrumb: [2026-08-23 15:58:00 CEST] Menüpunkt für Rechtsklick-Löschen ergänzt
      * ============================================================================= -->
+    <!-- Canvas Rechtsklick-Kontextmenü -->
+    <!-- =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: Canvas & Node Kontextmenü
+     * ERSETZEN IN: index.html
+     * Breadcrumb: [2026-08-24 19:05:00 CEST] Bereinigung Whitespace & vollständige Actions
+     * ============================================================================= -->
+    <!-- Canvas Rechtsklick-Kontextmenü -->
+    <!-- =============================================================================
+     * Breadcrumb: [2026-08-24 19:40:00 CEST] Knotenpunkt-Toggle ins Kontextmenü verschoben
+     * ============================================================================= -->
     <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 175px; padding: 4px 0;">
         <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Block hinzufügen</div>
         <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">📍 Bereich / Kasten</div>
+        <div id="ctxMenuToggleHandles" class="context-menu-item" style="border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('toggle_handles')">🔌 Knotenpunkte einblenden</div>
         <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
         <div id="ctxMenuDeleteNode" class="context-menu-item" style="display: none; color: #e53e3e;" onclick="handleContextMenuAction('delete')">✕ Block löschen</div>
     </div>
@@ -112,9 +124,20 @@
                     <label>Bezeichnung des Blocks:</label>
                     <input type="text" id="newBlockName" required placeholder="z.B. Förderband Übergabe" />
                 </div>
-                <div class="form-group">
-                    <label>5-stellige Artikelnummer (optional):</label>
-                    <input type="text" id="newBlockArticle" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                <!-- Breadcrumb: [2026-08-24] DOC-Nummer und Artikelnummer im Erstellungsmodal -->
+                <!-- Breadcrumb: [2026-08-24 19:50:00 CEST] DOC-Nummer als fixierter Prefix -->
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>DOC-Nummer (Vault):</label>
+                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
+                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
+                            <input type="text" id="newBlockDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Artikel-Nr. (APM):</label>
+                        <input type="text" id="newBlockArticle" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
                 </div>
                 <div id="newBlockBudgetRow" style="display: none; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
@@ -134,6 +157,8 @@
         </div>
     </div>
 
+
+
     <!-- Neue Zone / Kasten Erstellungs-Modal -->
     <div id="newZoneModal" class="modal-backdrop">
         <div class="modal-content">
@@ -141,8 +166,41 @@
             <form id="newZoneForm">
                 <input type="hidden" id="newZoneCustomPos" value="" />
                 <div class="form-group">
-                    <label>Bereichsbezeichnung:</label>
-                    <input type="text" id="newZoneTitle" required placeholder="z.B. Schlackenhalle oder Kesselhaus" />
+                    <label>Bereichsbezeichnung / Baugruppe:</label>
+                    <input type="text" id="newZoneTitle" required placeholder="z.B. Schlackenhalle oder Hauptbaugruppe" />
+                </div>
+                <div id="newZoneAssignedUserGroup" style="display: flex; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung CAD:</label>
+                        <select id="newZoneAssignedDesignUser"><option value="">-- Offen --</option></select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung Zeichnung:</label>
+                        <select id="newZoneAssignedDraftingUser"><option value="">-- Offen --</option></select>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>DOC-Nummer (Vault):</label>
+                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
+                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
+                            <input type="text" id="newZoneDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Artikel-Nr. (APM):</label>
+                        <input type="text" id="newZoneArticle" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
+                </div>
+                <div id="newZoneBudgetRow" style="display: none; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Eigenes Budget CAD (h):</label>
+                        <input type="number" min="0" step="0.5" id="newZoneBudgetDesign" value="0" />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Eigenes Budget Zeichnung (h):</label>
+                        <input type="number" min="0" step="0.5" id="newZoneBudgetDrafting" value="0" />
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Rahmenfarbe:</label>
@@ -164,8 +222,41 @@
             <form id="editZoneForm">
                 <input type="hidden" id="editZoneId" />
                 <div class="form-group">
-                    <label>Bereichsbezeichnung:</label>
+                    <label>Bereichsbezeichnung / Baugruppe:</label>
                     <input type="text" id="editZoneTitle" required />
+                </div>
+                <div id="editZoneAssignedUserGroup" style="display: none; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung CAD:</label>
+                        <select id="editZoneAssignedDesignUser"><option value="">-- Offen --</option></select>
+                    </div>
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Zuweisung Zeichnung:</label>
+                        <select id="editZoneAssignedDraftingUser"><option value="">-- Offen --</option></select>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>DOC-Nummer (Vault):</label>
+                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
+                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
+                            <input type="text" id="editZoneDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Artikel-Nr. (APM):</label>
+                        <input type="text" id="editZoneArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Eigenes Budget CAD (h):</label>
+                        <input type="number" min="0" step="0.5" id="editZoneBudgetDesign" />
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Eigenes Budget Zeichnung (h):</label>
+                        <input type="number" min="0" step="0.5" id="editZoneBudgetDrafting" />
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Rahmenfarbe anpassen:</label>
@@ -374,7 +465,8 @@
                 <button class="btn-zoom" id="btnZoomOut">-</button>
             </div>
 
-            <div id="canvas">
+            <!-- Breadcrumb: [2026-08-24 19:42:00 CEST] Handles standardmäßig über Klasse versteckt -->
+            <div id="canvas" class="hide-handles">
                 <svg id="connections-layer"></svg>
             </div>
         </div>
@@ -434,9 +526,20 @@
                     <input type="text" id="editName" required />
                 </div>
 
-                <div class="form-group">
-                    <label>Artikelnummer (5-stellig):</label>
-                    <input type="text" id="editArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                <!-- Breadcrumb: [2026-08-24] DOC-Nummer und Artikelnummer im Bearbeitungsmodal -->
+                <!-- Breadcrumb: [2026-08-24 19:50:00 CEST] DOC-Nummer als fixierter Prefix -->
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>DOC-Nummer (Vault):</label>
+                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
+                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
+                            <input type="text" id="editDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Artikel-Nr. (APM):</label>
+                        <input type="text" id="editArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
                 </div>
 
                 <div style="display: flex; gap: 10px;">

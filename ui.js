@@ -434,10 +434,12 @@ window.toggleZoneVisibility = function(zoneId) {
 
 // =============================================================================
 // 5. BLÖCKE & ZONEN (ERSTELLEN & BEARBEITEN)
+// Breadcrumb: [2026-08-24 20:15:00 CEST] Komplette Bereinigung von Duplikaten
 // =============================================================================
-window.handleOpenAddBlockModal = function(customX = null, customY = null, parentConnectId = null) {
+
+window.handleOpenAddBlockModal = function (customX = null, customY = null, parentConnectId = null) {
     const budgetRow = document.getElementById('newBlockBudgetRow');
-    budgetRow.style.display = isAdmin ? 'flex' : 'none';
+    if (budgetRow) budgetRow.style.display = isAdmin ? 'flex' : 'none';
 
     if (customX !== null && customY !== null) {
         document.getElementById('newBlockCustomPos').value = JSON.stringify({ x: customX, y: customY, parentConnectId });
@@ -447,12 +449,19 @@ window.handleOpenAddBlockModal = function(customX = null, customY = null, parent
     openModal('newBlockModal');
 };
 
-window.handleAddBlock = async function(e) {
+window.handleAddBlock = async function (e) {
     e.preventDefault();
     const name = document.getElementById('newBlockName').value.trim();
+    const docInput = document.getElementById('newBlockDocNumber').value.trim();
+    const docNumber = docInput ? 'DOC' + docInput : '';
     const article = document.getElementById('newBlockArticle').value.trim();
     const blockType = document.querySelector('input[name="blockType"]:checked').value;
     const customPosVal = document.getElementById('newBlockCustomPos').value;
+
+    if (docNumber && !/^DOC\d{7}$/.test(docNumber)) {
+        showToast('DOC-Nummer muss das Format DOC + 7 Ziffern haben (z.B. DOC1234567).', 'error');
+        return;
+    }
 
     let designBudget = 0;
     let draftingBudget = 0;
@@ -481,6 +490,7 @@ window.handleAddBlock = async function(e) {
     const { data: insertedNode } = await db.from('project_nodes').insert([{
         project_id: activeProjectId,
         name,
+        doc_number: docNumber,
         article_number: article,
         block_type: blockType,
         budget_design_hours: designBudget,
@@ -513,36 +523,23 @@ window.handleAddBlock = async function(e) {
     showToast('Block erfolgreich hinzugefügt', 'success');
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Config Modal (Getrennte Zuweisung CAD & Zeichnung)
- * ERSETZEN IN: ui.js
- * Breadcrumb: [2026-08-23 15:50:00 CEST] Getrennte Speicherung für 
- *   assigned_design_user und assigned_drafting_user implementiert.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Berechtigung: Ersteller & Admin können zuweisen)
- * ERSETZEN IN: ui.js
- * Breadcrumbs:
- *   - [2026-08-23 15:53:00 CEST]: Zuweisungs-Dropdowns für Admin UND Ersteller freigeschaltet.
- *     Fremde Benutzer können die Zuweisungen nicht ändern oder einsehen.
- * =============================================================================
- */
-window.openConfigModal = function(nodeId) {
+window.openConfigModal = function (nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    const nodeLogs = currentTimeLogs.filter(l => l.node_id === nodeId);
+    // Prüfe, ob IRGENDEINE Instanz dieses Blocks Zeiten gebucht hat
+    const relatedNodeIds = node.linked_id
+        ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
+        : [node.id];
+    const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
+
     const creator = node.created_by || 'COT';
     const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
     const canDelete = isAdmin || ((activeUserCode && activeUserCode === creator) && nodeLogs.length === 0);
 
     document.getElementById('editNodeId').value = node.id;
     document.getElementById('editName').value = node.name;
+    document.getElementById('editDocNumber').value = node.doc_number ? node.doc_number.replace(/^DOC/i, '') : '';
     document.getElementById('editArticleNumber').value = node.article_number || '';
     selectColorSwatch(node.color_hex);
 
@@ -560,22 +557,17 @@ window.openConfigModal = function(nodeId) {
     const selDesign = document.getElementById('editAssignedDesignUser');
     const selDraft = document.getElementById('editAssignedDraftingUser');
 
-    bDesign.value = node.budget_design_hours;
-    bDraft.value = node.budget_drafting_hours;
-    bDesign.disabled = !isAdmin;
-    bDraft.disabled = !isAdmin;
+    if (bDesign) { bDesign.value = node.budget_design_hours || 0; bDesign.disabled = !isAdmin; }
+    if (bDraft) { bDraft.value = node.budget_drafting_hours || 0; bDraft.disabled = !isAdmin; }
 
-    // Ersteller & Admin dürfen die Zuweisung festlegen / anpassen
     if (isCreatorOrAdmin) {
         if (assignGroup) assignGroup.style.display = 'flex';
-
         const populateSelect = (selectEl, currentVal) => {
             if (!selectEl) return;
             selectEl.innerHTML = '<option value="">-- Offen --</option>';
             currentUsers.forEach(u => selectEl.add(new Option(u.code, u.code)));
             selectEl.value = currentVal || '';
         };
-
         populateSelect(selDesign, node.assigned_design_user);
         populateSelect(selDraft, node.assigned_drafting_user);
     } else {
@@ -586,8 +578,8 @@ window.openConfigModal = function(nodeId) {
     const retroBtn = document.getElementById('retroLogAdminBtnContainer');
     const statusGroup = document.getElementById('editStatusGroup');
 
-    btnDel.style.display = canDelete ? 'block' : 'none';
-    retroBtn.style.display = isAdmin ? 'block' : 'none';
+    if (btnDel) btnDel.style.display = canDelete ? 'block' : 'none';
+    if (retroBtn) retroBtn.style.display = isAdmin ? 'block' : 'none';
 
     if (isAdmin) {
         if (statusGroup) statusGroup.style.display = 'block';
@@ -600,15 +592,7 @@ window.openConfigModal = function(nodeId) {
     openModal('configModal');
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Config Speicherung)
- * ERSETZEN IN: ui.js (Funktion handleSaveConfig)
- * Breadcrumb: [2026-08-23 15:45:00 CEST] Syntaxfehler und redundante Statusabfrage behoben.
- * =============================================================================
- */
-window.handleSaveConfig = async function(e) {
+window.handleSaveConfig = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editNodeId').value;
     const node = currentNodes.find(n => n.id === id);
@@ -618,61 +602,90 @@ window.handleSaveConfig = async function(e) {
     const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
 
     const name = document.getElementById('editName').value;
-    const article_number = document.getElementById('editArticleNumber').value;
+    const docInput = document.getElementById('editDocNumber').value.trim();
+    const doc_number = docInput ? 'DOC' + docInput : '';
+    const article_number = document.getElementById('editArticleNumber').value.trim();
     const color_hex = document.getElementById('editColor').value;
     const block_type = document.querySelector('input[name="editBlockType"]:checked').value;
 
-    const updateData = { name, article_number, color_hex, block_type };
+    if (doc_number && !/^DOC\d{7}$/.test(doc_number)) {
+        showToast('DOC-Nummer muss das Format DOC + 7 Ziffern haben (z.B. DOC1234567).', 'error');
+        return;
+    }
 
-    // Zuweisungen speichern, wenn Admin oder Ersteller
+    if (article_number && !/^\d{5}$/.test(article_number)) {
+        showToast('Artikelnummer muss genau 5 Ziffern lang sein.', 'error');
+        return;
+    }
+
+    const updateData = { name, doc_number, article_number, color_hex, block_type };
+
     if (isCreatorOrAdmin) {
         const selDesign = document.getElementById('editAssignedDesignUser');
         const selDraft = document.getElementById('editAssignedDraftingUser');
-
         if (selDesign) updateData.assigned_design_user = selDesign.value || null;
         if (selDraft) updateData.assigned_drafting_user = selDraft.value || null;
     }
 
-    // Budgets & Fertigstellung bleiben exklusiv beim Admin
     if (isAdmin) {
-        updateData.budget_design_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDesign').value) || 0);
-        updateData.budget_drafting_hours = Math.max(0, parseFloat(document.getElementById('editBudgetDrafting').value) || 0);
+        const bDesignEl = document.getElementById('editBudgetDesign');
+        const bDraftEl = document.getElementById('editBudgetDrafting');
+        if (bDesignEl) updateData.budget_design_hours = Math.max(0, parseFloat(bDesignEl.value) || 0);
+        if (bDraftEl) updateData.budget_drafting_hours = Math.max(0, parseFloat(bDraftEl.value) || 0);
 
         const statusSelect = document.getElementById('editCompletionStatus');
-        if (statusSelect) {
-            updateData.completion_status = statusSelect.value;
-        }
+        if (statusSelect) updateData.completion_status = statusSelect.value;
     }
 
     await db.from('project_nodes').update(updateData).eq('id', id);
     closeModal('configModal');
     showToast('Block aktualisiert', 'success');
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-window.handleDeleteNode = async function() {
+window.handleDeleteNode = async function () {
     const id = document.getElementById('editNodeId').value;
     const node = currentNodes.find(n => n.id === id);
     if (!node) return;
 
-    const nodeLogs = currentTimeLogs.filter(l => l.node_id === id);
+    const relatedNodeIds = node.linked_id
+        ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
+        : [node.id];
+    const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
+
     const isCreator = (activeUserCode && activeUserCode === node.created_by);
     const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
 
-    // Hard-Check Backend (falls Jemand trickst)
     if (!canDelete) {
         showToast('Nur Admins können Blöcke löschen, auf die bereits Zeiten gebucht wurden.', 'error');
         return;
     }
 
-    const confirmed = await customConfirm('Block löschen', 'Möchtest du diesen Block und alle Unterverknüpfungen wirklich entfernen?');
+    const confirmed = await customConfirm('Block löschen', 'Möchtest du diesen Block wirklich entfernen?');
     if (confirmed) {
-        await db.from('project_nodes').delete().eq('id', id);
+        const { error } = await db.from('project_nodes').delete().eq('id', id);
+        if (error) {
+            showToast('Fehler beim Löschen: ' + error.message, 'error');
+            return;
+        }
         closeModal('configModal');
         showToast('Block gelöscht', 'success');
+        if (typeof fetchCanvasData === 'function') fetchCanvasData();
     }
 };
 
-window.handleOpenAddZoneModal = function(customX = null, customY = null) {
+window.handleOpenAddZoneModal = function (customX = null, customY = null) {
+    const budgetRow = document.getElementById('newZoneBudgetRow');
+    if (budgetRow) budgetRow.style.display = isAdmin ? 'flex' : 'none';
+
+    const populateSelect = (selectEl) => {
+        if (!selectEl) return;
+        selectEl.innerHTML = '<option value="">-- Offen --</option>';
+        currentUsers.forEach(u => selectEl.add(new Option(u.code, u.code)));
+    };
+    populateSelect(document.getElementById('newZoneAssignedDesignUser'));
+    populateSelect(document.getElementById('newZoneAssignedDraftingUser'));
+
     if (customX !== null && customY !== null) {
         document.getElementById('newZoneCustomPos').value = JSON.stringify({ x: customX, y: customY });
     } else {
@@ -681,86 +694,160 @@ window.handleOpenAddZoneModal = function(customX = null, customY = null) {
     openModal('newZoneModal');
 };
 
-window.handleAddZone = async function(e) {
-    // ... bleibt identisch
+window.handleAddZone = async function (e) {
     e.preventDefault();
     const title = document.getElementById('newZoneTitle').value.trim();
     const color_hex = document.getElementById('newZoneColor').value;
     const customPosVal = document.getElementById('newZoneCustomPos').value;
 
+    const docInputEl = document.getElementById('newZoneDocNumber');
+    const docNumber = (docInputEl && docInputEl.value.trim()) ? 'DOC' + docInputEl.value.trim() : '';
+
+    const articleEl = document.getElementById('newZoneArticle');
+    const article = articleEl ? articleEl.value.trim() : '';
+
     if (!title) return;
+
+    if (docNumber && !/^DOC\d{7}$/.test(docNumber)) {
+        showToast('DOC-Nummer muss genau 7 Ziffern lang sein.', 'error');
+        return;
+    }
+
+    let designBudget = 0, draftingBudget = 0;
+    if (isAdmin) {
+        const bD = document.getElementById('newZoneBudgetDesign');
+        const bDr = document.getElementById('newZoneBudgetDrafting');
+        designBudget = bD ? Math.max(0, parseFloat(bD.value) || 0) : 0;
+        draftingBudget = bDr ? Math.max(0, parseFloat(bDr.value) || 0) : 0;
+    }
+
+    const sD = document.getElementById('newZoneAssignedDesignUser');
+    const sDr = document.getElementById('newZoneAssignedDraftingUser');
+    const assigned_design_user = sD ? sD.value || null : null;
+    const assigned_drafting_user = sDr ? sDr.value || null : null;
 
     let posX = Math.round(Math.random() * 200 + 100);
     let posY = Math.round(Math.random() * 150 + 100);
-
     if (customPosVal) {
-        const posObj = JSON.parse(customPosVal);
-        posX = Math.round(posObj.x);
-        posY = Math.round(posObj.y);
+        const pObj = JSON.parse(customPosVal);
+        posX = Math.round(pObj.x); posY = Math.round(pObj.y);
     }
 
     await db.from('project_zones').insert([{
         project_id: activeProjectId,
-        title,
-        color_hex,
-        pos_x: posX,
-        pos_y: posY,
-        width: 600,
-        height: 450,
-        created_by: activeUserCode || 'COT'
+        title, doc_number: docNumber, article_number: article,
+        budget_design_hours: designBudget, budget_drafting_hours: draftingBudget,
+        color_hex, pos_x: posX, pos_y: posY, width: 600, height: 450,
+        created_by: activeUserCode || 'COT',
+        assigned_design_user, assigned_drafting_user
     }]);
 
     closeModal('newZoneModal');
     document.getElementById('newZoneForm').reset();
     showToast(`Bereich "${title}" erstellt`, 'success');
-    fetchCanvasData();
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-window.openEditZoneModal = function(zoneId) {
+window.openEditZoneModal = function (zoneId) {
     const zone = currentZones.find(z => z.id === zoneId);
     if (!zone) return;
+
+    const creator = zone.created_by || 'COT';
+    const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
 
     document.getElementById('editZoneId').value = zone.id;
     document.getElementById('editZoneTitle').value = zone.title;
 
-    const container = document.getElementById('editZoneColorPresetsContainer');
-    container.innerHTML = '';
-    COLOR_PRESETS.forEach(p => {
-        const swatch = document.createElement('div');
-        swatch.className = 'color-swatch';
-        swatch.style.backgroundColor = p.hex;
-        swatch.title = p.name;
-        swatch.dataset.hex = p.hex;
+    const docEl = document.getElementById('editZoneDocNumber');
+    if (docEl) docEl.value = zone.doc_number ? zone.doc_number.replace(/^DOC/i, '') : '';
 
-        if (p.hex.toLowerCase() === (zone.color_hex || '#a0aec0').toLowerCase()) {
-            swatch.classList.add('selected');
-        }
+    const artEl = document.getElementById('editZoneArticleNumber');
+    if (artEl) artEl.value = zone.article_number || '';
 
-        swatch.addEventListener('click', () => {
-            document.querySelectorAll('#editZoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
-            swatch.classList.add('selected');
-            document.getElementById('editZoneColor').value = p.hex;
+    const bD = document.getElementById('editZoneBudgetDesign');
+    const bDr = document.getElementById('editZoneBudgetDrafting');
+    if (bD) { bD.value = zone.budget_design_hours || 0; bD.disabled = !isAdmin; }
+    if (bDr) { bDr.value = zone.budget_drafting_hours || 0; bDr.disabled = !isAdmin; }
+
+    const assignGroup = document.getElementById('editZoneAssignedUserGroup');
+    const selD = document.getElementById('editZoneAssignedDesignUser');
+    const selDr = document.getElementById('editZoneAssignedDraftingUser');
+
+    if (isCreatorOrAdmin) {
+        if (assignGroup) assignGroup.style.display = 'flex';
+        const popSelect = (el, val) => {
+            if (!el) return;
+            el.innerHTML = '<option value="">-- Offen --</option>';
+            currentUsers.forEach(u => el.add(new Option(u.code, u.code)));
+            el.value = val || '';
+        };
+        popSelect(selD, zone.assigned_design_user);
+        popSelect(selDr, zone.assigned_drafting_user);
+    } else {
+        if (assignGroup) assignGroup.style.display = 'none';
+    }
+
+    const cCont = document.getElementById('editZoneColorPresetsContainer');
+    if (cCont) {
+        cCont.innerHTML = '';
+        COLOR_PRESETS.forEach(p => {
+            const s = document.createElement('div');
+            s.className = 'color-swatch';
+            s.style.backgroundColor = p.hex;
+            if (p.hex.toLowerCase() === (zone.color_hex || '#a0aec0').toLowerCase()) s.classList.add('selected');
+            s.addEventListener('click', () => {
+                document.querySelectorAll('#editZoneColorPresetsContainer .color-swatch').forEach(x => x.classList.remove('selected'));
+                s.classList.add('selected');
+                document.getElementById('editZoneColor').value = p.hex;
+            });
+            cCont.appendChild(s);
         });
-        container.appendChild(swatch);
-    });
-
+    }
     document.getElementById('editZoneColor').value = zone.color_hex || '#a0aec0';
     openModal('editZoneModal');
 };
 
-window.handleSaveZoneConfig = async function(e) {
+window.handleSaveZoneConfig = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editZoneId').value;
     const title = document.getElementById('editZoneTitle').value.trim();
     const color_hex = document.getElementById('editZoneColor').value;
 
-    await db.from('project_zones').update({ title, color_hex }).eq('id', id);
+    const docInputEl = document.getElementById('editZoneDocNumber');
+    const doc_number = (docInputEl && docInputEl.value.trim()) ? 'DOC' + docInputEl.value.trim() : '';
+
+    const articleEl = document.getElementById('editZoneArticleNumber');
+    const article_number = articleEl ? articleEl.value.trim() : '';
+
+    if (!title) return;
+
+    const zone = currentZones.find(z => z.id === id);
+    const creator = zone ? zone.created_by : 'COT';
+    const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
+
+    const updateData = { title, color_hex, doc_number, article_number };
+
+    if (isAdmin) {
+        const bD = document.getElementById('editZoneBudgetDesign');
+        const bDr = document.getElementById('editZoneBudgetDrafting');
+        if (bD) updateData.budget_design_hours = Math.max(0, parseFloat(bD.value) || 0);
+        if (bDr) updateData.budget_drafting_hours = Math.max(0, parseFloat(bDr.value) || 0);
+    }
+
+    if (isCreatorOrAdmin) {
+        const sD = document.getElementById('editZoneAssignedDesignUser');
+        const sDr = document.getElementById('editZoneAssignedDraftingUser');
+        if (sD) updateData.assigned_design_user = sD.value || null;
+        if (sDr) updateData.assigned_drafting_user = sDr.value || null;
+    }
+
+    await db.from('project_zones').update(updateData).eq('id', id);
     closeModal('editZoneModal');
     showToast('Bereich erfolgreich aktualisiert', 'success');
-    fetchCanvasData();
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-window.handleDeleteZone = async function(zoneId) {
+window.handleDeleteZone = async function (zoneId) {
     const confirmed = await customConfirm('Bereich löschen', 'Möchtest du diesen Kasten entfernen? (Die darin liegenden Blöcke bleiben erhalten)');
     if (confirmed) {
         await db.from('project_zones').delete().eq('id', zoneId);
@@ -768,7 +855,6 @@ window.handleDeleteZone = async function(zoneId) {
         fetchCanvasData();
     }
 };
-
 // =============================================================================
 // 6. ZEITERFASSUNG, FERTIGSTELLUNG, REVISION & LÖSCHEN
 // =============================================================================
@@ -1210,7 +1296,7 @@ window.renderPendingLogsTable = function () {
       <thead>
         <tr>
           <th>Kürzel</th>
-          <th>Block</th>
+          <th>Ort (Block/Rahmen)</th>
           <th>Kat.</th>
           <th>Zeit</th>
           <th>Kommentar</th>
@@ -1221,8 +1307,16 @@ window.renderPendingLogsTable = function () {
   `;
 
     pendingLogs.forEach(log => {
+        let nodeName = 'Unbekannt';
         const node = currentNodes.find(n => n.id === log.node_id);
-        const nodeName = node ? node.name : 'Unbekannt';
+        if (node) {
+            nodeName = node.name;
+        } else {
+            // Falls es ein Zonen-Log ist
+            const zone = currentZones.find(z => z.id === log.zone_id || z.id === log.node_id);
+            if (zone) nodeName = '📍 ' + zone.title;
+        }
+
         let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
 
         // Revision/Fertigstellung optisch abheben
@@ -1312,4 +1406,114 @@ window.togglePersonalFilter = function() {
     }
 
     if (typeof renderCanvas === 'function') renderCanvas();
+};
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Knotenpunkte Toggle im Kontextmenü)
+ * Breadcrumb: [2026-08-24 19:40:00 CEST]
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Knotenpunkte Toggle im Kontextmenü)
+ * Breadcrumb: [2026-08-24 19:42:00 CEST] Startzustand auf false (ausgeblendet)
+ * =============================================================================
+ */
+window.handlesVisible = false;
+
+window.toggleHandles = function () {
+    window.handlesVisible = !window.handlesVisible;
+    const canvas = document.getElementById('canvas');
+    const menuBtn = document.getElementById('ctxMenuToggleHandles');
+
+    if (!canvas) return;
+
+    if (window.handlesVisible) {
+        canvas.classList.remove('hide-handles');
+        if (menuBtn) menuBtn.innerHTML = '🔌 Knotenpunkte ausblenden';
+        showToast('Verbindungspunkte eingeblendet', 'info');
+    } else {
+        canvas.classList.add('hide-handles');
+        if (menuBtn) menuBtn.innerHTML = '🔌 Knotenpunkte einblenden';
+
+        if (typeof cancelConnectionMode === 'function' && window.connectingFirstNodeId) {
+            cancelConnectionMode();
+        }
+        showToast('Verbindungspunkte ausgeblendet', 'info');
+    }
+};
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Zonen-Logs)
+* Breadcrumb: [2026-08-24 20:20:00 CEST]
+* =============================================================================
+*/
+window.toggleZoneLogs = function (e, zoneId) {
+    if (e) e.stopPropagation();
+    if (!window.expandedZones) window.expandedZones = new Set();
+
+    if (window.expandedZones.has(zoneId)) {
+        window.expandedZones.delete(zoneId);
+    } else {
+        window.expandedZones.add(zoneId);
+    }
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+};
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Zonen-Logs)
+ * Breadcrumb: [2026-08-24 20:25:00 CEST] Foreign-Key Error behoben (node_id: null)
+ * =============================================================================
+ */
+window.handleZoneLog = async function (e, zoneId) {
+    e.preventDefault();
+    const form = e.target;
+    const taskType = form.elements[1].value;
+    const hours = parseInt(form.elements[2].value, 10) || 0;
+    const mins = parseInt(form.elements[3].value, 10) || 0;
+    const note = form.elements[4].value.trim();
+
+    if (hours < 0 || mins < 0 || (hours === 0 && mins === 0)) {
+        showToast('Bitte mindestens 5 Minuten positive Zeit eingeben.', 'error');
+        return;
+    }
+
+    if (!activeUserCode) {
+        showToast('Bitte wähle zuerst dein Benutzerkürzel.', 'error');
+        return;
+    }
+
+    const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+
+    // node_id zwingend null senden, da der Log zur Zone gehört!
+    const payload = {
+        project_id: activeProjectId,
+        user_code: activeUserCode,
+        task_type: taskType,
+        hours: decimalHours,
+        note: note,
+        status: 'pending',
+        zone_id: zoneId,
+        node_id: null
+    };
+
+    const { error } = await db.from('time_logs').insert([payload]);
+
+    if (error) {
+        showToast('Fehler: ' + error.message, 'error');
+        return;
+    }
+
+    form.elements[2].value = '0';
+    form.elements[3].value = '30';
+    form.elements[4].value = '';
+    showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };

@@ -1017,3 +1017,83 @@ html, body {
     .zone-flow-btn:hover {
         transform: scale(1.2);
     }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Identifikator Badge & 4-Seiten Handles)
+ * Breadcrumb: [2026-08-24 19:15:00 CEST]
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-24 19:30:00 CEST] Identifikator-Badge links positioniert,
+ * um Überlagerungen mit dem mittigen Top-Handle zu vermeiden.
+ * =============================================================================
+ */
+.assembly-id-badge {
+    position: absolute;
+    top: -12px;
+    left: 12px;
+    background: #1a202c;
+    color: #edf2f7;
+    border: 1.5px solid var(--primary);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: monospace;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+    z-index: 25;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.ep-top {
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+    .ep-top:hover, .ep-top.active-source {
+        transform: translateX(-50%) scale(1.35);
+    }
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-24 19:35:00 CEST] Styling für den Knotenpunkt-Toggle 
+ * =============================================================================
+ */
+.btn-toggle-handles {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    color: #4a5568;
+    transition: all 0.2s ease;
+}
+
+    .btn-toggle-handles:hover {
+        background: #edf2f7;
+    }
+
+    .btn-toggle-handles.active {
+        background: #3182ce;
+        color: #fff;
+        border-color: #2b6cb0;
+    }
+
+/* Versteckt alle Handles am gesamten Canvas auf einen Schlag */
+#canvas.hide-handles .ep-handle {
+    display: none !important;
+}

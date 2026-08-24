@@ -235,9 +235,22 @@ function getCanvasCoords(clientX, clientY) {
     };
 }
 
-window.handleContextMenuAction = async function(type) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Kontextmenü Aktionen
+ * ERSETZEN IN: canvas.js (Funktion handleContextMenuAction)
+ * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Instanz-Duplizierung ergänzt
+ * =============================================================================
+ */
+window.handleContextMenuAction = async function (type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
+
+    if (type === 'toggle_handles') {
+        if (typeof toggleHandles === 'function') toggleHandles();
+        return;
+    }
 
     if (type === 'block') {
         handleOpenAddBlockModal(contextMenuCoords.x - 160, contextMenuCoords.y - 50);
@@ -270,7 +283,8 @@ window.handleContextMenuAction = async function(type) {
         const { error } = await db.from('project_nodes').insert([{
             project_id: activeProjectId,
             name: originalNode.name,
-            article_number: originalNode.article_number,
+            doc_number: originalNode.doc_number || null,
+            article_number: originalNode.article_number || null,
             block_type: originalNode.block_type || 'assembly',
             budget_design_hours: originalNode.budget_design_hours || 0,
             budget_drafting_hours: originalNode.budget_drafting_hours || 0,
@@ -676,9 +690,29 @@ function renderCanvas() {
         };
     });
 
+    /**
+         * =============================================================================
+         * Breadcrumb: [2026-08-24 20:20:00 CEST] Direkte Zonen-Logs in Rollups integriert
+         * =============================================================================
+         */
     const zoneRollups = {};
+    if (!window.expandedZones) window.expandedZones = new Set();
+
     currentZones.forEach(z => {
-        zoneRollups[z.id] = { dBudg: 0, drBudg: 0, dSpent: 0, drSpent: 0 };
+        const zLogs = currentTimeLogs.filter(l => l.zone_id === z.id || l.node_id === z.id);
+        let dSpentDirect = 0, drSpentDirect = 0;
+        zLogs.forEach(l => {
+            if (l.task_type === 'design') dSpentDirect += parseFloat(l.hours);
+            if (l.task_type === 'drafting') drSpentDirect += parseFloat(l.hours);
+        });
+
+        zoneRollups[z.id] = {
+            dBudg: parseFloat(z.budget_design_hours) || 0,
+            drBudg: parseFloat(z.budget_drafting_hours) || 0,
+            dSpent: dSpentDirect,
+            drSpent: drSpentDirect,
+            directLogs: zLogs
+        };
     });
 
     currentNodes.forEach(n => {
@@ -722,28 +756,137 @@ function renderCanvas() {
         const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
         const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
+        /**
+                 * =============================================================================
+                 * Breadcrumb: [2026-08-24 19:43:00 CEST] Textuelle Budget-Anzeige (Ist / Soll) 
+                 * direkt neben den Pie-Charts in den Zonen-Headern platziert.
+                 * =============================================================================
+                 */
+        /**
+              * =============================================================================
+              * Breadcrumb: [2026-08-24 20:20:00 CEST] Logging-Formular & Tabelle für Rahmen
+              * =============================================================================
+              */
+        const identifier = zone.article_number || zone.doc_number || '';
+        let badgeHtml = '';
+        if (identifier) {
+            badgeHtml = `<div class="assembly-id-badge" style="border-color: ${zone.color_hex || '#a0aec0'};" title="${zone.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
+        }
+
+        const isZoneExpanded = window.expandedZones.has(zone.id);
+        const zLogs = zStats.directLogs || [];
+        let inlineZoneLogsHtml = '';
+
+        if (isZoneExpanded) {
+            if (zLogs.length === 0) {
+                inlineZoneLogsHtml = `<div style="font-size:10px; color:#718096; text-align:center; padding: 6px 0;">Keine Zeiten direkt auf diesen Rahmen gebucht.</div>`;
+            } else {
+                let tableRows = '';
+                zLogs.forEach(log => {
+                    const d = new Date(log.logged_at);
+                    const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                    const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
+                    const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
+                    const canDel = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
+                    const delHtml = canDel ? `<span class="btn-delete-log" title="Löschen" onclick="handleDeleteLog('${log.id}')">✕</span>` : '';
+                    const noteHtml = log.note ? `<span class="info-tooltip-trigger" style="font-size:10px;">ℹ️<span class="tooltip-overlay">${escapeHtml(log.note)}</span></span>` : '';
+
+                    tableRows += `
+                      <tr>
+                        <td><strong>${escapeHtml(log.user_code)}</strong></td>
+                        <td>${dateStr}</td>
+                        <td>${kat}</td>
+                        <td>${formatHoursToHM(log.hours)} ${noteHtml}</td>
+                        <td>${badge} ${delHtml}</td>
+                      </tr>`;
+                });
+                inlineZoneLogsHtml = `
+                  <table class="log-table" style="background:#fff; border-radius:4px; margin-top:6px;">
+                    <thead><tr><th>Kürzel</th><th>Datum</th><th>Kat.</th><th>Zeit</th><th>Status</th></tr></thead>
+                    <tbody>${tableRows}</tbody>
+                  </table>`;
+            }
+        }
+        /**
+                 * =============================================================================
+                 * Breadcrumb: [2026-08-24 20:30:00 CEST] Zuweisungs-Badges für Rahmen (3D & Zeichnung)
+                 * =============================================================================
+                 */
+        let assignedBadgesHtml = '';
+        if (zone.assigned_design_user) {
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:8px; display:inline-flex; align-items:center; gap:3px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
+        }
+        if (zone.assigned_drafting_user) {
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
+        }
+
         zoneEl.innerHTML = `
+      ${badgeHtml}
       <div class="project-zone-header no-pan" style="border-bottom-color: ${zone.color_hex || '#a0aec0'}; align-items: flex-start;">
         <div style="display:flex; flex-direction:column; gap:6px;">
-          <span>📍 ${escapeHtml(zone.title)}</span>
-          <div style="display:flex; gap:6px; cursor:help;">
-              <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;" title="CAD: ${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}">
-                  <div class="pie-inner" style="width: 14px; height: 14px; font-size: 6px;"></div>
+          
+          <div style="display:flex; align-items:center;">
+             <span>📍 ${escapeHtml(zone.title)}</span>
+             ${assignedBadgesHtml}
+          </div>
+
+          <div style="display:flex; gap:16px; cursor:default; align-items: center; margin-top: 2px;">
+              <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
+                  <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;">
+                      <div class="pie-inner" style="width: 14px; height: 14px;"></div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.2;">
+                      <span style="color: #4a5568; font-weight: 800;">CAD</span>
+                      <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
+                  </div>
               </div>
-              <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;" title="Zeichnung: ${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}">
-                  <div class="pie-inner" style="width: 14px; height: 14px; font-size: 6px;"></div>
+              <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
+                  <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;">
+                      <div class="pie-inner" style="width: 14px; height: 14px;"></div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.2;">
+                      <span style="color: #4a5568; font-weight: 800;">Zeichnung</span>
+                      <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
+                  </div>
               </div>
           </div>
         </div>
         <div class="zone-actions">
-          <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil zu anderem Rahmen ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
-          <button type="button" class="zone-btn" title="${zone.is_locked ? 'Position entsperren' : 'Position sperren (Panzoom aktiv)'}" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
+          <button type="button" class="zone-btn" title="Zeiten auf Rahmen buchen & Details" onclick="toggleZoneLogs(event, '${zone.id}')">⏱️ Zeiten</button>
+          <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
+          <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
           ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
-            <button type="button" class="zone-btn" title="Bereich bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
-            <button type="button" class="zone-btn" style="color:#e53e3e;" title="Bereich löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
+            <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
+            <button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
           ` : ''}
         </div>
       </div>
+      
+      ${isZoneExpanded ? `
+      <div class="zone-body no-pan" style="background: rgba(255, 255, 255, 0.96); padding: 10px; border-bottom: 1px dashed #cbd5e0; position: relative; z-index: 10; pointer-events: auto;">
+        <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
+          <div class="time-inputs-row">
+            <select class="log-input" style="font-weight: bold; width: 60px;">
+              <option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option>
+            </select>
+            <select class="log-input" style="width: 75px;">
+              <option value="drafting">Zeichn.</option>
+              <option value="design">CAD</option>
+            </select>
+            <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Mausrad: +/- 1h" onwheel="handleTimeWheel(event, 'hour')" required />
+            <span>h</span>
+            <input type="number" class="log-input input-mins" min="0" max="55" step="5" value="30" style="width: 44px;" title="Mausrad: +/- 5m" onwheel="handleTimeWheel(event, 'min')" required />
+            <span>m</span>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 6px;">
+            <input type="text" class="log-input" placeholder="Kommentar (optional)..." style="flex: 1;" />
+            <button type="submit" class="btn-log" style="background: ${zone.color_hex || '#2b6cb0'};">+ Log</button>
+          </div>
+        </form>
+        ${inlineZoneLogsHtml}
+      </div>
+      ` : ''}
+
       <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
     `;
 
@@ -1057,6 +1200,21 @@ function renderCanvas() {
         const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
         const isDimmed = window.personalFilterActive && !isUserAssigned;
 
+        /**
+           * =============================================================================
+           * Projekt: CAD Time Manager
+           * Domain: Canvas Card Rendering
+           * ERSETZEN IN: canvas.js (Funktion renderCanvas)
+           * Breadcrumb: [2026-08-24 19:22:00 CEST] Vollständiger HTML-Block mit Identifikator-Badge,
+           * 4-Seiten Handles, Ersteller-Kürzel [COT] und Zuweisungs-Badges (3D & 📄)
+           * =============================================================================
+           */
+        const identifier = node.article_number || node.doc_number || '';
+        let badgeHtml = '';
+        if (identifier) {
+            badgeHtml = `<div class="assembly-id-badge" style="border-color: ${nodeColor};" title="${node.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
+        }
+
         const isConnectingThisNode = connectingFirstNodeId === node.id;
         const isSelected = selectedNodeIds.has(node.id);
         const isLinked = !!node.linked_id;
@@ -1075,27 +1233,41 @@ function renderCanvas() {
 
         let assignedBadgesHtml = '';
         if (node.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px; font-weight:normal;" title="3D-Modellierung zugewiesen an: ${escapeHtml(node.assigned_design_user)}"><span style="font-weight:normal;">🆛</span> <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px; display:inline-flex; align-items:center; gap:3px;" title="CAD / 3D: ${escapeHtml(node.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
         }
         if (node.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px; font-weight:normal;" title="Zeichnung zugewiesen an: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px; display:inline-flex; align-items:center; gap:3px;" title="Zeichnung: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
         }
 
         el.innerHTML = `
+      ${badgeHtml}
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
       <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
       <div id="ep-left-${node.id}" class="ep-handle ep-left ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
       <div id="ep-right-${node.id}" class="ep-handle ep-right ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
 
-      <div class="assembly-header" style="background: ${nodeColor};">
-        <div style="display: flex; align-items: center;">
-          ${subtreeBtnHtml}
-          <span>${escapeHtml(node.name)}${statusIcon}${linkedIconHtml}</span>
+
+      <div class="assembly-header" style="background: ${nodeColor}; flex-direction: column; align-items: stretch; gap: 6px;">
+        
+        <!-- Zeile 1: Name und Status-Icons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex: 1;">
+            ${subtreeBtnHtml}
+            <span style="overflow: hidden; text-overflow: ellipsis; font-size: 14px;" title="${escapeHtml(node.name)}"><strong>${escapeHtml(node.name)}</strong></span>
+          </div>
+          <div style="flex-shrink: 0; margin-left: 6px; display: flex; align-items: center; gap: 4px;">
+            ${statusIcon}${linkedIconHtml}
+          </div>
         </div>
-        <div class="header-meta">
-          <span class="author-badge" title="Typ: ${typeLabel}">${escapeHtml(typeLabel)}</span>
-          ${assignedBadgesHtml}
+
+        <!-- Zeile 2: Zuweisungen und Metadaten -->
+        <div class="header-meta" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div style="display: flex; gap: 4px; overflow: hidden;">
+            ${assignedBadgesHtml}
+          </div>
+          <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${typeLabel} | Ersteller: ${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
         </div>
+        
       </div>
       <div class="assembly-body">
         <div class="charts-grid">
@@ -1497,7 +1669,15 @@ window.addEventListener('mousemove', (e) => {
     window.lastClientY = e.clientY;
 });
 
-window.handlePasteNodes = async function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Copy/Paste
+ * ERSETZEN IN: canvas.js (Funktion handlePasteNodes)
+ * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Strg+V Instanz-Einfügen ergänzt
+ * =============================================================================
+ */
+window.handlePasteNodes = async function () {
     if (!window.copiedNodeIds || window.copiedNodeIds.length === 0) return;
 
     const coords = getCanvasCoords(window.lastClientX, window.lastClientY);
@@ -1517,7 +1697,8 @@ window.handlePasteNodes = async function() {
         await db.from('project_nodes').insert([{
             project_id: activeProjectId,
             name: originalNode.name,
-            article_number: originalNode.article_number,
+            doc_number: originalNode.doc_number || null,
+            article_number: originalNode.article_number || null,
             block_type: originalNode.block_type,
             budget_design_hours: originalNode.budget_design_hours,
             budget_drafting_hours: originalNode.budget_drafting_hours,
