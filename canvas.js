@@ -126,11 +126,23 @@ window.cancelConnectionMode = function() {
     renderConnections();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Panzoom & Touch-Navigation
+ * ERSETZEN IN: canvas.js (Funktion initPanzoom komplett ersetzen)
+ * Breadcrumbs:
+ *   - [2026-08-25] Touch-Support ergänzt: Single-Finger Panning, Pinch-to-Zoom 
+ *     und Long-Press (600ms) als Ersatz für den Rechtsklick (Kontextmenü).
+ * =============================================================================
+ */
 function initPanzoom() {
     const viewport = document.getElementById('viewport');
     applyCanvasTransform();
 
-    // Zooming
+    // =========================================================================
+    // 1. BESTEHENDER MAUS-CODE (Wheel & Drag)
+    // =========================================================================
     viewport.addEventListener('wheel', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
         e.preventDefault();
@@ -152,19 +164,16 @@ function initPanzoom() {
         applyCanvasTransform();
     }, { passive: false });
 
-    // Panning & Klick ins Leere
     let isDraggingCanvas = false;
     let startMouseX = 0, startMouseY = 0;
 
     viewport.addEventListener('mousedown', (e) => {
-        // Klick ins Leere hebt die Auswahl auf
         if (e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             if (selectedNodeIds.size > 0) {
                 selectedNodeIds.clear();
                 renderCanvas();
             }
         }
-
         const isControl = e.target.closest('button, input, select, .assembly-card, .note-card, .project-zone-header, .zone-resize-handle');
         if (!isControl || e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             isDraggingCanvas = true;
@@ -190,7 +199,124 @@ function initPanzoom() {
     viewport.addEventListener('mousemove', handleLiveSplineMove);
     viewport.addEventListener('contextmenu', handleCanvasContextMenu);
 
-    // Tastatur-Events (Copy/Paste & Escape)
+    // =========================================================================
+    // 2. NEUER TOUCH-CODE (Pan, Zoom, Long-Press)
+    // =========================================================================
+    let isDraggingCanvasTouch = false;
+    let startTouchX = 0, startTouchY = 0;
+    let initialPinchDist = null;
+    let initialPinchScale = 1;
+    let longPressTimer = null;
+    let touchHasMoved = false;
+
+    const getPinchDistance = (touches) => {
+        return Math.hypot(
+            touches[0].clientX - touches[1].clientX,
+            touches[0].clientY - touches[1].clientY
+        );
+    };
+
+    const getPinchCenter = (touches) => {
+        return {
+            x: (touches[0].clientX + touches[1].clientX) / 2,
+            y: (touches[0].clientY + touches[1].clientY) / 2
+        };
+    };
+
+    viewport.addEventListener('touchstart', (e) => {
+        if (e.target.closest('button, input, select')) return;
+        touchHasMoved = false;
+
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+
+            // Long-Press Timer starten (600ms) für das Kontextmenü
+            longPressTimer = setTimeout(() => {
+                if (!touchHasMoved) {
+                    const fakeEvent = {
+                        preventDefault: () => { },
+                        target: e.target,
+                        clientX: touch.clientX,
+                        clientY: touch.clientY
+                    };
+                    handleCanvasContextMenu(fakeEvent);
+                }
+            }, 600);
+
+            // Klick ins Leere hebt die Auswahl auf
+            if (e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
+                if (selectedNodeIds.size > 0) {
+                    selectedNodeIds.clear();
+                    renderCanvas();
+                }
+            }
+
+            const isControl = e.target.closest('.assembly-card, .note-card, .project-zone-header, .zone-resize-handle, .ep-handle');
+            if (!isControl || e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
+                isDraggingCanvasTouch = true;
+                startTouchX = touch.clientX - window.currentPanX;
+                startTouchY = touch.clientY - window.currentPanY;
+            }
+        } else if (e.touches.length === 2) {
+            clearTimeout(longPressTimer);
+            isDraggingCanvasTouch = false;
+            initialPinchDist = getPinchDistance(e.touches);
+            initialPinchScale = window.currentScale;
+        }
+    }, { passive: false });
+
+    viewport.addEventListener('touchmove', (e) => {
+        if (e.target.closest('button, input, select')) return;
+
+        touchHasMoved = true;
+        clearTimeout(longPressTimer);
+
+        if (e.touches.length === 1 && isDraggingCanvasTouch) {
+            e.preventDefault(); // Verhindert mobiles Pull-to-Refresh
+            window.currentPanX = e.touches[0].clientX - startTouchX;
+            window.currentPanY = e.touches[0].clientY - startTouchY;
+            applyCanvasTransform();
+        } else if (e.touches.length === 2 && initialPinchDist) {
+            e.preventDefault();
+            const currentPinchDist = getPinchDistance(e.touches);
+            const scaleFactor = currentPinchDist / initialPinchDist;
+
+            let newScale = Math.min(Math.max(initialPinchScale * scaleFactor, 0.05), 5.0);
+
+            const center = getPinchCenter(e.touches);
+            const rect = viewport.getBoundingClientRect();
+            const clientX = center.x - rect.left;
+            const clientY = center.y - rect.top;
+
+            const pivotX = (clientX - window.currentPanX) / window.currentScale;
+            const pivotY = (clientY - window.currentPanY) / window.currentScale;
+
+            window.currentPanX = window.currentPanX - (pivotX * (newScale - window.currentScale));
+            window.currentPanY = window.currentPanY - (pivotY * (newScale - window.currentScale));
+            window.currentScale = newScale;
+
+            initialPinchDist = currentPinchDist;
+            initialPinchScale = window.currentScale;
+
+            applyCanvasTransform();
+        }
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer);
+        if (e.touches.length < 2) initialPinchDist = null;
+        if (e.touches.length === 0) isDraggingCanvasTouch = false;
+    });
+
+    viewport.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer);
+        isDraggingCanvasTouch = false;
+        initialPinchDist = null;
+    });
+
+    // =========================================================================
+    // 3. TASTATUR-EVENTS & BUTTONS
+    // =========================================================================
     window.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
@@ -199,7 +325,7 @@ function initPanzoom() {
                 cancelConnectionMode();
                 showToast('Verbindungsvorgang abgebrochen', 'info');
             }
-            if (connectingFlowZoneId) {
+            if (typeof connectingFlowZoneId !== 'undefined' && connectingFlowZoneId) {
                 connectingFlowZoneId = null;
                 showToast('Materialfluss abgebrochen', 'info');
             }
@@ -209,7 +335,6 @@ function initPanzoom() {
             }
         }
 
-        // Strg + C
         if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'c' || e.code === 'KeyC')) {
             if (selectedNodeIds.size > 0) {
                 window.copiedNodeIds = Array.from(selectedNodeIds);
@@ -221,12 +346,9 @@ function initPanzoom() {
             }
         }
 
-        // Strg + V
         if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'v' || e.code === 'KeyV')) {
             if (window.copiedNodeIds && window.copiedNodeIds.length > 0) {
-                if (typeof window.handlePasteNodes === 'function') {
-                    window.handlePasteNodes();
-                }
+                if (typeof window.handlePasteNodes === 'function') window.handlePasteNodes();
             }
         }
     });
@@ -1086,24 +1208,191 @@ function renderCanvas() {
                 window.addEventListener('mousemove', onMouseMove);
                 window.addEventListener('mouseup', onMouseUp);
             });
+        } if (canMoveZone) {
+            let isDragging = false;
+            let startX = 0, startY = 0;
+            let initLeft = 0, initTop = 0;
+            let childStartPos = [];
+            let childZonesStartPos = [];
+            let descendantZoneIds = [];
+            let allMovedZoneIds = [];
+            let descendantZones = [];
+            let childNodes = [];
+
+            /**
+             * Breadcrumb: [2026-08-25] Touch-Support: Zonen Drag & Drop integriert
+             */
+            const startZoneDrag = (e) => {
+                if (e.target.closest('.zone-actions, .zone-resize-handle')) return;
+                if (e.type === 'touchstart' && e.touches.length > 1) return; // Nur Single-Touch zulassen
+
+                window.isDraggingAnything = true;
+                isDragging = true;
+                const scale = window.currentScale;
+
+                startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                initLeft = zone.pos_x;
+                initTop = zone.pos_y;
+
+                descendantZoneIds = getAllDescendantZones(zone.id);
+                allMovedZoneIds = [zone.id, ...descendantZoneIds];
+                descendantZones = currentZones.filter(z => descendantZoneIds.includes(z.id));
+                childNodes = currentNodes.filter(n => allMovedZoneIds.includes(n.zone_id));
+
+                childStartPos = childNodes.map(n => ({ id: n.id, x: n.pos_x, y: n.pos_y }));
+                childZonesStartPos = descendantZones.map(z => ({ id: z.id, x: z.pos_x, y: z.pos_y }));
+
+                if (e.cancelable) e.stopPropagation();
+
+                const onMouseMove = (moveEvent) => {
+                    if (!isDragging) return;
+                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault(); // Browser-Scroll stoppen
+
+                    const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                    const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+                    const dx = (clientX - startX) / scale;
+                    const dy = (clientY - startY) / scale;
+
+                    zone.pos_x = Math.max(10, Math.round(initLeft + dx));
+                    zone.pos_y = Math.max(10, Math.round(initTop + dy));
+                    zoneEl.style.left = `${zone.pos_x}px`;
+                    zoneEl.style.top = `${zone.pos_y}px`;
+
+                    descendantZones.forEach((z, idx) => {
+                        z.pos_x = Math.max(10, Math.round(childZonesStartPos[idx].x + dx));
+                        z.pos_y = Math.max(10, Math.round(childZonesStartPos[idx].y + dy));
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) {
+                            zEl.style.left = `${z.pos_x}px`;
+                            zEl.style.top = `${z.pos_y}px`;
+                        }
+                    });
+
+                    childNodes.forEach((n, idx) => {
+                        n.pos_x = Math.max(10, Math.round(childStartPos[idx].x + dx));
+                        n.pos_y = Math.max(10, Math.round(childStartPos[idx].y + dy));
+                        const nEl = document.getElementById(n.id);
+                        if (nEl) {
+                            nEl.style.left = `${n.pos_x}px`;
+                            nEl.style.top = `${n.pos_y}px`;
+                        }
+                    });
+
+                    const headerCenterX = zone.pos_x + (zone.width / 2);
+                    const headerCenterY = zone.pos_y + 20;
+                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) {
+                            if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
+                            else zEl.classList.remove('zone-hover-highlight');
+                        }
+                    });
+
+                    renderConnections();
+                };
+
+                const onMouseUp = async (upEvent) => {
+                    if (!isDragging) return;
+                    isDragging = false;
+
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    window.removeEventListener('touchmove', onMouseMove);
+                    window.removeEventListener('touchend', onMouseUp);
+                    window.removeEventListener('touchcancel', onMouseUp);
+
+                    const headerCenterX = zone.pos_x + (zone.width / 2);
+                    const headerCenterY = zone.pos_y + 20;
+                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+                    const newParentId = targetZone ? targetZone.id : null;
+
+                    if (newParentId) {
+                        const parentDepth = getZoneDepth(newParentId);
+                        let maxChildRelativeDepth = 0;
+                        descendantZoneIds.forEach(id => {
+                            let d = getZoneDepth(id) - getZoneDepth(zone.id);
+                            if (d > maxChildRelativeDepth) maxChildRelativeDepth = d;
+                        });
+
+                        if (parentDepth + 1 + maxChildRelativeDepth >= 5) {
+                            showToast('Maximale Verschachtelung von 5 Ebenen erreicht!', 'error');
+                        } else {
+                            zone.parent_zone_id = newParentId;
+                        }
+                    } else {
+                        zone.parent_zone_id = null;
+                    }
+
+                    currentZones.forEach(z => {
+                        const zEl = document.getElementById(z.id);
+                        if (zEl) zEl.classList.remove('zone-hover-highlight');
+                    });
+
+                    const updates = childNodes.map(n => db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id));
+                    descendantZones.forEach(z => {
+                        updates.push(db.from('project_zones').update({ pos_x: z.pos_x, pos_y: z.pos_y }).eq('id', z.id));
+                    });
+                    updates.push(db.from('project_zones').update({
+                        pos_x: zone.pos_x,
+                        pos_y: zone.pos_y,
+                        parent_zone_id: zone.parent_zone_id
+                    }).eq('id', zone.id));
+
+                    await Promise.all(updates);
+
+                    window.isDraggingAnything = false;
+                    if (window.pendingCanvasUpdate) {
+                        window.pendingCanvasUpdate = false;
+                        fetchCanvasData();
+                    } else {
+                        renderCanvas();
+                    }
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+                window.addEventListener('touchmove', onMouseMove, { passive: false });
+                window.addEventListener('touchend', onMouseUp);
+                window.addEventListener('touchcancel', onMouseUp);
+            };
+
+            zoneEl.addEventListener('mousedown', startZoneDrag);
+            zoneEl.addEventListener('touchstart', startZoneDrag, { passive: false });
         }
 
         const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
         if (resizeHandle && (isAdmin || (activeUserCode && activeUserCode === zone.created_by))) {
-            resizeHandle.addEventListener('mousedown', (e) => {
-                e.stopPropagation();
+
+            /**
+             * Breadcrumb: [2026-08-25] Touch-Support: Zonen-Resizing integriert
+             */
+            const startZoneResize = (e) => {
+                if (e.type === 'touchstart' && e.touches.length > 1) return;
+                if (e.cancelable) e.stopPropagation();
+
                 window.isDraggingAnything = true;
                 let isResizing = true;
                 const scale = window.currentScale;
                 const startW = zone.width;
                 const startH = zone.height;
-                const startMouseX = e.clientX;
-                const startMouseY = e.clientY;
+
+                const startMouseX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const startMouseY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
 
                 const onResizeMove = (moveEvent) => {
                     if (!isResizing) return;
-                    const dw = (moveEvent.clientX - startMouseX) / scale;
-                    const dh = (moveEvent.clientY - startMouseY) / scale;
+                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+
+                    const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                    const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+                    const dw = (clientX - startMouseX) / scale;
+                    const dh = (clientY - startMouseY) / scale;
                     const newW = Math.max(200, Math.round(startW + dw));
                     const newH = Math.max(150, Math.round(startH + dh));
                     zoneEl.style.width = `${newW}px`;
@@ -1115,8 +1404,13 @@ function renderCanvas() {
                 const onResizeUp = async () => {
                     if (!isResizing) return;
                     isResizing = false;
+
                     window.removeEventListener('mousemove', onResizeMove);
                     window.removeEventListener('mouseup', onResizeUp);
+                    window.removeEventListener('touchmove', onResizeMove);
+                    window.removeEventListener('touchend', onResizeUp);
+                    window.removeEventListener('touchcancel', onResizeUp);
+
                     await db.from('project_zones').update({ width: zone.width, height: zone.height }).eq('id', zone.id);
 
                     window.isDraggingAnything = false;
@@ -1128,7 +1422,13 @@ function renderCanvas() {
 
                 window.addEventListener('mousemove', onResizeMove);
                 window.addEventListener('mouseup', onResizeUp);
-            });
+                window.addEventListener('touchmove', onResizeMove, { passive: false });
+                window.addEventListener('touchend', onResizeUp);
+                window.addEventListener('touchcancel', onResizeUp);
+            };
+
+            resizeHandle.addEventListener('mousedown', startZoneResize);
+            resizeHandle.addEventListener('touchstart', startZoneResize, { passive: false });
         }
 
         canvas.appendChild(zoneEl);
@@ -1204,23 +1504,33 @@ function renderCanvas() {
                 let startClientX = 0, startClientY = 0;
                 let initX = 0, initY = 0;
 
-                el.addEventListener('mousedown', (e) => {
-                    // Verhindern, dass Rechtsklicks das Dragging starten
-                    if (e.button !== 0) return;
+                /**
+                 * Breadcrumb: [2026-08-25] Touch-Support: Sticky Notes Drag & Drop integriert
+                 */
+                const startNoteDrag = (e) => {
+                    if (e.type === 'mousedown' && e.button !== 0) return; // Kein Rechtsklick-Drag
+                    if (e.type === 'touchstart' && e.touches.length > 1) return;
 
                     window.isDraggingAnything = true;
                     isDragging = true;
-                    startClientX = e.clientX;
-                    startClientY = e.clientY;
+
+                    startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
                     initX = node.pos_x;
                     initY = node.pos_y;
-                    e.stopPropagation();
+                    if (e.cancelable) e.stopPropagation();
 
                     const onMouseMove = (moveEvent) => {
                         if (!isDragging) return;
+                        if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+
+                        const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                        const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
                         const scale = window.currentScale || 1;
-                        const dx = (moveEvent.clientX - startClientX) / scale;
-                        const dy = (moveEvent.clientY - startClientY) / scale;
+                        const dx = (clientX - startClientX) / scale;
+                        const dy = (clientY - startClientY) / scale;
 
                         node.pos_x = Math.round(initX + dx);
                         node.pos_y = Math.round(initY + dy);
@@ -1231,8 +1541,12 @@ function renderCanvas() {
                     const onMouseUp = async (upEvent) => {
                         if (!isDragging) return;
                         isDragging = false;
+
                         window.removeEventListener('mousemove', onMouseMove);
                         window.removeEventListener('mouseup', onMouseUp);
+                        window.removeEventListener('touchmove', onMouseMove);
+                        window.removeEventListener('touchend', onMouseUp);
+                        window.removeEventListener('touchcancel', onMouseUp);
 
                         const targetZone = (typeof getDeepestZoneAt === 'function')
                             ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
@@ -1247,18 +1561,23 @@ function renderCanvas() {
                         }).eq('id', node.id);
 
                         window.isDraggingAnything = false;
-                        // Anstatt auf einen weiteren Fetch zu warten, erzwingen wir ein direktes Re-Rendering
                         if (typeof renderCanvas === 'function') renderCanvas();
 
-                        // Im Hintergrund syncen
                         if (window.pendingCanvasUpdate && typeof fetchCanvasData === 'function') {
                             window.pendingCanvasUpdate = false;
                             fetchCanvasData();
                         }
                     };
+
                     window.addEventListener('mousemove', onMouseMove);
                     window.addEventListener('mouseup', onMouseUp);
-                });
+                    window.addEventListener('touchmove', onMouseMove, { passive: false });
+                    window.addEventListener('touchend', onMouseUp);
+                    window.addEventListener('touchcancel', onMouseUp);
+                };
+
+                el.addEventListener('mousedown', startNoteDrag);
+                el.addEventListener('touchstart', startNoteDrag, { passive: false });
             }
 
             canvas.appendChild(el);
@@ -1568,16 +1887,21 @@ function renderCanvas() {
             let startClientX = 0, startClientY = 0;
             let initialNodePositions = new Map();
 
-            el.addEventListener('mousedown', (e) => {
+            /**
+             * Breadcrumb: [2026-08-25] Touch-Support: Baugruppen Drag & Drop integriert
+             */
+            const startBlockDrag = (e) => {
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle')) return;
-                // Damit wir bei Strg+Klick nicht draggen, sondern nur auswählen:
-                if (e.ctrlKey || e.shiftKey || e.metaKey) return;
+                if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
+                if (e.type === 'touchstart' && e.touches.length > 1) return;
 
                 window.isDraggingAnything = true;
                 isDragging = true;
-                startClientX = e.clientX;
-                startClientY = e.clientY;
-                e.stopPropagation();
+
+                startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                if (e.cancelable) e.stopPropagation();
 
                 const nodesToMove = (selectedNodeIds.has(node.id))
                     ? Array.from(selectedNodeIds).map(id => currentNodes.find(n => n.id === id)).filter(Boolean)
@@ -1590,9 +1914,14 @@ function renderCanvas() {
 
                 const onMouseMove = (moveEvent) => {
                     if (!isDragging) return;
+                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+
+                    const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                    const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
                     const scale = window.currentScale || 1;
-                    const dx = (moveEvent.clientX - startClientX) / scale;
-                    const dy = (moveEvent.clientY - startClientY) / scale;
+                    const dx = (clientX - startClientX) / scale;
+                    const dy = (clientY - startClientY) / scale;
 
                     nodesToMove.forEach(n => {
                         const initPos = initialNodePositions.get(n.id);
@@ -1629,21 +1958,23 @@ function renderCanvas() {
                     renderConnections();
                 };
 
-                const onMouseUp = async () => {
+                const onMouseUp = async (upEvent) => {
                     if (!isDragging) return;
                     isDragging = false;
+
                     window.removeEventListener('mousemove', onMouseMove);
                     window.removeEventListener('mouseup', onMouseUp);
-
-                    const primaryInit = initialNodePositions.get(nodesToMove[0].id);
-                    const scale = window.currentScale || 1;
-                    const dx = (window.lastClientX - startClientX) / scale;
-                    const dy = (window.lastClientY - startClientY) / scale;
+                    window.removeEventListener('touchmove', onMouseMove);
+                    window.removeEventListener('touchend', onMouseUp);
+                    window.removeEventListener('touchcancel', onMouseUp);
 
                     let targetZoneId = null;
+                    const primaryInit = initialNodePositions.get(nodesToMove[0].id);
+
                     if (primaryInit) {
-                        const centerX = (primaryInit.x + dx) + 160;
-                        const centerY = (primaryInit.y + dy) + 100;
+                        // Wir nutzen direkt die frisch errechnete Position des Knotens aus dem DOM
+                        const centerX = nodesToMove[0].pos_x + 160;
+                        const centerY = nodesToMove[0].pos_y + 100;
                         const targetZone = getDeepestZoneAt(centerX, centerY);
                         targetZoneId = targetZone ? targetZone.id : null;
                     }
@@ -1673,7 +2004,13 @@ function renderCanvas() {
 
                 window.addEventListener('mousemove', onMouseMove);
                 window.addEventListener('mouseup', onMouseUp);
-            });
+                window.addEventListener('touchmove', onMouseMove, { passive: false });
+                window.addEventListener('touchend', onMouseUp);
+                window.addEventListener('touchcancel', onMouseUp);
+            };
+
+            el.addEventListener('mousedown', startBlockDrag);
+            el.addEventListener('touchstart', startBlockDrag, { passive: false });
         }
 
         canvas.appendChild(el);

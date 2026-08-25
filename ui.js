@@ -1707,3 +1707,85 @@ window.handleDeleteNote = async function(e) {
         if (typeof fetchCanvasData === 'function') fetchCanvasData();
     }
 };
+
+/**
+* =============================================================================
+* Breadcrumb: [2026-08-25] Mobile Sidebar Toggle Logik
+* HINZUFÜGEN IN: ui.js (am Ende der Datei)
+* =============================================================================
+*/
+window.toggleMobileSidebar = function () {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('mobile-open');
+    }
+};
+
+// Schließt die Sidebar auf mobilen Geräten automatisch, wenn man ins Canvas tippt
+document.addEventListener('click', (e) => {
+    const sidebar = document.getElementById('sidebar');
+    const menuBtn = document.getElementById('mobileMenuBtn');
+    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('mobile-open')) {
+        if (!sidebar.contains(e.target) && !menuBtn.contains(e.target)) {
+            sidebar.classList.remove('mobile-open');
+        }
+    }
+}, { capture: true }); // Capture-Phase, damit es vor Canvas-Events feuert
+
+/**
+ * =============================================================================
+ * 9. MOBILE TOUCH-WHEEL (Zeiterfassung durch Wischen)
+ * Breadcrumb: [2026-08-25] Wisch-Gesten auf Stunden/Minuten-Feldern ergänzt.
+ * Zieht man den Finger auf dem Feld nach oben/unten, rollt die Zeit mit.
+ * HINZUFÜGEN IN: ui.js (am Ende der Datei)
+ * =============================================================================
+ */
+let timeSwipeStartY = 0;
+let timeSwipeStartVal = 0;
+let timeSwipeType = '';
+let timeSwipeInput = null;
+
+document.addEventListener('touchstart', (e) => {
+    const input = e.target.closest('.input-hours, .input-mins');
+    if (input && e.touches.length === 1) {
+        timeSwipeInput = input;
+        timeSwipeStartY = e.touches[0].clientY;
+        timeSwipeStartVal = parseInt(input.value, 10) || 0;
+        timeSwipeType = input.classList.contains('input-hours') ? 'hour' : 'min';
+
+        // Verhindern, dass sich das Canvas beim Drehen des Rades verschiebt
+        window.isDraggingAnything = true;
+    }
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+    if (timeSwipeInput && e.touches.length === 1) {
+        if (e.cancelable) e.preventDefault(); // Stoppt Seiten-Scrollen beim Wischen
+
+        const currentY = e.touches[0].clientY;
+        const diff = timeSwipeStartY - currentY; // Hochwischen = positive Zahl
+
+        // Sensibilität: Alle 15 Pixel Wischbewegung = 1 Schritt
+        const steps = Math.trunc(diff / 15);
+
+        let stepValue = (timeSwipeType === 'hour') ? 1 : 5;
+        let newVal = timeSwipeStartVal + (steps * stepValue);
+
+        // Grenzen definieren
+        if (newVal < 0) newVal = 0;
+        if (timeSwipeType === 'min' && newVal > 55) newVal = 55;
+
+        // Wert direkt ins Feld schreiben
+        timeSwipeInput.value = (timeSwipeType === 'min') ? newVal.toString().padStart(2, '0') : newVal;
+    }
+}, { passive: false }); // passive: false erlaubt e.preventDefault()
+
+const endTimeSwipe = () => {
+    if (timeSwipeInput) {
+        window.isDraggingAnything = false;
+        timeSwipeInput = null;
+    }
+};
+
+document.addEventListener('touchend', endTimeSwipe);
+document.addEventListener('touchcancel', endTimeSwipe);

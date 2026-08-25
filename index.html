@@ -480,8 +480,12 @@
         </div>
 
         <!-- Canvas Bereich -->
+        <!-- ERSETZEN IN: index.html (Im Bereich <div id="viewport">) -->
+        <!-- Breadcrumb: [2026-08-25] Mobile Hamburger-Menü Button hinzugefügt -->
         <div id="viewport">
-            <!-- Buttons links oben entfernt -->
+            <!-- Neuer Mobile-Menü Button (nur auf kleinen Screens sichtbar) -->
+            <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
+
             <!-- Info-Leitfaden Button links vom Schloss -->
             <button id="infoGuideBtn" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
             <button id="adminLockBtn" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
