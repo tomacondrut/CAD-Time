@@ -13,9 +13,12 @@
  */
 
 // Globale State-Variablen für das native Panning/Zooming
+// Globale State-Variablen für das native Panning/Zooming
 window.currentScale = 1;
 window.currentPanX = 100;
 window.currentPanY = 100;
+window.hoveredNodeId = null;
+window.copiedNodeIds = [];
 
 // Dummy-Proxy, damit bestehender Drag&Drop Code kompatibel bleibt
 window.panzoomInstance = { getScale: () => window.currentScale };
@@ -64,6 +67,13 @@ window.handleLiveSplineMove = function(e) {
     }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Kontextmenü (Rechtsklick Handling inkl. Notizen)
+ * Breadcrumb: [2026-08-25 17:45:00 CEST] Notiz-Menüpunkt in Kontext-Steuerung integriert
+ * =============================================================================
+ */
 window.handleCanvasContextMenu = function(e) {
     e.preventDefault();
     if (e.target.closest('button, input, select, .sidebar')) return;
@@ -73,8 +83,9 @@ window.handleCanvasContextMenu = function(e) {
     const itemDelete = document.getElementById('ctxMenuDeleteNode');
     const itemAddBlock = document.getElementById('ctxMenuAddBlock');
     const itemAddZone = document.getElementById('ctxMenuAddZone');
+    const itemAddNote = document.getElementById('ctxMenuAddNote');
 
-    const cardEl = e.target.closest('.assembly-card');
+    const cardEl = e.target.closest('.assembly-card, .note-card');
     if (cardEl) {
         contextTargetNodeId = cardEl.id;
         const targetNode = currentNodes.find(n => n.id === contextTargetNodeId);
@@ -84,18 +95,20 @@ window.handleCanvasContextMenu = function(e) {
             const isCreator = (activeUserCode && activeUserCode === targetNode.created_by);
             const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
 
-            if (itemDuplicate) itemDuplicate.style.display = 'flex';
+            if (itemDuplicate) itemDuplicate.style.display = targetNode.block_type === 'note' ? 'none' : 'flex';
             if (itemDelete) itemDelete.style.display = canDelete ? 'flex' : 'none';
         }
 
         if (itemAddBlock) itemAddBlock.style.display = 'none';
         if (itemAddZone) itemAddZone.style.display = 'none';
+        if (itemAddNote) itemAddNote.style.display = 'none';
     } else {
         contextTargetNodeId = null;
         if (itemDuplicate) itemDuplicate.style.display = 'none';
         if (itemDelete) itemDelete.style.display = 'none';
         if (itemAddBlock) itemAddBlock.style.display = 'flex';
         if (itemAddZone) itemAddZone.style.display = 'flex';
+        if (itemAddNote) itemAddNote.style.display = 'flex';
     }
 
     if (menu) {
@@ -139,12 +152,20 @@ function initPanzoom() {
         applyCanvasTransform();
     }, { passive: false });
 
-    // Panning
+    // Panning & Klick ins Leere
     let isDraggingCanvas = false;
     let startMouseX = 0, startMouseY = 0;
 
     viewport.addEventListener('mousedown', (e) => {
-        const isControl = e.target.closest('button, input, select, .assembly-card, .project-zone-header, .zone-resize-handle');
+        // Klick ins Leere hebt die Auswahl auf
+        if (e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
+            if (selectedNodeIds.size > 0) {
+                selectedNodeIds.clear();
+                renderCanvas();
+            }
+        }
+
+        const isControl = e.target.closest('button, input, select, .assembly-card, .note-card, .project-zone-header, .zone-resize-handle');
         if (!isControl || e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             isDraggingCanvas = true;
             startMouseX = e.clientX - window.currentPanX;
@@ -169,7 +190,10 @@ function initPanzoom() {
     viewport.addEventListener('mousemove', handleLiveSplineMove);
     viewport.addEventListener('contextmenu', handleCanvasContextMenu);
 
+    // Tastatur-Events (Copy/Paste & Escape)
     window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
         if (e.key === 'Escape') {
             if (connectingFirstNodeId) {
                 cancelConnectionMode();
@@ -185,16 +209,24 @@ function initPanzoom() {
             }
         }
 
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        // Strg + C
+        if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'c' || e.code === 'KeyC')) {
             if (selectedNodeIds.size > 0) {
                 window.copiedNodeIds = Array.from(selectedNodeIds);
                 showToast(`${window.copiedNodeIds.length} Block(s) kopiert`, 'info');
+            } else if (window.hoveredNodeId) {
+                window.copiedNodeIds = [window.hoveredNodeId];
+                const n = currentNodes.find(x => x.id === window.hoveredNodeId);
+                showToast(`"${n ? n.name : 'Block'}" kopiert`, 'info');
             }
         }
 
-        if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        // Strg + V
+        if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'v' || e.code === 'KeyV')) {
             if (window.copiedNodeIds && window.copiedNodeIds.length > 0) {
-                if (typeof handlePasteNodes === 'function') handlePasteNodes();
+                if (typeof window.handlePasteNodes === 'function') {
+                    window.handlePasteNodes();
+                }
             }
         }
     });
@@ -256,6 +288,8 @@ window.handleContextMenuAction = async function (type) {
         handleOpenAddBlockModal(contextMenuCoords.x - 160, contextMenuCoords.y - 50);
     } else if (type === 'zone') {
         handleOpenAddZoneModal(contextMenuCoords.x, contextMenuCoords.y);
+    } else if (type === 'note') {
+        if (typeof handleOpenAddNoteModal === 'function') handleOpenAddNoteModal(contextMenuCoords.x, contextMenuCoords.y);
     } else if (type === 'duplicate' && contextTargetNodeId) {
         const originalNode = currentNodes.find(n => n.id === contextTargetNodeId);
         if (!originalNode) return;
@@ -668,7 +702,8 @@ function renderCanvas() {
     const canvas = document.getElementById('canvas');
     const svgLayer = document.getElementById('connections-layer');
 
-    const existingCards = canvas.querySelectorAll('.assembly-card, .project-zone');
+    // NEU (nimmt auch bestehende Notizen mit in den Reset):
+    const existingCards = canvas.querySelectorAll('.assembly-card, .project-zone, .note-card');
     existingCards.forEach(c => c.remove());
     svgLayer.innerHTML = '';
 
@@ -715,12 +750,38 @@ function renderCanvas() {
         };
     });
 
+    /**
+         * =============================================================================
+         * Breadcrumb: [2026-08-25 17:20:19 CEST] Master-Instanz Logik: Zonen-Rollups
+         * berücksichtigen nur noch die Master-Instanz. Zeiten aller Instanzen werden 
+         * auf die Zone der Master-Instanz umgeleitet.
+         * =============================================================================
+         */
+    /**
+         * =============================================================================
+         * Breadcrumb: [2026-08-25 17:45:00 CEST] Master-Instanz Logik & Notiz-Filter:
+         * Notizen besitzen keine Budgets/Zeiten und werden im Rollup ignoriert.
+         * =============================================================================
+         */
     currentNodes.forEach(n => {
-        if (n.zone_id && zoneRollups[n.zone_id]) {
+        if (n.block_type === 'note' || n.doc_number === 'NOTE') return; // Notizen bei Zonen-Budgets ignorieren
+
+        const relatedIds = n.linked_id ? currentNodes.filter(x => x.linked_id === n.linked_id).map(x => x.id) : [n.id];
+        const isEffectivelyLinked = relatedIds.length > 1;
+
+        // Die Master-Instanz ist der erste Node mit dieser linked_id (oder sich selbst)
+        const isMaster = !isEffectivelyLinked || (currentNodes.find(x => x.linked_id === n.linked_id).id === n.id);
+
+        if (isMaster && n.zone_id && zoneRollups[n.zone_id]) {
+            // Budget nur vom Master an den Kasten übergeben
             zoneRollups[n.zone_id].dBudg += nodeDirectStats[n.id].dBudg;
             zoneRollups[n.zone_id].drBudg += nodeDirectStats[n.id].drBudg;
-            zoneRollups[n.zone_id].dSpent += nodeDirectStats[n.id].dSpent;
-            zoneRollups[n.zone_id].drSpent += nodeDirectStats[n.id].drSpent;
+
+            // Zeiten ALLER referenzierten Instanzen auf den Kasten des Masters summieren
+            relatedIds.forEach(relId => {
+                zoneRollups[n.zone_id].dSpent += nodeDirectStats[relId].dSpent;
+                zoneRollups[n.zone_id].drSpent += nodeDirectStats[relId].drSpent;
+            });
         }
     });
 
@@ -1073,10 +1134,163 @@ function renderCanvas() {
         canvas.appendChild(zoneEl);
     });
 
+    /**
+         * =============================================================================
+         * Breadcrumb: [2026-08-25 17:20:19 CEST] Master-Instanz Logik: Visuelle 
+         * Abgrenzung, Klammer-Budgets und Log-Weiterleitung an den Master.
+         * =============================================================================
+         */
+    /**
+     * =============================================================================
+     * Breadcrumb: [2026-08-25 17:55:00 CEST] Sticky Notes Rendering & Sichtbarkeit gefixt
+     * =============================================================================
+     */
     currentNodes.forEach(node => {
-        if (isNodeHiddenByAncestor(node.id) || (node.zone_id && window.isZoneHidden(node.zone_id))) return;
+        // Notizen besitzen keine Parent-Kanten; nur Kasten-Sichtbarkeit prüfen
+        if (node.zone_id && window.isZoneHidden(node.zone_id)) return;
 
-        const stats = rollups[node.id] || { totalDesign: 0, totalDrafting: 0, logs: [] };
+        // 1. STICKY NOTES RENDERING
+        if (node.block_type === 'note' || node.doc_number === 'NOTE') {
+            const isPrivate = node.article_number === 'private';
+            const userCode = (activeUserCode || '').toUpperCase();
+            const noteCreator = (node.created_by || '').toUpperCase();
+
+            // Privat-Check: Nur Ersteller und Admin sehen private Notizen
+            if (isPrivate && noteCreator !== userCode && !isAdmin) return;
+
+            const el = document.createElement('div');
+            el.id = node.id;
+            const canDrag = isAdmin || (userCode === noteCreator);
+
+            el.className = `note-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'}`;
+            el.style.left = `${node.pos_x}px`;
+            el.style.top = `${node.pos_y}px`;
+            el.style.backgroundColor = node.color_hex || '#fefcbf';
+            el.style.border = '1px solid rgba(0, 0, 0, 0.1)';
+
+            const lockIcon = isPrivate ? '<span style="font-size:12px;" title="Private Notiz (Nur für dich sichtbar)">🔒</span>' : '';
+
+            // CSS-Ergänzung für pointer-events-none auf inneren Elementen, damit Dragging sauber greift
+            el.innerHTML = `
+                <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
+                    <span>📝 ${escapeHtml(node.created_by || 'COT')}</span>
+                    ${lockIcon}
+                </div>
+                <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:12px; color:#2d3748; flex:1;">${escapeHtml(node.name)}</div>
+            `;
+
+            // Hover-Status fürs Kopieren merken
+            el.addEventListener('mouseenter', () => {
+                window.hoveredNodeId = node.id; // Für Copy&Paste merken
+                if (node.linked_id) {
+                    document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
+                }
+            });
+
+            el.addEventListener('mouseleave', () => {
+                window.hoveredNodeId = null; // Verwerfen
+                if (node.linked_id) {
+                    document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.remove('linked-highlight'));
+                }
+            });
+
+            el.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                if (canDrag && typeof openEditNoteModal === 'function') openEditNoteModal(node.id);
+            });
+
+            if (canDrag) {
+                let isDragging = false;
+                let startClientX = 0, startClientY = 0;
+                let initX = 0, initY = 0;
+
+                el.addEventListener('mousedown', (e) => {
+                    // Verhindern, dass Rechtsklicks das Dragging starten
+                    if (e.button !== 0) return;
+
+                    window.isDraggingAnything = true;
+                    isDragging = true;
+                    startClientX = e.clientX;
+                    startClientY = e.clientY;
+                    initX = node.pos_x;
+                    initY = node.pos_y;
+                    e.stopPropagation();
+
+                    const onMouseMove = (moveEvent) => {
+                        if (!isDragging) return;
+                        const scale = window.currentScale || 1;
+                        const dx = (moveEvent.clientX - startClientX) / scale;
+                        const dy = (moveEvent.clientY - startClientY) / scale;
+
+                        node.pos_x = Math.round(initX + dx);
+                        node.pos_y = Math.round(initY + dy);
+                        el.style.left = `${node.pos_x}px`;
+                        el.style.top = `${node.pos_y}px`;
+                    };
+
+                    const onMouseUp = async (upEvent) => {
+                        if (!isDragging) return;
+                        isDragging = false;
+                        window.removeEventListener('mousemove', onMouseMove);
+                        window.removeEventListener('mouseup', onMouseUp);
+
+                        const targetZone = (typeof getDeepestZoneAt === 'function')
+                            ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
+                            : null;
+                        const targetZoneId = targetZone ? targetZone.id : null;
+                        node.zone_id = targetZoneId;
+
+                        await db.from('project_nodes').update({
+                            pos_x: node.pos_x,
+                            pos_y: node.pos_y,
+                            zone_id: targetZoneId
+                        }).eq('id', node.id);
+
+                        window.isDraggingAnything = false;
+                        // Anstatt auf einen weiteren Fetch zu warten, erzwingen wir ein direktes Re-Rendering
+                        if (typeof renderCanvas === 'function') renderCanvas();
+
+                        // Im Hintergrund syncen
+                        if (window.pendingCanvasUpdate && typeof fetchCanvasData === 'function') {
+                            window.pendingCanvasUpdate = false;
+                            fetchCanvasData();
+                        }
+                    };
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
+                });
+            }
+
+            canvas.appendChild(el);
+            return; // Schleifendurchlauf für diesen Block beenden
+        }
+
+        // 2. REGULÄRE BAUGRUPPEN / BAUTEILE
+        if (isNodeHiddenByAncestor(node.id)) return;
+
+        // --- HIER GEHT DER BESTEHENDE CODE FÜR BAUGRUPPEN WEITER ---
+        const relatedNodeIds = node.linked_id
+            ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
+            : [node.id];
+
+        // Nur wenn es WIRKLICH mehr als ein Element mit dieser ID gibt, ist es eine aktive Instanz
+        const isEffectivelyLinked = relatedNodeIds.length > 1;
+
+        // Master-Erkennung für den aktuellen Block
+        const isMaster = !isEffectivelyLinked || (currentNodes.find(n => n.linked_id === node.linked_id).id === node.id);
+        const masterNode = isEffectivelyLinked ? currentNodes.find(n => n.linked_id === node.linked_id) : node;
+
+        // Zeiten für die Anzeige aggregieren
+        let dSpentAgg = 0;
+        let drSpentAgg = 0;
+        relatedNodeIds.forEach(id => {
+            const st = rollups[id] || { totalDesign: 0, totalDrafting: 0, logs: [] };
+            dSpentAgg += st.totalDesign;
+            drSpentAgg += st.totalDrafting;
+        });
+
+        const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
+
         const nodeColor = node.color_hex || '#2b6cb0';
         const creator = node.created_by || 'COT';
         const bType = node.block_type || 'assembly';
@@ -1084,22 +1298,20 @@ function renderCanvas() {
 
         const canDrag = isAdmin || (activeUserCode && activeUserCode === creator);
 
-        const dSpent = stats.totalDesign;
-        const dBudg = Math.max(0, parseFloat(node.budget_design_hours) || 0);
-        const dPct = dBudg > 0 ? Math.round((dSpent / dBudg) * 100) : 0;
-        const dPieStyle = generatePieStyle(dSpent, dBudg, nodeColor);
+        // Budgets vom Master übernehmen
+        const dBudg = Math.max(0, parseFloat(masterNode.budget_design_hours) || 0);
+        const dPct = dBudg > 0 ? Math.round((dSpentAgg / dBudg) * 100) : 0;
+        const dPieStyle = generatePieStyle(dSpentAgg, dBudg, nodeColor);
 
-        const drSpent = stats.totalDrafting;
-        const drBudg = Math.max(0, parseFloat(node.budget_drafting_hours) || 0);
-        const drPct = drBudg > 0 ? Math.round((drSpent / drBudg) * 100) : 0;
-        const drPieStyle = generatePieStyle(drSpent, drBudg, '#38a169');
+        const drBudg = Math.max(0, parseFloat(masterNode.budget_drafting_hours) || 0);
+        const drPct = drBudg > 0 ? Math.round((drSpentAgg / drBudg) * 100) : 0;
+        const drPieStyle = generatePieStyle(drSpentAgg, drBudg, '#38a169');
+
+        // Textuelle Darstellung: Budgets bei Instanzen in Klammern setzen
+        const dStr = isMaster ? `${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)}` : `(${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)})`;
+        const drStr = isMaster ? `${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)}` : `(${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)})`;
 
         const isExpanded = expandedNodes.has(node.id);
-
-        const relatedNodeIds = node.linked_id
-            ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
-            : [node.id];
-        const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
 
         const hasChildren = currentEdges.some(e => e.source === node.id);
         const isSubtreeCollapsed = collapsedParents.has(node.id);
@@ -1200,15 +1412,6 @@ function renderCanvas() {
         const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
         const isDimmed = window.personalFilterActive && !isUserAssigned;
 
-        /**
-           * =============================================================================
-           * Projekt: CAD Time Manager
-           * Domain: Canvas Card Rendering
-           * ERSETZEN IN: canvas.js (Funktion renderCanvas)
-           * Breadcrumb: [2026-08-24 19:22:00 CEST] Vollständiger HTML-Block mit Identifikator-Badge,
-           * 4-Seiten Handles, Ersteller-Kürzel [COT] und Zuweisungs-Badges (3D & 📄)
-           * =============================================================================
-           */
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
         if (identifier) {
@@ -1217,19 +1420,24 @@ function renderCanvas() {
 
         const isConnectingThisNode = connectingFirstNodeId === node.id;
         const isSelected = selectedNodeIds.has(node.id);
-        const isLinked = !!node.linked_id;
 
         const el = document.createElement('div');
         el.id = node.id;
-        if (isLinked) el.dataset.linkedId = node.linked_id;
+        if (isEffectivelyLinked) el.dataset.linkedId = node.linked_id;
 
-        el.className = `assembly-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-multi' : ''} ${isDimmed ? 'node-dimmed' : ''}`;
+        // HIGHLIGHT-KLASSE ".selected-node" anwenden
+        el.className = `assembly-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-node' : ''} ${isDimmed ? 'node-dimmed' : ''}`;
         el.style.left = `${node.pos_x}px`;
         el.style.top = `${node.pos_y}px`;
         el.style.borderColor = nodeColor;
+        // Referenz-Instanzen visuell abgrenzen (gestrichelter Rand - NUR wenn es weitere Instanzen gibt)
+        el.style.borderStyle = (isEffectivelyLinked && !isMaster) ? 'dashed' : 'solid';
         el.style.zIndex = "10";
 
-        const linkedIconHtml = isLinked ? `<span class="linked-icon" title="Verknüpfte Instanz (Zeiten synchron)">🔗</span>` : '';
+        // Icon mit Tooltip und Text-Suffix für Referenzen (verschwindet, wenn es keine Referenzen mehr gibt)
+        const linkedIconHtml = isEffectivelyLinked
+            ? `<span class="linked-icon" title="${isMaster ? 'Master-Instanz (Zeiten synchron)' : 'Referenz-Instanz (loggt auf Master)'}">🔗${isMaster ? '' : ' Ref'}</span>`
+            : '';
 
         let assignedBadgesHtml = '';
         if (node.assigned_design_user) {
@@ -1276,19 +1484,20 @@ function renderCanvas() {
               <div class="pie-inner">${dPct}%</div>
             </div>
             <div class="chart-label">CAD</div>
-            <div class="chart-sub">${formatHoursToHM(dSpent)} / ${formatHoursToHM(dBudg)}</div>
+            <div class="chart-sub">${dStr}</div>
           </div>
           <div class="chart-box">
             <div class="pie-chart" style="${drPieStyle}">
               <div class="pie-inner">${drPct}%</div>
             </div>
             <div class="chart-label">Zeichnung</div>
-            <div class="chart-sub">${formatHoursToHM(drSpent)} / ${formatHoursToHM(drBudg)}</div>
+            <div class="chart-sub">${drStr}</div>
           </div>
         </div>
 
         <hr class="divider" />
-        <form class="log-form" onsubmit="handleLog(event, '${node.id}')">
+        <!-- OnSubmit leitet den Log nun auf die masterNode.id um -->
+        <form class="log-form" onsubmit="handleLog(event, '${masterNode.id}')">
           <div class="time-inputs-row">
             <select class="log-input" style="font-weight: bold; width: 60px;">
               <option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option>
@@ -1321,27 +1530,31 @@ function renderCanvas() {
     `;
 
         el.addEventListener('mouseenter', () => {
+            window.hoveredNodeId = node.id;
             if (node.linked_id) {
                 document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
             }
         });
 
         el.addEventListener('mouseleave', () => {
+            window.hoveredNodeId = null;
             if (node.linked_id) {
                 document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.remove('linked-highlight'));
             }
         });
 
+        // Klick markiert den Block sofort (für Strg+C / Strg+V)
         el.addEventListener('click', (e) => {
-            if (isAdmin && e.shiftKey) {
-                e.stopPropagation();
-                if (selectedNodeIds.has(node.id)) {
-                    selectedNodeIds.delete(node.id);
-                } else {
-                    selectedNodeIds.add(node.id);
-                }
-                renderCanvas();
+            if (e.target.closest('button, input, select, .ep-handle')) return;
+            e.stopPropagation();
+            if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                if (selectedNodeIds.has(node.id)) selectedNodeIds.delete(node.id);
+                else selectedNodeIds.add(node.id);
+            } else {
+                selectedNodeIds.clear();
+                selectedNodeIds.add(node.id);
             }
+            renderCanvas();
         });
 
         el.addEventListener('dblclick', (e) => {
@@ -1357,7 +1570,8 @@ function renderCanvas() {
 
             el.addEventListener('mousedown', (e) => {
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle')) return;
-                if (e.shiftKey) return;
+                // Damit wir bei Strg+Klick nicht draggen, sondern nur auswählen:
+                if (e.ctrlKey || e.shiftKey || e.metaKey) return;
 
                 window.isDraggingAnything = true;
                 isDragging = true;
@@ -1365,7 +1579,7 @@ function renderCanvas() {
                 startClientY = e.clientY;
                 e.stopPropagation();
 
-                const nodesToMove = (isAdmin && selectedNodeIds.has(node.id))
+                const nodesToMove = (selectedNodeIds.has(node.id))
                     ? Array.from(selectedNodeIds).map(id => currentNodes.find(n => n.id === id)).filter(Boolean)
                     : [node];
 
@@ -1677,7 +1891,23 @@ window.addEventListener('mousemove', (e) => {
  * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Strg+V Instanz-Einfügen ergänzt
  * =============================================================================
  */
-window.handlePasteNodes = async function () {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Copy/Paste
+ * ERSETZEN IN: canvas.js (Funktion handlePasteNodes)
+ * Breadcrumb: [2026-08-25] Zonen-Zuweisung bei Paste hinzugefügt & Notizen unterstützt
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Copy/Paste
+ * ERSETZEN IN: canvas.js (Funktion handlePasteNodes)
+ * Breadcrumb: [2026-08-25] Zonen-Zuweisung bei Paste & DB-Insert Fehler abfangen
+ * =============================================================================
+ */
+window.handlePasteNodes = async function() {
     if (!window.copiedNodeIds || window.copiedNodeIds.length === 0) return;
 
     const coords = getCanvasCoords(window.lastClientX, window.lastClientY);
@@ -1688,13 +1918,24 @@ window.handlePasteNodes = async function () {
         if (!originalNode) continue;
 
         let linkedId = originalNode.linked_id;
-        if (!linkedId) {
+        const isNote = (originalNode.block_type === 'note' || originalNode.doc_number === 'NOTE');
+
+        // Notizen werden nicht als verknüpfte Instanzen behandelt, normale Blöcke schon
+        if (!linkedId && !isNote) {
             linkedId = 'inst_' + crypto.randomUUID();
             originalNode.linked_id = linkedId;
             await db.from('project_nodes').update({ linked_id: linkedId }).eq('id', originalNode.id);
         }
 
-        await db.from('project_nodes').insert([{
+        const newPosX = Math.round(coords.x + offsetX);
+        const newPosY = Math.round(coords.y);
+
+        // Finde die Zone, in die wir am Mauszeiger einfügen
+        const targetZone = (typeof getDeepestZoneAt === 'function')
+            ? getDeepestZoneAt(newPosX + 160, newPosY + 100)
+            : null;
+
+        const { error } = await db.from('project_nodes').insert([{
             project_id: activeProjectId,
             name: originalNode.name,
             doc_number: originalNode.doc_number || null,
@@ -1706,15 +1947,20 @@ window.handlePasteNodes = async function () {
             created_by: activeUserCode || 'COT',
             assigned_design_user: originalNode.assigned_design_user || null,
             assigned_drafting_user: originalNode.assigned_drafting_user || null,
-            pos_x: Math.round(coords.x + offsetX),
-            pos_y: Math.round(coords.y),
-            linked_id: linkedId,
-            zone_id: null
+            pos_x: newPosX,
+            pos_y: newPosY,
+            linked_id: isNote ? null : linkedId,
+            zone_id: targetZone ? targetZone.id : null
         }]);
 
-        offsetX += 340;
+        if (error) {
+            console.error("Fehler beim Einfügen der Kopie:", error);
+            showToast('Fehler beim Einfügen', 'error');
+        }
+
+        offsetX += 340; // Versatz, falls mehrere Elemente eingefügt werden
     }
 
-    showToast(`${window.copiedNodeIds.length} verknüpfte Instanz(en) eingefügt`, 'success');
+    showToast(`${window.copiedNodeIds.length} Element(e) eingefügt`, 'success');
     fetchCanvasData();
 };

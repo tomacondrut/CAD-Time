@@ -1097,3 +1097,45 @@ html, body {
 #canvas.hide-handles .ep-handle {
     display: none !important;
 }
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-25] Styling für Sticky Notes (Post-its)
+ * =============================================================================
+ */
+.note-card {
+    position: absolute !important;
+    width: 190px !important;
+    min-height: 80px !important;
+    padding: 10px 12px !important;
+    border-radius: 4px 4px 16px 4px !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12) !important;
+    z-index: 15 !important;
+    user-select: none !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+    .note-card.draggable-enabled {
+        cursor: move !important;
+    }
+
+    .note-card.draggable-disabled {
+        cursor: default !important;
+    }
+
+    .note-card:hover {
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18) !important;
+    }
+
+    /**
+ * =============================================================================
+ * Breadcrumb: [2026-08-25 18:30:00 CEST] Selektions-Highlighting für Blöcke & Notizen
+ * =============================================================================
+ */
+    .assembly-card.selected-node, .note-card.selected-node {
+        outline: 3px solid #ecc94b !important;
+        box-shadow: 0 0 16px rgba(236, 201, 75, 0.85) !important;
+        z-index: 60 !important;
+    }

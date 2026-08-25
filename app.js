@@ -41,6 +41,9 @@ function initApp() {
     addListenerIfEx('btnDeleteBlock', 'click', handleDeleteNode);
     addListenerIfEx('retroLogForm', 'submit', handleSaveRetroLog);
     addListenerIfEx('adminProjectForm', 'submit', handleSaveProject);
+    // Notiz Formulare:
+    addListenerIfEx('newNoteForm', 'submit', handleAddNote);
+    addListenerIfEx('editNoteForm', 'submit', handleSaveNote);
 
     /**
      * Breadcrumb: [2026-08-23] Sicherer Start, unabhängig vom DOMContentLoaded-Timing.

@@ -39,6 +39,8 @@
     <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 175px; padding: 4px 0;">
         <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Block hinzufügen</div>
         <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">📍 Bereich / Kasten</div>
+        <!-- Breadcrumb: [2026-08-25 17:35:00 CEST] Notiz-Funktion ins Kontextmenü aufgenommen -->
+        <div id="ctxMenuAddNote" class="context-menu-item" onclick="handleContextMenuAction('note')">📝 Notiz / Textzettel</div>
         <div id="ctxMenuToggleHandles" class="context-menu-item" style="border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('toggle_handles')">🔌 Knotenpunkte einblenden</div>
         <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
         <div id="ctxMenuDeleteNode" class="context-menu-item" style="display: none; color: #e53e3e;" onclick="handleContextMenuAction('delete')">✕ Block löschen</div>
@@ -61,24 +63,49 @@
 
     <!-- Info & Leitfaden Modal -->
     <div id="infoGuideModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 520px;">
+        <div class="modal-content" style="width: 650px;">
             <div class="modal-header">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
-            <div style="font-size: 12px; color: #4a5568; line-height: 1.6; max-height: 380px; overflow-y: auto; padding-right: 4px;">
-                <strong style="color: #2b6cb0;">Blöcke & Bereiche erstellen:</strong><br>
-                • <strong>Rechtsklick auf Canvas:</strong> Öffnet das Menü zum Hinzufügen von Blöcken oder Bereichen direkt an der Mausposition.<br>
-                • <strong>Live-Verbindung:</strong> Klicke auf den Verbindungspunkt eines Blocks und ziehe die Linie. Ein Rechtsklick auf den Canvas erstellt direkt einen verbundenen Unterblock.<br><br>
+            <div style="font-size: 12px; color: #4a5568; line-height: 1.6; max-height: 500px; overflow-y: auto; padding-right: 8px;">
 
-                <strong style="color: #2b6cb0;">Bereiche / Kästen & Panzoom:</strong><br>
-                • <strong>Positions-Sperre (🔒 / 🔓):</strong> Über das Schloss im Header eines Kastens kann dessen Position gesperrt werden, um ungehindertes Pan-Verschieben innerhalb großer Rahmen zu ermöglichen.<br>
-                • <strong>Skalieren:</strong> Die Größe kann jederzeit an der rechten unteren Ecke gezogen werden.<br>
-                • <strong>Verschachtelung:</strong> Blöcke und kleinere Kästen werden beim Hineinziehen automatisch der innersten Zone zugewiesen und bewegen sich mit.<br><br>
+                <strong style="color: #2b6cb0; font-size: 13px;">🧭 Navigation & Grundlagen</strong>
+                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
+                    <li><strong>Pan & Zoom:</strong> Bewege dich mit gedrückter linker Maustaste über das Raster. Zoomen erfolgt über das Mausrad oder die Buttons (unten rechts).</li>
+                    <li><strong>Persönlicher Filter:</strong> Ein Klick auf dein Kürzel oben links in der Sidebar (unter "CAD TIME MANAGER") dimmt alle Blöcke ab, die nicht dir zugewiesen sind.</li>
+                    <li><strong>Erstellen:</strong> Ein Rechtsklick auf eine leere Stelle öffnet das Menü für neue Blöcke, Rahmen oder Notizen.</li>
+                </ul>
 
-                <strong style="color: #2b6cb0;">Zeiterfassung & Fertigstellung:</strong><br>
-                • <strong>Mausrad-Steuerung:</strong> Schnelles Justieren der Stunden (+/- 1h) und Minuten (+/- 5m).<br>
-                • <strong>Fertigmelden:</strong> Schließt einen Block ab und reicht ihn zur Freigabe ein (gekennzeichnet mit ⏳ bzw. ✅).
+                <strong style="color: #2b6cb0; font-size: 13px;">📦 Blöcke, Instanzen & Verbindungen</strong>
+                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
+                    <li><strong>Hierarchien (Splines):</strong> Klicke auf einen der 4 Knotenpunkte (🔌) eines Blocks und danach auf ein Ziel, um eine Verknüpfung zu ziehen.</li>
+                    <li><strong>Referenz-Instanzen:</strong> Über Rechtsklick auf einen Block kann dieser "Als Instanz dupliziert" werden. Das Original fungiert als Master (durchgezogener Rand). Referenzen (gestrichelter Rand) leiten alle gebuchten Zeiten an den Master weiter. Budgets werden in Klammern dargestellt. Strg+C / Strg+V kopiert Blöcke ebenfalls als Instanz.</li>
+                    <li><strong>Doppelklick:</strong> Öffnet die Einstellungen eines Blocks zur Bearbeitung von Namen, DOC-Nummer, Farbe und Zuweisungen.</li>
+                </ul>
+
+                <strong style="color: #2b6cb0; font-size: 13px;">📍 Bereiche / Rahmen (Hallen & Zonen)</strong>
+                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
+                    <li><strong>Verschachtelung:</strong> Blöcke und kleinere Rahmen ordnen sich beim Hineinziehen automatisch dem Rahmen zu, in dem sie liegen. Rahmen können bis zu 5 Ebenen tief verschachtelt werden.</li>
+                    <li><strong>Isolation (Sidebar):</strong> Das 🎯-Icon in der Sidebar isoliert einen Rahmen – alle anderen werden ausgeblendet. Über 👁️ kann die Sichtbarkeit einzeln gesteuert werden.</li>
+                    <li><strong>Materialfluss:</strong> Klicke auf "➔ Fluss" im Header eines Rahmens und wähle einen Ziel-Rahmen an, um einen dynamischen Materialfluss-Pfeil zu zeichnen.</li>
+                    <li><strong>Sperren (🔒):</strong> Fixiert die Position des Rahmens, damit du per Klick und Ziehen durch ihn hindurch auf dem Canvas navigieren kannst.</li>
+                </ul>
+
+                <strong style="color: #2b6cb0; font-size: 13px;">⏱️ Zeiterfassung & Status</strong>
+                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
+                    <li><strong>Schnelleingabe:</strong> Nutze das Mausrad über den Stunden- (+/- 1h) und Minuten-Feldern (+/- 5m), um Zeiten rasant anzupassen.</li>
+                    <li><strong>Direktbuchung auf Rahmen:</strong> Über "⏱️ Zeiten" im Rahmen-Header können Stunden auch allgemein auf ganze Zonen/Hallen gebucht werden.</li>
+                    <li><strong>Rückwirkend Eintragen:</strong> Im Bearbeitungsmenü (Doppelklick) eines Blocks kann nachträglich Zeit erfasst werden. Admins geben diese direkt frei, für Kollegen landen sie vorerst im Status "Wartend".</li>
+                    <li><strong>Fertigmelden:</strong> Klick auf "✔ Fertigmelden" reicht den Block zur Freigabe ein (Status ⏳). Nach Admin-Freigabe gilt er als erledigt (✅).</li>
+                </ul>
+
+                <strong style="color: #2b6cb0; font-size: 13px;">📝 Sticky Notes (Notizzettel)</strong>
+                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
+                    <li><strong>Post-its:</strong> Frei auf dem Canvas platzierbar und genau wie Blöcke einem Rahmen zuordnungsbar.</li>
+                    <li><strong>Sichtbarkeit:</strong> Du kannst beim Erstellen entscheiden, ob eine Notiz öffentlich (für alle) oder privat (🔒 nur für dich und Admins sichtbar) sein soll.</li>
+                </ul>
+
             </div>
             <div class="modal-actions" style="margin-top: 15px;">
-                <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Verstanden</button>
+                <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Verstanden, los geht's!</button>
             </div>
         </div>
     </div>
@@ -619,6 +646,68 @@
             <div class="modal-actions" style="margin-top: 14px;">
                 <button type="button" class="btn-sec" onclick="closeModal('adminModal')">Schließen</button>
             </div>
+        </div>
+    </div>
+
+    <!-- =============================================================================
+     * Breadcrumb: [2026-08-25 17:35:00 CEST] Modals für Canvas Sticky Notes (Öffentlich/Privat)
+     * ============================================================================= -->
+    <div id="newNoteModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 350px;">
+            <div class="modal-header">Neue Notiz (Sticky Note)</div>
+            <form id="newNoteForm">
+                <input type="hidden" id="newNoteCustomPos" value="" />
+                <div class="form-group">
+                    <label>Notiz-Text:</label>
+                    <textarea id="newNoteText" required rows="5" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Sichtbarkeit:</label>
+                    <select id="newNoteVisibility">
+                        <option value="public">Für alle sichtbar</option>
+                        <option value="private">Privat (Nur für mich sichtbar)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Farbe:</label>
+                    <div class="color-presets-grid" id="newNoteColorPresets"></div>
+                    <input type="hidden" id="newNoteColor" value="#fefcbf" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-sec" onclick="closeModal('newNoteModal')">Abbrechen</button>
+                    <button type="submit" class="btn-prim">Anheften</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editNoteModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 350px;">
+            <div class="modal-header">Notiz bearbeiten</div>
+            <form id="editNoteForm">
+                <input type="hidden" id="editNoteId" value="" />
+                <div class="form-group">
+                    <label>Notiz-Text:</label>
+                    <textarea id="editNoteText" required rows="5" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Sichtbarkeit:</label>
+                    <select id="editNoteVisibility">
+                        <option value="public">Für alle sichtbar</option>
+                        <option value="private">Privat (Nur für mich sichtbar)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Farbe:</label>
+                    <div class="color-presets-grid" id="editNoteColorPresets"></div>
+                    <input type="hidden" id="editNoteColor" value="#fefcbf" />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-del" style="margin-right: auto;" onclick="handleDeleteNote()">Löschen</button>
+                    <button type="button" class="btn-sec" onclick="closeModal('editNoteModal')">Abbrechen</button>
+                    <button type="submit" class="btn-prim">Speichern</button>
+                </div>
+            </form>
         </div>
     </div>
 

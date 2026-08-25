@@ -579,7 +579,11 @@ window.openConfigModal = function (nodeId) {
     const statusGroup = document.getElementById('editStatusGroup');
 
     if (btnDel) btnDel.style.display = canDelete ? 'block' : 'none';
-    if (retroBtn) retroBtn.style.display = isAdmin ? 'block' : 'none';
+
+    /**
+     * Breadcrumb: [2026-08-25] Rückwirkendes Eintragen für alle Nutzer freigeschaltet.
+     */
+    if (retroBtn) retroBtn.style.display = 'block';
 
     if (isAdmin) {
         if (statusGroup) statusGroup.style.display = 'block';
@@ -990,7 +994,13 @@ window.approveLog = async function (logId) {
 // =============================================================================
 // 7. RETRO-LOGGING (ADMIN)
 // =============================================================================
-window.openRetroLogModal = function () {
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-25] Retro-Log Modus für alle Nutzer anpassen
+ * (Admin: direkt freigegeben, User: wartet auf Freigabe & nur eigenes Kürzel).
+ * =============================================================================
+ */
+window.openRetroLogModal = function() {
     const id = document.getElementById('editNodeId').value;
     const node = currentNodes.find(n => n.id === id);
     if (!node) return;
@@ -1000,6 +1010,21 @@ window.openRetroLogModal = function () {
     document.getElementById('retroLogNodeId').value = node.id;
     document.getElementById('retroLogBlockName').value = node.name;
     document.getElementById('retroLogDate').valueAsDate = new Date();
+
+    // Nutzerkürzel standardmäßig auf den aktiven Nutzer setzen
+    const userSelect = document.getElementById('retroLogUserCode');
+    if (userSelect) {
+        userSelect.value = activeUserCode;
+        // Wenn kein Admin, Auswahl auf den eigenen Code sperren, um Manipulationen zu verhindern
+        userSelect.disabled = !isAdmin;
+    }
+
+    // Button Text dynamisch anpassen
+    const submitBtn = document.querySelector('#retroLogForm .btn-prim');
+    if (submitBtn) {
+        submitBtn.textContent = isAdmin ? 'Eintragen & Direkt freigeben' : 'Eintragen (Wartet auf Freigabe)';
+    }
+
     openModal('retroLogModal');
 };
 
@@ -1021,6 +1046,11 @@ window.handleSaveRetroLog = async function (e) {
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
     const loggedAtTimestamp = new Date(dateVal + 'T12:00:00Z').toISOString();
 
+    /**
+     * Breadcrumb: [2026-08-25] Status abhängig von Admin-Rechten setzen.
+     */
+    const finalStatus = isAdmin ? 'approved' : 'pending';
+
     const { error } = await db.from('time_logs').insert([{
         project_id: activeProjectId,
         node_id: nodeId,
@@ -1028,7 +1058,7 @@ window.handleSaveRetroLog = async function (e) {
         task_type: taskType,
         hours: decimalHours,
         note: note ? `[Rückwirkend] ${note}` : '[Rückwirkend eingetragen]',
-        status: 'approved',
+        status: finalStatus,
         logged_at: loggedAtTimestamp
     }]);
 
@@ -1038,7 +1068,15 @@ window.handleSaveRetroLog = async function (e) {
     }
 
     closeModal('retroLogModal');
-    showToast(`Rückwirkender Eintrag für ${userCode} gespeichert`, 'success');
+
+    const msg = isAdmin
+        ? `Rückwirkender Eintrag für ${userCode} gespeichert`
+        : `Rückwirkender Eintrag erfasst (wartet auf Freigabe)`;
+
+    showToast(msg, 'success');
+
+    // Canvas aktualisieren, damit ausstehende Logs direkt in der Historie angezeigt werden
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
 // =============================================================================
@@ -1516,4 +1554,156 @@ window.handleZoneLog = async function (e, zoneId) {
     form.elements[4].value = '';
     showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
+};
+
+/**
+* =============================================================================
+* Breadcrumb: [2026-08-25 17:35:00 CEST] Sticky Notes Logic 
+* Verwendet 'project_nodes' mit block_type='note' und article_number='public/private'
+* =============================================================================
+*/
+
+const NOTE_COLORS = [
+    { name: 'Gelb', hex: '#fefcbf' },
+    { name: 'Blau', hex: '#bee3f8' },
+    { name: 'Grün', hex: '#c6f6d5' },
+    { name: 'Pink', hex: '#fed7e2' },
+    { name: 'Grau', hex: '#edf2f7' }
+];
+
+window.renderNoteColorPresets = function(containerId, inputId, defaultColor) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    NOTE_COLORS.forEach(p => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = p.hex;
+        if (p.hex === defaultColor) swatch.classList.add('selected');
+        swatch.addEventListener('click', () => {
+            container.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('selected'));
+            swatch.classList.add('selected');
+            document.getElementById(inputId).value = p.hex;
+        });
+        container.appendChild(swatch);
+    });
+};
+
+window.handleOpenAddNoteModal = function(x, y) {
+    document.getElementById('newNoteCustomPos').value = JSON.stringify({ x, y });
+    document.getElementById('newNoteForm').reset();
+    renderNoteColorPresets('newNoteColorPresets', 'newNoteColor', '#fefcbf');
+    openModal('newNoteModal');
+};
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-25 18:00:00 CEST] Notiz-Erstellung mit Budget-Defaults 
+ * und direkter Fehleranzeige.
+ * =============================================================================
+ */
+window.handleAddNote = async function(e) {
+    if (e) e.preventDefault();
+    const text = document.getElementById('newNoteText').value.trim();
+    const visibility = document.getElementById('newNoteVisibility').value;
+    const color = document.getElementById('newNoteColor').value;
+    const posStr = document.getElementById('newNoteCustomPos').value;
+
+    let posX = 150, posY = 150;
+    if (posStr) {
+        const p = JSON.parse(posStr);
+        posX = Math.round(p.x);
+        posY = Math.round(p.y);
+    }
+
+    if (!text) return;
+
+    const { error } = await db.from('project_nodes').insert([{
+        project_id: activeProjectId,
+        name: text,
+        block_type: 'note',
+        article_number: visibility,
+        budget_design_hours: 0,
+        budget_drafting_hours: 0,
+        color_hex: color,
+        created_by: activeUserCode || 'COT',
+        pos_x: posX,
+        pos_y: posY
+    }]);
+
+    if (error) {
+        console.error("Fehler beim Speichern der Notiz:", error);
+        showToast('Fehler beim Anheften: ' + error.message, 'error');
+        return;
+    }
+
+    closeModal('newNoteModal');
+    showToast('Notiz angeheftet', 'success');
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+};
+
+window.openEditNoteModal = function(nodeId) {
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    document.getElementById('editNoteId').value = node.id;
+    document.getElementById('editNoteText').value = node.name;
+    document.getElementById('editNoteVisibility').value = node.article_number || 'public';
+
+    renderNoteColorPresets('editNoteColorPresets', 'editNoteColor', node.color_hex || '#fefcbf');
+    openModal('editNoteModal');
+};
+
+window.handleSaveNote = async function(e) {
+    e.preventDefault();
+    const id = document.getElementById('editNoteId').value;
+    const text = document.getElementById('editNoteText').value.trim();
+    const visibility = document.getElementById('editNoteVisibility').value;
+    const color = document.getElementById('editNoteColor').value;
+
+    if (!text) return;
+
+    await db.from('project_nodes').update({
+        name: text,
+        article_number: visibility,
+        color_hex: color
+    }).eq('id', id);
+
+    closeModal('editNoteModal');
+    showToast('Notiz aktualisiert', 'success');
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+};
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-25 18:05:00 CEST] handleDeleteNote mit sicherer ID-Prüfung
+ * =============================================================================
+ */
+window.handleDeleteNote = async function(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const id = document.getElementById('editNoteId').value;
+    if (!id) {
+        showToast('Keine Notiz-ID gefunden.', 'error');
+        return;
+    }
+
+    const confirmed = await customConfirm('Notiz löschen', 'Möchtest du diesen Notizzettel wirklich entfernen?');
+    if (confirmed) {
+        const { error } = await db.from('project_nodes').delete().eq('id', id);
+        if (error) {
+            showToast('Fehler beim Löschen: ' + error.message, 'error');
+            return;
+        }
+
+        closeModal('editNoteModal');
+        showToast('Notiz entfernt', 'success');
+
+        // Lokalen Cache sofort bereinigen und Canvas neu rendern
+        currentNodes = currentNodes.filter(n => n.id !== id);
+        if (typeof renderCanvas === 'function') renderCanvas();
+        if (typeof fetchCanvasData === 'function') fetchCanvasData();
+    }
 };
