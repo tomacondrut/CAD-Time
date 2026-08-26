@@ -157,20 +157,95 @@ window.renderProjectDropdowns = function() {
     }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Login, Logout & Session Storage
+ * ERSETZEN IN: ui.js (Funktionen confirmUserLogin & handleLogout)
+ * Zeitstempel: 2026-08-26 20:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26] Speichern von User/Projekt im localStorage sowie 
+ *     handleLogout zum Zurückkehren zum Login-Fenster implementiert.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Login & Cache-Persistierung
+ * ERSETZEN IN: ui.js (Funktion confirmUserLogin)
+ * Zeitstempel: 2026-08-26 20:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26] Robuste Overlay-Schließung und Viewport-Wiederherstellung.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Login & Cache-Persistierung
+ * ERSETZEN IN: ui.js (Funktionen confirmUserLogin & handleLogout)
+ * Zeitstempel: 2026-08-26 20:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26] Robuste Overlay-Schließung: Fallback auf localStorage,
+ *     falls Dropdowns im DOM beim Initialstart noch nicht fertig befüllt sind.
+ * =============================================================================
+ */
 window.confirmUserLogin = function () {
     const selectUser = document.getElementById('userSelectDropdown');
     const selectProj = document.getElementById('projectSelectLoginDropdown');
-    if (!selectUser.value || !selectProj.value) return;
 
-    activeUserCode = selectUser.value;
-    activeProjectId = selectProj.value;
+    // Priorität: Dropdown-Wert -> wenn leer, Fallback auf localStorage
+    const userVal = (selectUser && selectUser.value) ? selectUser.value : localStorage.getItem('cad_tm_user');
+    const projVal = (selectProj && selectProj.value) ? selectProj.value : localStorage.getItem('cad_tm_project');
 
-    document.getElementById('sidebarUserCode').textContent = activeUserCode;
-    document.getElementById('sidebarProjectSelect').value = activeProjectId;
-    closeModal('userLoginOverlay');
+    if (!userVal || !projVal) return;
 
+    activeUserCode = userVal;
+    activeProjectId = projVal;
+
+    // Im LocalStorage sichern
+    localStorage.setItem('cad_tm_user', activeUserCode);
+    localStorage.setItem('cad_tm_project', activeProjectId);
+
+    const sbUser = document.getElementById('sidebarUserCode');
+    const sbProj = document.getElementById('sidebarProjectSelect');
+    if (sbUser) sbUser.textContent = activeUserCode;
+    if (sbProj) sbProj.value = activeProjectId;
+
+    // Dropdowns synchronisieren
+    if (selectUser) selectUser.value = activeUserCode;
+    if (selectProj) selectProj.value = activeProjectId;
+
+    // Login-Overlay zuverlässig ausblenden
+    const overlay = document.getElementById('userLoginOverlay');
+    if (overlay) overlay.style.display = 'none';
+
+    // Gespeicherte Viewport-Koordinaten anwenden
+    const savedPanX = localStorage.getItem('cad_tm_panX');
+    const savedPanY = localStorage.getItem('cad_tm_panY');
+    const savedScale = localStorage.getItem('cad_tm_scale');
+
+    if (savedPanX !== null && savedPanY !== null && savedScale !== null) {
+        window.currentPanX = parseFloat(savedPanX);
+        window.currentPanY = parseFloat(savedPanY);
+        window.currentScale = parseFloat(savedScale);
+    }
+
+    if (typeof applyCanvasTransform === 'function') applyCanvasTransform();
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
     showToast(`Angemeldet als ${activeUserCode}`, 'success');
-    fetchCanvasData();
+};
+
+window.handleLogout = function () {
+    // Cache leeren
+    localStorage.removeItem('cad_tm_user');
+
+    // Login-Modal wieder öffnen
+    const overlay = document.getElementById('userLoginOverlay');
+    if (overlay) overlay.style.display = 'flex';
+
+    if (typeof renderUserDropdowns === 'function') renderUserDropdowns();
+    if (typeof renderProjectDropdowns === 'function') renderProjectDropdowns();
+    showToast('Abgemeldet', 'info');
 };
 
 window.handleSidebarProjectChange = function (newProjectId) {
@@ -1623,8 +1698,9 @@ window.handleAddNote = async function(e) {
         name: text,
         block_type: 'note',
         article_number: visibility,
-        budget_design_hours: 0,
-        budget_drafting_hours: 0,
+        budget_design_hours: 190,  // Standard-Breite der Notiz (Zweckentfremdung)
+        budget_drafting_hours: 80, // Standard-Höhe der Notiz (Zweckentfremdung)
+        completion_status: 'open', // Zuklapp-Status
         color_hex: color,
         created_by: activeUserCode || 'COT',
         pos_x: posX,

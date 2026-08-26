@@ -12,11 +12,22 @@
  * =============================================================================
  */
 
-// Globale State-Variablen für das native Panning/Zooming
-// Globale State-Variablen für das native Panning/Zooming
-window.currentScale = 1;
-window.currentPanX = 100;
-window.currentPanY = 100;
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Viewport Caching
+ * ERSETZEN IN: canvas.js (Kopfbereich & Initialisierung)
+ * Zeitstempel: 2026-08-26 20:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26] Globale Pan/Zoom-Variablen lesen initial direkt aus localStorage,
+ *     damit die Position vor dem ersten Frame korrekt sitzt.
+ * =============================================================================
+ */
+
+// Globale State-Variablen für das native Panning/Zooming (aus localStorage oder Fallback)
+window.currentScale = parseFloat(localStorage.getItem('cad_tm_scale')) || 1;
+window.currentPanX = parseFloat(localStorage.getItem('cad_tm_panX')) || 100;
+window.currentPanY = parseFloat(localStorage.getItem('cad_tm_panY')) || 100;
 window.hoveredNodeId = null;
 window.copiedNodeIds = [];
 
@@ -31,6 +42,26 @@ let contextTargetNodeId = null;
 
 /**
  * Wendet Zoom- und Pan-Werte nativ an und synchronisiert das Viewport-Punktraster
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine, 4-Seiten Handles & Flow-Arrows
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Breadcrumbs:
+ *   - [2026-08-26] LOD-Logik entfernt (verursachte visuelle Artefakte und Flickern).
+ *     GPU-Beschleunigung über CSS "will-change" ist ausreichend performant.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Viewport Caching
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-08-26 20:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26] Position (PanX, PanY) und Zoom (Scale) im localStorage sichern.
+ * =============================================================================
  */
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
@@ -58,6 +89,11 @@ function applyCanvasTransform(animate = false) {
 
     const dotSize = Math.max(1, 1.5 * window.currentScale);
     viewportEl.style.backgroundImage = `radial-gradient(circle, #cbd5e0 ${dotSize}px, transparent ${dotSize}px)`;
+
+    // Viewport-Zustand im Cache sichern
+    localStorage.setItem('cad_tm_panX', window.currentPanX);
+    localStorage.setItem('cad_tm_panY', window.currentPanY);
+    localStorage.setItem('cad_tm_scale', window.currentScale);
 }
 
 window.handleLiveSplineMove = function(e) {
@@ -65,6 +101,22 @@ window.handleLiveSplineMove = function(e) {
         const coords = getCanvasCoords(e.clientX, e.clientY);
         renderConnections(coords);
     }
+};
+
+// Schaltet Notizen zwischen "zugeklappt (Icon)" und "offen" um
+window.toggleNoteCollapse = async function (e, nodeId) {
+    if (e) e.stopPropagation();
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // Status wechseln
+    node.completion_status = node.completion_status === 'collapsed' ? 'open' : 'collapsed';
+
+    // UI sofort aktualisieren
+    if (typeof renderCanvas === 'function') renderCanvas();
+
+    // In der Datenbank speichern
+    await db.from('project_nodes').update({ completion_status: node.completion_status }).eq('id', nodeId);
 };
 
 /**
@@ -1208,7 +1260,8 @@ function renderCanvas() {
                 window.addEventListener('mousemove', onMouseMove);
                 window.addEventListener('mouseup', onMouseUp);
             });
-        } if (canMoveZone) {
+        }
+if (canMoveZone) {
             let isDragging = false;
             let startX = 0, startY = 0;
             let initLeft = 0, initTop = 0;
@@ -1220,7 +1273,10 @@ function renderCanvas() {
             let childNodes = [];
 
             /**
-             * Breadcrumb: [2026-08-25] Touch-Support: Zonen Drag & Drop integriert
+             * Breadcrumbs:
+             * - [2026-08-25] Touch-Support: Zonen Drag & Drop integriert
+             * - [2026-08-26] Bugfix: actualDx / actualDy verhindert das Zusammendrücken von Elementen am Canvas-Rand.
+             *   Zusammenführung des redundanten Drag-Codes.
              */
             const startZoneDrag = (e) => {
                 if (e.target.closest('.zone-actions, .zone-resize-handle')) return;
@@ -1256,14 +1312,22 @@ function renderCanvas() {
                     const dx = (clientX - startX) / scale;
                     const dy = (clientY - startY) / scale;
 
-                    zone.pos_x = Math.max(10, Math.round(initLeft + dx));
-                    zone.pos_y = Math.max(10, Math.round(initTop + dy));
+                    // 1. Tatsächliche Verschiebung des Hauptrahmens ermitteln (inklusive der 10px-Barriere)
+                    const newParentX = Math.max(10, Math.round(initLeft + dx));
+                    const newParentY = Math.max(10, Math.round(initTop + dy));
+                    
+                    const actualDx = newParentX - initLeft;
+                    const actualDy = newParentY - initTop;
+
+                    zone.pos_x = newParentX;
+                    zone.pos_y = newParentY;
                     zoneEl.style.left = `${zone.pos_x}px`;
                     zoneEl.style.top = `${zone.pos_y}px`;
 
+                    // 2. Diese tatsächliche Verschiebung auf alle Kinder anwenden
                     descendantZones.forEach((z, idx) => {
-                        z.pos_x = Math.max(10, Math.round(childZonesStartPos[idx].x + dx));
-                        z.pos_y = Math.max(10, Math.round(childZonesStartPos[idx].y + dy));
+                        z.pos_x = childZonesStartPos[idx].x + actualDx;
+                        z.pos_y = childZonesStartPos[idx].y + actualDy;
                         const zEl = document.getElementById(z.id);
                         if (zEl) {
                             zEl.style.left = `${z.pos_x}px`;
@@ -1272,8 +1336,8 @@ function renderCanvas() {
                     });
 
                     childNodes.forEach((n, idx) => {
-                        n.pos_x = Math.max(10, Math.round(childStartPos[idx].x + dx));
-                        n.pos_y = Math.max(10, Math.round(childStartPos[idx].y + dy));
+                        n.pos_x = childStartPos[idx].x + actualDx;
+                        n.pos_y = childStartPos[idx].y + actualDy;
                         const nEl = document.getElementById(n.id);
                         if (nEl) {
                             nEl.style.left = `${n.pos_x}px`;
@@ -1449,6 +1513,20 @@ function renderCanvas() {
         // Notizen besitzen keine Parent-Kanten; nur Kasten-Sichtbarkeit prüfen
         if (node.zone_id && window.isZoneHidden(node.zone_id)) return;
 
+        /**
+          * =============================================================================
+          * Projekt: CAD Time Manager
+          * Domain: Sticky Notes Rendering (Drag & Drop, Resize & Collapse-Lock)
+          * ERSETZEN IN: canvas.js (Innerhalb renderCanvas())
+          * Zeitstempel: 2026-08-26 20:00:00 CEST
+          * Breadcrumbs:
+          *   - [2026-08-25 17:55:00 CEST]: Initiales Notiz-Rendering mit Sichtbarkeit & Drag.
+          *   - [2026-08-26 19:30:00 CEST]: Resizing & Zuklappen integriert.
+          *   - [2026-08-26 20:00:00 CEST]: Bugfix Drag-Click: didDrag-Flag verhindert, 
+          *     dass sich zugeklappte Notizen beim Verschieben ungewollt öffnen.
+          *     overflow-y: auto durch overflow: hidden ersetzt (verhindert Zoom-Flickern).
+          * =============================================================================
+          */
         // 1. STICKY NOTES RENDERING
         if (node.block_type === 'note' || node.doc_number === 'NOTE') {
             const isPrivate = node.article_number === 'private';
@@ -1457,6 +1535,13 @@ function renderCanvas() {
 
             // Privat-Check: Nur Ersteller und Admin sehen private Notizen
             if (isPrivate && noteCreator !== userCode && !isAdmin) return;
+
+            // Zustand und Dimensionen parsen
+            const isCollapsed = node.completion_status === 'collapsed';
+            let noteW = parseFloat(node.budget_design_hours) || 190;
+            let noteH = parseFloat(node.budget_drafting_hours) || 80;
+            if (noteW < 100) noteW = 190; // Fallbacks
+            if (noteH < 50) noteH = 80;
 
             const el = document.createElement('div');
             el.id = node.id;
@@ -1468,27 +1553,54 @@ function renderCanvas() {
             el.style.backgroundColor = node.color_hex || '#fefcbf';
             el.style.border = '1px solid rgba(0, 0, 0, 0.1)';
 
+            // Dynamische Größe anwenden
+            el.style.width = isCollapsed ? '38px' : `${noteW}px`;
+            el.style.height = isCollapsed ? '38px' : `${noteH}px`;
+            el.style.minHeight = isCollapsed ? '38px' : '80px';
+            el.style.padding = isCollapsed ? '0' : '10px 12px';
+            el.style.justifyContent = isCollapsed ? 'center' : 'flex-start';
+            el.style.alignItems = isCollapsed ? 'center' : 'stretch';
+
             const lockIcon = isPrivate ? '<span style="font-size:12px;" title="Private Notiz (Nur für dich sichtbar)">🔒</span>' : '';
 
-            // CSS-Ergänzung für pointer-events-none auf inneren Elementen, damit Dragging sauber greift
-            el.innerHTML = `
-                <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
-                    <span>📝 ${escapeHtml(node.created_by || 'COT')}</span>
-                    ${lockIcon}
-                </div>
-                <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:12px; color:#2d3748; flex:1;">${escapeHtml(node.name)}</div>
-            `;
+            // Datumsstempel formatieren
+            const dateStr = node.created_at ? new Date(node.created_at).toLocaleDateString('de-DE') : '';
+            const dateHtml = dateStr ? `<span style="font-weight:normal; font-size:9px; color:#718096; margin-left:6px;">${dateStr}</span>` : '';
+
+            // Layout je nach Status (Zugeklappt vs Offen)
+            if (isCollapsed) {
+                el.innerHTML = `
+                    <div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(node.name)}">
+                        📝
+                    </div>
+                `;
+            } else {
+                el.innerHTML = `
+                    <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
+                        <div style="display:flex; align-items:center;">
+                            <span>📝 ${escapeHtml(node.created_by || 'COT')}</span>
+                            ${dateHtml}
+                        </div>
+                        <div style="pointer-events:auto; display:flex; gap:4px; align-items:center;">
+                            ${lockIcon}
+                            <span onclick="toggleNoteCollapse(event, '${node.id}')" style="cursor:pointer; opacity:0.6; font-size:10px; border:1px solid rgba(0,0,0,0.1); border-radius:3px; padding:0 3px;" title="Notiz zuklappen">−</span>
+                        </div>
+                    </div>
+                    <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:12px; color:#2d3748; flex:1; overflow: hidden;">${escapeHtml(node.name)}</div>
+                    ${canDrag ? '<div class="note-resize-handle no-pan" title="Größe anpassen"></div>' : ''}
+                `;
+            }
 
             // Hover-Status fürs Kopieren merken
             el.addEventListener('mouseenter', () => {
-                window.hoveredNodeId = node.id; // Für Copy&Paste merken
+                window.hoveredNodeId = node.id;
                 if (node.linked_id) {
                     document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
                 }
             });
 
             el.addEventListener('mouseleave', () => {
-                window.hoveredNodeId = null; // Verwerfen
+                window.hoveredNodeId = null;
                 if (node.linked_id) {
                     document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.remove('linked-highlight'));
                 }
@@ -1501,18 +1613,19 @@ function renderCanvas() {
 
             if (canDrag) {
                 let isDragging = false;
+                let didDrag = false;
                 let startClientX = 0, startClientY = 0;
                 let initX = 0, initY = 0;
 
-                /**
-                 * Breadcrumb: [2026-08-25] Touch-Support: Sticky Notes Drag & Drop integriert
-                 */
                 const startNoteDrag = (e) => {
-                    if (e.type === 'mousedown' && e.button !== 0) return; // Kein Rechtsklick-Drag
+                    // Klicks auf den Resize-Handle oder den Zuklapp-Button ignorieren
+                    if (e.target.closest('.note-resize-handle, span[title="Notiz zuklappen"]')) return;
+                    if (e.type === 'mousedown' && e.button !== 0) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
 
                     window.isDraggingAnything = true;
                     isDragging = true;
+                    didDrag = false;
 
                     startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                     startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
@@ -1531,6 +1644,10 @@ function renderCanvas() {
                         const scale = window.currentScale || 1;
                         const dx = (clientX - startClientX) / scale;
                         const dy = (clientY - startClientY) / scale;
+
+                        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                            didDrag = true;
+                        }
 
                         node.pos_x = Math.round(initX + dx);
                         node.pos_y = Math.round(initY + dy);
@@ -1578,6 +1695,83 @@ function renderCanvas() {
 
                 el.addEventListener('mousedown', startNoteDrag);
                 el.addEventListener('touchstart', startNoteDrag, { passive: false });
+
+                // Klick öffnet zugeklappte Notiz nur bei echtem Klick (nicht nach Verschieben)
+                el.addEventListener('click', (e) => {
+                    if (didDrag) {
+                        didDrag = false;
+                        return;
+                    }
+                    if (isCollapsed) {
+                        toggleNoteCollapse(e, node.id);
+                    }
+                });
+
+                // ================== RESIZE HANDLE LOGIK ==================
+                if (!isCollapsed) {
+                    const resizeHandle = el.querySelector('.note-resize-handle');
+                    if (resizeHandle) {
+                        const startNoteResize = (e) => {
+                            if (e.type === 'touchstart' && e.touches.length > 1) return;
+                            if (e.cancelable) e.stopPropagation();
+
+                            window.isDraggingAnything = true;
+                            let isResizing = true;
+                            const scale = window.currentScale || 1;
+                            const startW = noteW;
+                            const startH = noteH;
+
+                            const startMouseX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                            const startMouseY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                            const onResizeMove = (moveEvent) => {
+                                if (!isResizing) return;
+                                if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+
+                                const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                                const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+                                const dw = (clientX - startMouseX) / scale;
+                                const dh = (clientY - startMouseY) / scale;
+
+                                const newW = Math.max(120, Math.round(startW + dw));
+                                const newH = Math.max(60, Math.round(startH + dh));
+
+                                el.style.width = `${newW}px`;
+                                el.style.height = `${newH}px`;
+                                node.budget_design_hours = newW; // Speichern als Breite
+                                node.budget_drafting_hours = newH; // Speichern als Höhe
+                            };
+
+                            const onResizeUp = async () => {
+                                if (!isResizing) return;
+                                isResizing = false;
+
+                                window.removeEventListener('mousemove', onResizeMove);
+                                window.removeEventListener('mouseup', onResizeUp);
+                                window.removeEventListener('touchmove', onResizeMove);
+                                window.removeEventListener('touchend', onResizeUp);
+                                window.removeEventListener('touchcancel', onResizeUp);
+
+                                await db.from('project_nodes').update({
+                                    budget_design_hours: node.budget_design_hours,
+                                    budget_drafting_hours: node.budget_drafting_hours
+                                }).eq('id', node.id);
+
+                                window.isDraggingAnything = false;
+                            };
+
+                            window.addEventListener('mousemove', onResizeMove);
+                            window.addEventListener('mouseup', onResizeUp);
+                            window.addEventListener('touchmove', onResizeMove, { passive: false });
+                            window.addEventListener('touchend', onResizeUp);
+                            window.addEventListener('touchcancel', onResizeUp);
+                        };
+
+                        resizeHandle.addEventListener('mousedown', startNoteResize);
+                        resizeHandle.addEventListener('touchstart', startNoteResize, { passive: false });
+                    }
+                }
             }
 
             canvas.appendChild(el);
@@ -2195,7 +2389,17 @@ function renderConnections(mouseCoords = null) {
     }
 }
 
-window.adjustCanvasBounds = function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Bounds (Dynamische Größenanpassung)
+ * ERSETZEN IN: canvas.js (Funktion window.adjustCanvasBounds)
+ * Breadcrumbs:
+ *   - [2026-08-26] Extremen Puffer von 3000px auf 1000px reduziert, um 
+ *     VRAM/RAM zu sparen und Render-Performance bei vielen Blöcken zu verbessern.
+ * =============================================================================
+ */
+window.adjustCanvasBounds = function () {
     let maxX = 0, maxY = 0;
 
     currentZones.forEach(z => {
@@ -2209,8 +2413,9 @@ window.adjustCanvasBounds = function() {
     });
 
     const canvasEl = document.getElementById('canvas');
-    canvasEl.style.width = Math.max(3000, maxX + 3000) + 'px';
-    canvasEl.style.height = Math.max(3000, maxY + 3000) + 'px';
+    // Startgröße 3000, danach dynamisch den Maximalwert + 1000px Puffer
+    canvasEl.style.width = Math.max(3000, maxX + 1000) + 'px';
+    canvasEl.style.height = Math.max(3000, maxY + 1000) + 'px';
 };
 
 window.lastClientX = 0;

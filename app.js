@@ -2,7 +2,13 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Haupt-Bootstrap / Entry Point
- * Zeitstempel: 2026-08-23 15:00:00 CEST
+ * ERSETZEN IN: app.js (Gesamte Datei)
+ * Zeitstempel: 2026-08-26 20:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-23 15:00:00 CEST]: Initialer Start & Realtime-Sync.
+ *   - [2026-08-23 16:30:00 CEST]: Hierarchische Sidebar-Zonen & Isolation.
+ *   - [2026-08-26 20:25:00 CEST]: Auto-Login & Session-Restore aus localStorage,
+ *     Syntax-Bereinigung und Schließen von initApp().
  * =============================================================================
  */
 
@@ -45,14 +51,29 @@ function initApp() {
     addListenerIfEx('newNoteForm', 'submit', handleAddNote);
     addListenerIfEx('editNoteForm', 'submit', handleSaveNote);
 
-    /**
-     * Breadcrumb: [2026-08-23] Sicherer Start, unabhängig vom DOMContentLoaded-Timing.
-     */
-    // Initialer Datenabruf mit anschließendem Dropdown-Update
+    // Auto-Login Vorab-Prüfung: Overlay direkt verstecken, wenn Daten vorhanden
+    const cachedUser = localStorage.getItem('cad_tm_user');
+    const cachedProject = localStorage.getItem('cad_tm_project');
+
+    if (cachedUser && cachedProject) {
+        const overlay = document.getElementById('userLoginOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    // Initialer Datenabruf mit anschließendem Dropdown-Update & Auto-Login
     if (typeof fetchUsers === 'function' && typeof fetchProjects === 'function') {
         Promise.all([fetchUsers(), fetchProjects()]).then(() => {
             if (typeof renderUserDropdowns === 'function') renderUserDropdowns();
             if (typeof renderProjectDropdowns === 'function') renderProjectDropdowns();
+
+            if (cachedUser && cachedProject && typeof confirmUserLogin === 'function') {
+                const userSelect = document.getElementById('userSelectDropdown');
+                const projSelect = document.getElementById('projectSelectLoginDropdown');
+                if (userSelect) userSelect.value = cachedUser;
+                if (projSelect) projSelect.value = cachedProject;
+
+                confirmUserLogin();
+            }
         });
     }
 
@@ -70,35 +91,27 @@ function initApp() {
 
 // =============================================================================
 // SICHERER START-MECHANISMUS
-// Führt initApp sofort aus, wenn das DOM schon fertig ist, ansonsten wartet es.
 // =============================================================================
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', initApp);
 } else {
     initApp();
 }
+
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Sidebar Zonen-Rendering & Hierarchische Isolation
- * Breadcrumbs:
- *   - [2026-08-23] Hierarchieebene für Zonen in der Sidebar hinzugefügt.
- *     Untergeordnete Bereiche werden eingerückt unter dem Hauptrahmen dargestellt.
- *   - [2026-08-23] Intelligente Isolation (toggleIsolateZone): Ancestors (Eltern)
- *     und Descendants (Kinder) bleiben sichtbar, wenn ein Element isoliert wird.
  * =============================================================================
  */
-
-window.renderSidebarZones = function() {
+window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
     container.innerHTML = '';
 
-    // Hilfsfunktion zur Flächenberechnung für Sortierung
     const getArea = (z) => (parseFloat(z.width) || 0) * (parseFloat(z.height) || 0);
 
-    // Top-Level Zonen nach Größe ABSTEIGEND sortieren
     const topZones = currentZones
         .filter(z => !z.parent_zone_id)
         .sort((a, b) => getArea(b) - getArea(a));
@@ -108,7 +121,6 @@ window.renderSidebarZones = function() {
         return;
     }
 
-    // Rekursive (oder 2-stufige) Rendering-Funktion
     const renderZoneItem = (zone, isSubZone = false, parentHidden = false) => {
         const isSelfHidden = window.hiddenTopZoneIds && window.hiddenTopZoneIds.has(zone.id);
         const isEffectivelyHidden = isSelfHidden || parentHidden;
@@ -117,7 +129,6 @@ window.renderSidebarZones = function() {
         el.style.display = 'flex';
         el.style.justifyContent = 'space-between';
         el.style.alignItems = 'center';
-        // Optische Einrückung für Untergeordnete Bereiche
         el.style.padding = isSubZone ? '4px 10px 4px 24px' : '6px 10px';
         el.style.background = isSubZone ? 'transparent' : '#2d3748';
         el.style.borderRadius = '4px';
@@ -138,7 +149,6 @@ window.renderSidebarZones = function() {
         `;
         container.appendChild(el);
 
-        // Suche eine Hierarchieebene tiefer nach Kindern
         if (!isSubZone) {
             const childZones = currentZones
                 .filter(z => z.parent_zone_id === zone.id)
@@ -154,17 +164,8 @@ window.renderSidebarZones = function() {
         renderZoneItem(zone, false, false);
     });
 };
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar & Isolation Logic
- * ERSETZEN IN: app.js
- * Update: Robuste Statusabfrage für das Isolieren von Zonen
- * =============================================================================
- */
 
-// Schaltet die Sichtbarkeit einer einzelnen Zone um
-window.toggleZoneVisibility = function(zoneId) {
+window.toggleZoneVisibility = function (zoneId) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
 
     if (window.hiddenTopZoneIds.has(zoneId)) {
@@ -177,14 +178,12 @@ window.toggleZoneVisibility = function(zoneId) {
     if (typeof renderSidebarZones === 'function') window.renderSidebarZones();
 };
 
-// Isoliert eine Zone (blendet alle anderen aus) oder hebt Isolation auf
-window.toggleIsolateZone = function(zoneId) {
+window.toggleIsolateZone = function (zoneId) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
 
     const targetZone = currentZones.find(z => z.id === zoneId);
     if (!targetZone) return;
 
-    // 1. Alle übergeordneten Eltern-Rahmen ermitteln (müssen sichtbar bleiben)
     const ancestors = new Set();
     let curr = targetZone;
     while (curr.parent_zone_id) {
@@ -193,7 +192,6 @@ window.toggleIsolateZone = function(zoneId) {
         if (!curr) break;
     }
 
-    // 2. Alle untergeordneten Kind-Rahmen ermitteln (sollen sichtbar bleiben)
     const descendants = new Set();
     const getDescendants = (parentId) => {
         currentZones.filter(z => z.parent_zone_id === parentId).forEach(child => {
@@ -203,26 +201,20 @@ window.toggleIsolateZone = function(zoneId) {
     };
     getDescendants(zoneId);
 
-    // Diese IDs dürfen für die Isolation NICHT ausgeblendet werden
     const keepVisible = new Set([zoneId, ...ancestors, ...descendants]);
 
-    // 3. Prüfen: Ist diese Konstellation bereits isoliert?
     let currentlyIsolated = true;
     currentZones.forEach(z => {
         if (keepVisible.has(z.id)) {
-            // Darf nicht ausgeblendet sein
             if (window.hiddenTopZoneIds.has(z.id)) currentlyIsolated = false;
         } else {
-            // Muss ausgeblendet sein
             if (!window.isZoneHidden(z.id)) currentlyIsolated = false;
         }
     });
 
     window.hiddenTopZoneIds.clear();
 
-    // 4. Isolation anwenden oder aufheben
     if (!currentlyIsolated) {
-        // Isoliere: Alle Ausblenden, die nicht auf der keepVisible-Liste stehen
         currentZones.forEach(z => {
             if (!keepVisible.has(z.id)) {
                 window.hiddenTopZoneIds.add(z.id);
@@ -233,7 +225,6 @@ window.toggleIsolateZone = function(zoneId) {
     if (typeof renderCanvas === 'function') renderCanvas();
     if (typeof renderSidebarZones === 'function') window.renderSidebarZones();
 
-    // Smooth scroll zum sichtbaren Bereich
     setTimeout(() => {
         if (window.centerViewOnVisible) window.centerViewOnVisible(currentlyIsolated ? null : zoneId);
     }, 20);

@@ -165,13 +165,13 @@ html, body {
         cursor: grabbing;
     }
 
+/* ERSETZEN IN: style.css (Beim #canvas Element) */
 #canvas {
-    width: 6000px;
-    height: 6000px;
+    width: 3000px;
+    height: 3000px;
     position: absolute;
     top: 0;
     left: 0;
-    /* Hintergrund entfernt -> Der Viewport scheint jetzt durch! */
     background: transparent;
     transform-origin: 0 0;
 }
@@ -1098,16 +1098,20 @@ html, body {
     display: none !important;
 }
 
+
 /**
  * =============================================================================
- * Breadcrumb: [2026-08-25] Styling für Sticky Notes (Post-its)
+ * Breadcrumb: [2026-08-26] Styling für Sticky Notes (Zuklappbar & Resizable)
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-26] Styling für Sticky Notes (Zuklappbar & Resizable)
  * =============================================================================
  */
 .note-card {
     position: absolute !important;
-    width: 190px !important;
-    min-height: 80px !important;
-    padding: 10px 12px !important;
+    /* !important für width und height entfernt, damit JS die dynamische Größe setzen kann */
     border-radius: 4px 4px 16px 4px !important;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12) !important;
     z-index: 15 !important;
@@ -1115,6 +1119,7 @@ html, body {
     box-sizing: border-box !important;
     display: flex !important;
     flex-direction: column !important;
+    transition: background-color 0.2s ease;
 }
 
     .note-card.draggable-enabled {
@@ -1128,6 +1133,32 @@ html, body {
     .note-card:hover {
         box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18) !important;
     }
+
+/* Resize-Handle unten rechts an der Notiz */
+.note-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.15) 50%);
+    border-bottom-right-radius: 12px;
+    pointer-events: auto;
+}
+
+/* Resize-Handle unten rechts an der Notiz */
+.note-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.15) 50%);
+    border-bottom-right-radius: 12px;
+    pointer-events: auto;
+}
 
     /**
  * =============================================================================
@@ -1214,3 +1245,4 @@ html, body {
         user-select: none;
     }
 }
+

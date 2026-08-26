@@ -425,9 +425,20 @@
     <div id="app-container">
         <!-- Linke Sidebar -->
         <div id="sidebar">
+            <!-- ERSETZEN IN: index.html (Bereich sidebar-header) -->
+
             <div class="sidebar-header">
                 <span class="sidebar-title">CAD TIME MANAGER</span>
-                <span class="user-tag" id="sidebarUserCode" onclick="togglePersonalFilter()" title="Klick = Nur meine Aufgaben hervorheben">---</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="user-tag" id="sidebarUserCode" onclick="togglePersonalFilter()" title="Klick = Nur meine Aufgaben hervorheben">---</span>
+                    <button type="button" onclick="handleLogout()" style="background: none; border: none; color: #a0aec0; cursor: pointer; display: flex; align-items: center; padding: 2px; transition: color 0.15s ease;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#a0aec0'" title="Benutzer wechseln / Abmelden">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="sidebar-content">
                 <div class="sidebar-section-title">Aktives Projekt</div>
