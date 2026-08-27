@@ -1032,6 +1032,16 @@ html, body {
  * um Überlagerungen mit dem mittigen Top-Handle zu vermeiden.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Identifikator Badge Z-Index Fix)
+ * ERSETZEN IN: style.css (Klasse .assembly-id-badge)
+ * Zeitstempel: 2026-08-27 18:35:00 CEST
+ * Breadcrumb: [2026-08-27] z-index auf 120 erhöht, damit Artikel- und DOC-Badges
+ * immer im Vordergrund vor Rahmen-Kanten und Headern liegen.
+ * =============================================================================
+ */
 .assembly-id-badge {
     position: absolute;
     top: -12px;
@@ -1046,11 +1056,10 @@ html, body {
     font-family: monospace;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
-    z-index: 25;
+    z-index: 120 !important;
     pointer-events: none;
     white-space: nowrap;
 }
-
 .ep-top {
     top: -9px;
     left: 50%;
