@@ -1697,6 +1697,19 @@ window.handleZoneLog = async function(e, zoneId) {
 * =============================================================================
 */
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sticky Notes & To-Do Logik)
+ * ERSETZEN IN: ui.js (Abschnitt Sticky Notes)
+ * Zeitstempel: 2026-08-27 20:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-25 17:35:00 CEST]: Initiale Sticky Notes Logik.
+ *   - [2026-08-27 20:00:00 CEST]: Notiz / To-Do Umschaltung, JSON-Payload-Parser, 
+ *     Checklisten-Verwaltung und Direkt-Checkbox-Toggle am Canvas.
+ * =============================================================================
+ */
+
 const NOTE_COLORS = [
     { name: 'Gelb', hex: '#fefcbf' },
     { name: 'Blau', hex: '#bee3f8' },
@@ -1705,7 +1718,19 @@ const NOTE_COLORS = [
     { name: 'Grau', hex: '#edf2f7' }
 ];
 
-window.renderNoteColorPresets = function(containerId, inputId, defaultColor) {
+window.parseNotePayload = function (payloadStr) {
+    if (!payloadStr) return { text: '', dueDate: null, items: [] };
+    try {
+        if (payloadStr.startsWith('{') && payloadStr.endsWith('}')) {
+            return JSON.parse(payloadStr);
+        }
+    } catch (e) {
+        // Fallback für reguläre Textnotizen
+    }
+    return { text: payloadStr, dueDate: null, items: [] };
+};
+
+window.renderNoteColorPresets = function (containerId, inputId, defaultColor) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
@@ -1723,21 +1748,66 @@ window.renderNoteColorPresets = function(containerId, inputId, defaultColor) {
     });
 };
 
-window.handleOpenAddNoteModal = function(x, y) {
-    document.getElementById('newNoteCustomPos').value = JSON.stringify({ x, y });
-    document.getElementById('newNoteForm').reset();
-    renderNoteColorPresets('newNoteColorPresets', 'newNoteColor', '#fefcbf');
-    openModal('newNoteModal');
+window.toggleNoteTypeFields = function (mode) {
+    const isTodo = document.querySelector(`input[name="${mode}NoteType"]:checked`).value === 'TODO';
+    const todoCont = document.getElementById(`${mode}NoteTodoContainer`);
+    const label = document.getElementById(`${mode}NoteTextLabel`);
+
+    if (todoCont) todoCont.style.display = isTodo ? 'block' : 'none';
+    if (label) label.textContent = isTodo ? 'Aufgabe / Beschreibung:' : 'Notiz-Text:';
 };
 
 /**
  * =============================================================================
- * Breadcrumb: [2026-08-25 18:00:00 CEST] Notiz-Erstellung mit Budget-Defaults 
- * und direkter Fehleranzeige.
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Checklisten-Layout & Benutzerzuweisung für To-Dos)
+ * ERSETZEN IN: ui.js (Funktionen addChecklistItem, handleOpenAddNoteModal, handleAddNote, openEditNoteModal, handleSaveNote)
+ * Zeitstempel: 2026-08-27 20:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 20:30:00 CEST]: Saubere DOM-Generierung der Checklisten-Zeile
+ *     ohne Umbruch und Befüllung/Speicherung von assigned_design_user.
  * =============================================================================
  */
-window.handleAddNote = async function(e) {
+window.addChecklistItem = function (mode, text = '', done = false) {
+    const container = document.getElementById(`${mode}NoteChecklistItems`);
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'modal-checklist-row';
+    row.innerHTML = `
+        <input type="checkbox" ${done ? 'checked' : ''} />
+        <input type="text" placeholder="Unterpunkt..." value="${escapeHtml(text)}" />
+        <span class="btn-del-item" title="Punkt entfernen" onclick="this.parentElement.remove()">✕</span>
+    `;
+    container.appendChild(row);
+};
+
+window.populateUserDropdown = function (selectEl, selectedVal = '') {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="">-- Offen --</option>';
+    (currentUsers || []).forEach(u => selectEl.add(new Option(u.code, u.code)));
+    selectEl.value = selectedVal || '';
+};
+
+
+window.handleOpenAddNoteModal = function (x, y) {
+    document.getElementById('newNoteCustomPos').value = JSON.stringify({ x, y });
+    document.getElementById('newNoteForm').reset();
+    document.getElementById('newNoteChecklistItems').innerHTML = '';
+
+    populateUserDropdown(document.getElementById('newNoteAssignedUser'), activeUserCode);
+
+    const defaultRadio = document.querySelector('input[name="newNoteType"][value="NOTE"]');
+    if (defaultRadio) defaultRadio.checked = true;
+    toggleNoteTypeFields('new');
+
+    renderNoteColorPresets('newNoteColorPresets', 'newNoteColor', '#fefcbf');
+    openModal('newNoteModal');
+};
+
+window.handleAddNote = async function (e) {
     if (e) e.preventDefault();
+    const noteType = document.querySelector('input[name="newNoteType"]:checked').value;
     const text = document.getElementById('newNoteText').value.trim();
     const visibility = document.getElementById('newNoteVisibility').value;
     const color = document.getElementById('newNoteColor').value;
@@ -1750,16 +1820,39 @@ window.handleAddNote = async function(e) {
         posY = Math.round(p.y);
     }
 
-    if (!text) return;
+    if (!text && noteType === 'NOTE') {
+        showToast('Bitte Notiztext eingeben.', 'error');
+        return;
+    }
+
+    const checklistItems = [];
+    if (noteType === 'TODO') {
+        document.querySelectorAll('#newNoteChecklistItems .modal-checklist-row').forEach(row => {
+            const itemText = row.querySelector('input[type="text"]').value.trim();
+            const isDone = row.querySelector('input[type="checkbox"]').checked;
+            if (itemText) checklistItems.push({ text: itemText, done: isDone });
+        });
+    }
+
+    const dueDate = (noteType === 'TODO') ? (document.getElementById('newNoteDueDate').value || null) : null;
+    const assignedUser = (noteType === 'TODO') ? (document.getElementById('newNoteAssignedUser').value || null) : null;
+
+    const payload = JSON.stringify({
+        text,
+        dueDate,
+        items: checklistItems
+    });
 
     const { error } = await db.from('project_nodes').insert([{
         project_id: activeProjectId,
-        name: text,
+        name: payload,
+        doc_number: noteType,
         block_type: 'note',
         article_number: visibility,
-        budget_design_hours: 190,  // Standard-Breite der Notiz (Zweckentfremdung)
-        budget_drafting_hours: 80, // Standard-Höhe der Notiz (Zweckentfremdung)
-        completion_status: 'open', // Zuklapp-Status
+        assigned_design_user: assignedUser,
+        budget_design_hours: noteType === 'TODO' ? 240 : 190,
+        budget_drafting_hours: noteType === 'TODO' ? 140 : 80,
+        completion_status: 'open',
         color_hex: color,
         created_by: activeUserCode || 'COT',
         pos_x: posX,
@@ -1773,59 +1866,104 @@ window.handleAddNote = async function(e) {
     }
 
     closeModal('newNoteModal');
-    showToast('Notiz angeheftet', 'success');
+    showToast(noteType === 'TODO' ? 'To-Do Liste angeheftet' : 'Notiz angeheftet', 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-window.openEditNoteModal = function(nodeId) {
+window.openEditNoteModal = function (nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
 
+    const noteType = node.doc_number === 'TODO' ? 'TODO' : 'NOTE';
+    const noteData = parseNotePayload(node.name);
+
     document.getElementById('editNoteId').value = node.id;
-    document.getElementById('editNoteText').value = node.name;
+    document.getElementById('editNoteText').value = noteData.text || '';
     document.getElementById('editNoteVisibility').value = node.article_number || 'public';
+
+    populateUserDropdown(document.getElementById('editNoteAssignedUser'), node.assigned_design_user);
+
+    const radio = document.querySelector(`input[name="editNoteType"][value="${noteType}"]`);
+    if (radio) radio.checked = true;
+    toggleNoteTypeFields('edit');
+
+    const dueInput = document.getElementById('editNoteDueDate');
+    if (dueInput) dueInput.value = noteData.dueDate || '';
+
+    const checkCont = document.getElementById('editNoteChecklistItems');
+    checkCont.innerHTML = '';
+    if (noteData.items && noteData.items.length > 0) {
+        noteData.items.forEach(item => addChecklistItem('edit', item.text, item.done));
+    }
 
     renderNoteColorPresets('editNoteColorPresets', 'editNoteColor', node.color_hex || '#fefcbf');
     openModal('editNoteModal');
 };
 
-window.handleSaveNote = async function(e) {
+window.handleSaveNote = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editNoteId').value;
+    const noteType = document.querySelector('input[name="editNoteType"]:checked').value;
     const text = document.getElementById('editNoteText').value.trim();
     const visibility = document.getElementById('editNoteVisibility').value;
     const color = document.getElementById('editNoteColor').value;
 
-    if (!text) return;
+    const checklistItems = [];
+    if (noteType === 'TODO') {
+        document.querySelectorAll('#editNoteChecklistItems .modal-checklist-row').forEach(row => {
+            const itemText = row.querySelector('input[type="text"]').value.trim();
+            const isDone = row.querySelector('input[type="checkbox"]').checked;
+            if (itemText) checklistItems.push({ text: itemText, done: isDone });
+        });
+    }
+
+    const dueDate = (noteType === 'TODO') ? (document.getElementById('editNoteDueDate').value || null) : null;
+    const assignedUser = (noteType === 'TODO') ? (document.getElementById('editNoteAssignedUser').value || null) : null;
+
+    const payload = JSON.stringify({
+        text,
+        dueDate,
+        items: checklistItems
+    });
 
     await db.from('project_nodes').update({
-        name: text,
+        name: payload,
+        doc_number: noteType,
         article_number: visibility,
+        assigned_design_user: assignedUser,
         color_hex: color
     }).eq('id', id);
 
     closeModal('editNoteModal');
-    showToast('Notiz aktualisiert', 'success');
+    showToast('Aktualisiert', 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-/**
- * =============================================================================
- * Breadcrumb: [2026-08-25 18:05:00 CEST] handleDeleteNote mit sicherer ID-Prüfung
- * =============================================================================
- */
-window.handleDeleteNote = async function(e) {
+window.handleToggleTodoItem = async function (e, nodeId, itemIndex) {
+    e.stopPropagation();
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const noteData = parseNotePayload(node.name);
+    if (!noteData.items || !noteData.items[itemIndex]) return;
+
+    noteData.items[itemIndex].done = e.target.checked;
+    node.name = JSON.stringify(noteData);
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+
+    await db.from('project_nodes').update({ name: node.name }).eq('id', nodeId);
+};
+
+window.handleDeleteNote = async function (e) {
     if (e) {
         e.preventDefault();
         e.stopPropagation();
     }
     const id = document.getElementById('editNoteId').value;
-    if (!id) {
-        showToast('Keine Notiz-ID gefunden.', 'error');
-        return;
-    }
+    if (!id) return;
 
-    const confirmed = await customConfirm('Notiz löschen', 'Möchtest du diesen Notizzettel wirklich entfernen?');
+    const confirmed = await customConfirm('Löschen', 'Möchtest du diese Notiz / To-Do wirklich entfernen?');
     if (confirmed) {
         const { error } = await db.from('project_nodes').delete().eq('id', id);
         if (error) {
@@ -1834,14 +1972,15 @@ window.handleDeleteNote = async function(e) {
         }
 
         closeModal('editNoteModal');
-        showToast('Notiz entfernt', 'success');
+        showToast('Entfernt', 'success');
 
-        // Lokalen Cache sofort bereinigen und Canvas neu rendern
         currentNodes = currentNodes.filter(n => n.id !== id);
         if (typeof renderCanvas === 'function') renderCanvas();
         if (typeof fetchCanvasData === 'function') fetchCanvasData();
     }
 };
+
+
 
 /**
 * =============================================================================

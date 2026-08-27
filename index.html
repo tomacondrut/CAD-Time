@@ -372,12 +372,12 @@
                 <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
                     <label>Zeitraum:</label>
                     <!-- =============================================================================
-     * Projekt: CAD Time Manager
-     * Domain: Reporting & Filter-Optionen
-     * ERSETZEN IN: index.html (Im Bereich #reportModal -> #repTimeframe Dropdown)
-     * Zeitstempel: 2026-08-27 17:42:00 CEST
-     * Breadcrumb: [2026-08-27] "Heute" und "Gestern" an den Anfang des Zeitfilters gesetzt.
-     * ============================================================================= -->
+                    * Projekt: CAD Time Manager
+                    * Domain: Reporting & Filter-Optionen
+                    * ERSETZEN IN: index.html (Im Bereich #reportModal -> #repTimeframe Dropdown)
+                    * Zeitstempel: 2026-08-27 17:42:00 CEST
+                    * Breadcrumb: [2026-08-27] "Heute" und "Gestern" an den Anfang des Zeitfilters gesetzt.
+                    * ============================================================================= -->
                     <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
                         <option value="today">Heute</option>
                         <option value="yesterday">Gestern</option>
@@ -674,17 +674,58 @@
     </div>
 
     <!-- =============================================================================
-     * Breadcrumb: [2026-08-25 17:35:00 CEST] Modals für Canvas Sticky Notes (Öffentlich/Privat)
-     * ============================================================================= -->
+    * Projekt: CAD Time Manager
+    * Domain: Modals für Canvas Sticky Notes & To-Dos (Zuweisung, Breiteres Modal, Inline-Items)
+    * ERSETZEN IN: index.html (#newNoteModal und #editNoteModal)
+    * Zeitstempel: 2026-08-27 20:30:00 CEST
+    * Breadcrumbs:
+    *   - [2026-08-27 20:10:00 CEST]: Typ-Umschaltung, Fälligkeit & Checkliste.
+    *   - [2026-08-27 20:30:00 CEST]: Breite auf 460px erhöht, Zuweisungs-Dropdown
+    *     ergänzt und Checklisten-Layout bereinigt.
+    * ============================================================================= -->
     <div id="newNoteModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 350px;">
-            <div class="modal-header">Neue Notiz (Sticky Note)</div>
+        <div class="modal-content" style="width: 460px;">
+            <div class="modal-header" id="newNoteModalTitle">Neue Notiz / To-Do</div>
             <form id="newNoteForm">
                 <input type="hidden" id="newNoteCustomPos" value="" />
+
                 <div class="form-group">
-                    <label>Notiz-Text:</label>
-                    <textarea id="newNoteText" required rows="5" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;"></textarea>
+                    <label>Typ:</label>
+                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newNoteType" value="NOTE" checked onchange="toggleNoteTypeFields('new')" style="width: auto;" /> 📝 Reine Notiz
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newNoteType" value="TODO" onchange="toggleNoteTypeFields('new')" style="width: auto;" /> ☑️ To-Do Liste
+                        </label>
+                    </div>
                 </div>
+
+                <div class="form-group">
+                    <label id="newNoteTextLabel">Notiz-Text:</label>
+                    <textarea id="newNoteText" rows="3" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;" placeholder="Titel / Haupttext..."></textarea>
+                </div>
+
+                <div id="newNoteTodoContainer" style="display: none;">
+                    <div style="display: flex; gap: 10px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Zuweisung:</label>
+                            <select id="newNoteAssignedUser" style="padding: 6px; font-size: 12px;"><option value="">-- Offen --</option></select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Fälligkeitsdatum:</label>
+                            <input type="date" id="newNoteDueDate" style="padding: 6px; font-size: 12px;" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Unterpunkte / Checkliste:</span>
+                            <button type="button" class="btn-sec" style="padding: 2px 8px; font-size: 11px;" onclick="addChecklistItem('new')">+ Punkt</button>
+                        </label>
+                        <div id="newNoteChecklistItems" style="display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; padding: 2px 0;"></div>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Sichtbarkeit:</label>
                     <select id="newNoteVisibility">
@@ -706,14 +747,48 @@
     </div>
 
     <div id="editNoteModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 350px;">
-            <div class="modal-header">Notiz bearbeiten</div>
+        <div class="modal-content" style="width: 460px;">
+            <div class="modal-header">Notiz / To-Do bearbeiten</div>
             <form id="editNoteForm">
                 <input type="hidden" id="editNoteId" value="" />
+
                 <div class="form-group">
-                    <label>Notiz-Text:</label>
-                    <textarea id="editNoteText" required rows="5" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;"></textarea>
+                    <label>Typ:</label>
+                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editNoteType" value="NOTE" onchange="toggleNoteTypeFields('edit')" style="width: auto;" /> 📝 Reine Notiz
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editNoteType" value="TODO" onchange="toggleNoteTypeFields('edit')" style="width: auto;" /> ☑️ To-Do Liste
+                        </label>
+                    </div>
                 </div>
+
+                <div class="form-group">
+                    <label id="editNoteTextLabel">Notiz-Text:</label>
+                    <textarea id="editNoteText" rows="3" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; resize: vertical; font-family: inherit; font-size: 13px;"></textarea>
+                </div>
+
+                <div id="editNoteTodoContainer" style="display: none;">
+                    <div style="display: flex; gap: 10px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Zuweisung:</label>
+                            <select id="editNoteAssignedUser" style="padding: 6px; font-size: 12px;"><option value="">-- Offen --</option></select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>Fälligkeitsdatum:</label>
+                            <input type="date" id="editNoteDueDate" style="padding: 6px; font-size: 12px;" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Unterpunkte / Checkliste:</span>
+                            <button type="button" class="btn-sec" style="padding: 2px 8px; font-size: 11px;" onclick="addChecklistItem('edit')">+ Punkt</button>
+                        </label>
+                        <div id="editNoteChecklistItems" style="display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; padding: 2px 0;"></div>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Sichtbarkeit:</label>
                     <select id="editNoteVisibility">

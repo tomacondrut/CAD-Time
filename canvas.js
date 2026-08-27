@@ -1405,76 +1405,151 @@ function renderCanvas() {
             return;
         }
 
-        // 2a. STICKY NOTES
-        if (node.block_type === 'note' || node.doc_number === 'NOTE') {
+        // 2a. STICKY NOTES & TO-DO CARDS
+        // =============================================================================
+        // Projekt: CAD Time Manager
+        // Domain: NATIVE Canvas Engine (Persönlicher Filter & Rotes Pulsieren bei Überfälligkeit)
+        // ERSETZEN IN: canvas.js (Abschnitt 2a in renderCanvas)
+        // Zeitstempel: 2026-08-27 20:45:00 CEST
+        // Breadcrumbs:
+        //   - [2026-08-27 20:30:00 CEST]: Notizen & To-Do Rendering.
+        //   - [2026-08-27 20:45:00 CEST]: Filter-Logik geschärft (Dimmen wenn nicht
+        //     zugewiesen) & Klasse 'note-overdue' für pulsierende rote Warnung ergänzt.
+        // =============================================================================
+        if (node.block_type === 'note' || node.doc_number === 'NOTE' || node.doc_number === 'TODO') {
             const isPrivate = node.article_number === 'private';
+            const isTodo = node.doc_number === 'TODO';
             const userCode = (activeUserCode || '').toUpperCase();
             const noteCreator = (node.created_by || '').toUpperCase();
 
             if (isPrivate && noteCreator !== userCode && !isAdmin) return;
 
             const isCollapsed = node.completion_status === 'collapsed';
-            let noteW = parseFloat(node.budget_design_hours) || 190;
-            let noteH = parseFloat(node.budget_drafting_hours) || 80;
-            if (noteW < 100) noteW = 190;
-            if (noteH < 50) noteH = 80;
+            let noteW = parseFloat(node.budget_design_hours) || 220;
+            let noteH = parseFloat(node.budget_drafting_hours) || (isTodo ? 140 : 90);
+            if (noteW < 120) noteW = 220;
+            if (noteH < 60) noteH = isTodo ? 140 : 90;
+
+            // Daten parsen (JSON oder Legacy String)
+            const noteData = (typeof parseNotePayload === 'function')
+                ? parseNotePayload(node.name)
+                : { text: node.name || '', dueDate: null, items: [] };
+
+            const totalItems = noteData.items ? noteData.items.length : 0;
+            const doneItems = noteData.items ? noteData.items.filter(i => i.done).length : 0;
+            const isAllCompleted = isTodo && totalItems > 0 && doneItems === totalItems;
+
+            // Überfälligkeits-Prüfung (nur aktiv wenn noch nicht alle Punkte abgehakt sind)
+            let isOverdue = false;
+            let isDueToday = false;
+            if (isTodo && noteData.dueDate && !isAllCompleted) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                isOverdue = noteData.dueDate < todayStr;
+                isDueToday = noteData.dueDate === todayStr;
+            }
+
+            // Persönlicher Filter: Nur aktiv zugewiesene Notizen/To-Dos hervorheben, andere ausgrauen
+            const isAssignedToMe = (node.assigned_design_user && node.assigned_design_user.toUpperCase() === userCode);
+            const isCreatedByMe = (noteCreator === userCode);
+            // Kriterium: Zugewiesen an mich ODER (falls keine Zuweisung existiert) von mir erstellt
+            const matchesFilter = node.assigned_design_user ? isAssignedToMe : isCreatedByMe;
+            const isDimmed = window.personalFilterActive && !matchesFilter;
 
             const el = document.createElement('div');
             el.id = node.id;
             const canDrag = isAdmin || (userCode === noteCreator);
 
-            el.className = `note-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'}`;
+            // =============================================================================
+            // Projekt: CAD Time Manager
+            // Domain: NATIVE Canvas Engine (Voll-Puls Inline-Bereinigung)
+            // ERSETZEN IN: canvas.js (Im Bereich der Style-Zuweisung von el)
+            // Zeitstempel: 2026-08-27 21:12:00 CEST
+            // Breadcrumb: [2026-08-27 21:12:00 CEST] backgroundColor und border bei überfälligen
+            // Notizen freigegeben, damit CSS-Keyframes vollflächig animieren.
+            // =============================================================================
+            el.className = `note-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isDimmed ? 'node-dimmed' : ''} ${isOverdue ? 'note-overdue' : ''}`;
             el.style.left = `${node.pos_x}px`;
             el.style.top = `${node.pos_y}px`;
-            el.style.backgroundColor = node.color_hex || '#fefcbf';
-            el.style.border = '1px solid rgba(0, 0, 0, 0.1)';
-            el.style.zIndex = '150';
 
-            el.style.width = isCollapsed ? '38px' : `${noteW}px`;
-            el.style.height = isCollapsed ? '38px' : `${noteH}px`;
-            el.style.minHeight = isCollapsed ? '38px' : '80px';
-            el.style.padding = isCollapsed ? '0' : '10px 12px';
+            if (isOverdue) {
+                // Keine fixen inline Farben, damit CSS overdueFullPulse steuern kann
+                el.style.backgroundColor = '';
+                el.style.border = '';
+            } else {
+                el.style.backgroundColor = node.color_hex || '#fefcbf';
+                el.style.border = '1px solid rgba(0, 0, 0, 0.12)';
+            }
+
+            el.style.zIndex = isOverdue ? '180' : '150';
+
+            el.style.width = isCollapsed ? '42px' : `${noteW}px`;
+            el.style.height = isCollapsed ? '42px' : `${noteH}px`;
+            el.style.minHeight = isCollapsed ? '42px' : (isTodo ? '90px' : '60px');
+            el.style.padding = isCollapsed ? '0' : '8px 10px';
             el.style.justifyContent = isCollapsed ? 'center' : 'flex-start';
             el.style.alignItems = isCollapsed ? 'center' : 'stretch';
 
-            const lockIcon = isPrivate ? '<span style="font-size:12px;" title="Private Notiz">🔒</span>' : '';
-            const dateStr = node.created_at ? new Date(node.created_at).toLocaleDateString('de-DE') : '';
-            const dateHtml = dateStr ? `<span style="font-weight:normal; font-size:9px; color:#718096; margin-left:6px;">${dateStr}</span>` : '';
+            const typeIcon = isTodo ? '☑️' : '📝';
+            const progressBadge = (isTodo && totalItems > 0) ? `<span style="font-size:9px; font-weight:normal; opacity:0.8;">(${doneItems}/${totalItems})</span>` : '';
+            const lockIcon = isPrivate ? '<span style="font-size:11px;" title="Private Notiz">🔒</span>' : '';
+
+            let assignedHtml = '';
+            if (node.assigned_design_user) {
+                assignedHtml = `<span class="author-badge" style="background:#2b6cb0; font-size:8px; padding:0 3px;" title="Zugewiesen an: ${escapeHtml(node.assigned_design_user)}">👤 <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
+            }
+
+            let dueBadgeHtml = '';
+            if (isTodo && noteData.dueDate) {
+                const dFormatted = new Date(noteData.dueDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+                let badgeClass = 'note-due-badge';
+                if (isOverdue) badgeClass += ' overdue';
+                else if (isDueToday) badgeClass += ' due-today';
+
+                dueBadgeHtml = `<span class="${badgeClass}" title="Fällig am ${noteData.dueDate}">📅 ${dFormatted}</span>`;
+            }
 
             if (isCollapsed) {
-                el.innerHTML = `<div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(node.name)}">📝</div>`;
+                el.innerHTML = `<div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(noteData.text || 'Notiz')}">${typeIcon}</div>`;
             } else {
+                let checklistHtml = '';
+                if (isTodo && noteData.items && noteData.items.length > 0) {
+                    checklistHtml = `<div style="display:flex; flex-direction:column; gap:2px; margin-top:6px; max-height:120px; overflow-y:auto; pointer-events:auto;">`;
+                    noteData.items.forEach((item, idx) => {
+                        checklistHtml += `
+                            <div class="note-todo-item ${item.done ? 'done' : ''}">
+                                <input type="checkbox" ${item.done ? 'checked' : ''} onchange="handleToggleTodoItem(event, '${node.id}', ${idx})" />
+                                <span style="word-break: break-word;">${escapeHtml(item.text)}</span>
+                            </div>
+                        `;
+                    });
+                    checklistHtml += `</div>`;
+                }
+
                 el.innerHTML = `
-                    <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
-                        <div style="display:flex; align-items:center;">
-                            <span>📝 ${escapeHtml(node.created_by || 'COT')}</span>
-                            ${dateHtml}
+                    <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
+                        <div style="display:flex; align-items:center; gap:4px; overflow:hidden;">
+                            <span title="${isTodo ? 'To-Do Liste' : 'Reine Notiz'}">${typeIcon}</span>
+                            <span>${escapeHtml(node.created_by || 'COT')}</span>
+                            ${assignedHtml}
+                            ${progressBadge}
+                            ${dueBadgeHtml}
                         </div>
-                        <div style="pointer-events:auto; display:flex; gap:4px; align-items:center;">
+                        <div style="pointer-events:auto; display:flex; gap:4px; align-items:center; flex-shrink:0;">
                             ${lockIcon}
-                            <span onclick="toggleNoteCollapse(event, '${node.id}')" style="cursor:pointer; opacity:0.6; font-size:10px; border:1px solid rgba(0,0,0,0.1); border-radius:3px; padding:0 3px;" title="Notiz zuklappen">−</span>
+                            <span onclick="toggleNoteCollapse(event, '${node.id}')" style="cursor:pointer; opacity:0.6; font-size:10px; border:1px solid rgba(0,0,0,0.1); border-radius:3px; padding:0 3px;" title="Zuklappen">−</span>
                         </div>
                     </div>
-                    <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:12px; color:#2d3748; flex:1; overflow: hidden;">${escapeHtml(node.name)}</div>
+                    <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:11px; color:#2d3748; flex-shrink: 0;">${escapeHtml(noteData.text)}</div>
+                    ${checklistHtml}
                     ${canDrag ? '<div class="note-resize-handle no-pan" title="Größe anpassen"></div>' : ''}
                 `;
             }
 
-            el.addEventListener('mouseenter', () => {
-                window.hoveredNodeId = node.id;
-                if (node.linked_id) {
-                    document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
-                }
-            });
-
-            el.addEventListener('mouseleave', () => {
-                window.hoveredNodeId = null;
-                if (node.linked_id) {
-                    document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.remove('linked-highlight'));
-                }
-            });
+            el.addEventListener('mouseenter', () => { window.hoveredNodeId = node.id; });
+            el.addEventListener('mouseleave', () => { window.hoveredNodeId = null; });
 
             el.addEventListener('dblclick', (e) => {
+                if (e.target.tagName === 'INPUT') return;
                 e.stopPropagation();
                 if (canDrag && typeof openEditNoteModal === 'function') openEditNoteModal(node.id);
             });
@@ -1486,7 +1561,7 @@ function renderCanvas() {
                 let initX = 0, initY = 0;
 
                 const startNoteDrag = (e) => {
-                    if (e.target.closest('.note-resize-handle, span[title="Notiz zuklappen"]')) return;
+                    if (e.target.closest('.note-resize-handle, span[title="Zuklappen"], input[type="checkbox"]')) return;
                     if (e.type === 'mousedown' && e.button !== 0) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
 
@@ -1591,8 +1666,8 @@ function renderCanvas() {
                                 const dw = (clientX - startMouseX) / scale;
                                 const dh = (clientY - startMouseY) / scale;
 
-                                const newW = Math.max(120, Math.round(startW + dw));
-                                const newH = Math.max(60, Math.round(startH + dh));
+                                const newW = Math.max(140, Math.round(startW + dw));
+                                const newH = Math.max(70, Math.round(startH + dh));
 
                                 el.style.width = `${newW}px`;
                                 el.style.height = `${newH}px`;

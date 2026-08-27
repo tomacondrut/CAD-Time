@@ -1255,3 +1255,189 @@ html, body {
     }
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (To-Do Notizen, Checklisten-Items & Fälligkeitsanzeige)
+ * ERSETZEN / ANHÄNGEN IN: style.css
+ * Zeitstempel: 2026-08-27 20:00:00 CEST
+ * Breadcrumb: [2026-08-27] Checklisten-Styling, Strikethrough & Fälligkeits-Badges
+ * =============================================================================
+ */
+.note-todo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 11px;
+    line-height: 1.3;
+    padding: 2px 0;
+    color: #2d3748;
+}
+
+    .note-todo-item input[type="checkbox"] {
+        margin-top: 2px;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .note-todo-item.done span {
+        text-decoration: line-through;
+        opacity: 0.55;
+        color: #718096;
+    }
+
+.note-due-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.06);
+    color: #4a5568;
+}
+
+    .note-due-badge.overdue {
+        background: #fed7d7;
+        color: #c53030;
+    }
+
+    .note-due-badge.due-today {
+        background: #feebc8;
+        color: #c05621;
+    }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Fix für Checklisten-Ausrichtung im Modal)
+ * ERSETZEN IN: style.css (.modal-checklist-row)
+ * Zeitstempel: 2026-08-27 20:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 20:30:00 CEST]: Checkbox, Input und Löschbutton strikt nebeneinander 
+ *     fixiert, kein vertikales Brechen von Checkbox/Delete-Button mehr.
+ * ============================================================================= -->
+ */
+.modal-checklist-row {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+
+    .modal-checklist-row input[type="checkbox"] {
+        width: 16px !important;
+        height: 16px !important;
+        min-width: 16px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        cursor: pointer;
+        flex-shrink: 0 !important;
+    }
+
+    .modal-checklist-row input[type="text"] {
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        padding: 6px 8px !important;
+        font-size: 12px !important;
+        margin: 0 !important;
+    }
+
+    .modal-checklist-row .btn-del-item {
+        color: #e53e3e;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 14px;
+        padding: 2px 6px;
+        flex-shrink: 0;
+        line-height: 1;
+    }
+
+        .modal-checklist-row .btn-del-item:hover {
+            color: #9b2c2c;
+        }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (GPU-beschleunigter Voll-Puls / 0% CPU)
+ * ERSETZEN IN: style.css (Am Ende der Datei)
+ * Zeitstempel: 2026-08-27 21:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 21:12:00 CEST]: CPU-basierter Voll-Puls.
+ *   - [2026-08-27 21:35:00 CEST]: 100% exakte Optik wiederhergestellt, aber 
+ *     über 2 GPU-Ebenen (Base & Pulse) mit reiner Opacity-Überblendung.
+ * =============================================================================
+ */
+
+/* Skaliert die gesamte Karte (inklusive Inhalt und Rahmen) */
+@keyframes overdueScalePulse {
+    0% {
+        transform: scale(1) translateZ(0);
+    }
+
+    50% {
+        transform: scale(1.025) translateZ(0);
+    }
+
+    100% {
+        transform: scale(1) translateZ(0);
+    }
+}
+
+/* Überblendet nur die leuchtende Ebene */
+@keyframes overdueOpacityPulse {
+    0% {
+        opacity: 0;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Die eigentliche Notiz wird transparent und dient nur als Container */
+.note-card.note-overdue {
+    background-color: transparent !important;
+    border: 2px solid transparent !important;
+    transform: translateZ(0); /* Zwingt Hardware-Beschleunigung (GPU) */
+    will-change: transform;
+    animation: overdueScalePulse 1.8s infinite ease-in-out !important;
+    transition: none !important;
+    z-index: 180 !important;
+}
+
+    /* BASE-LAYER: Ruhiger Zustand (heller Hintergrund, dünner Rahmen, kleiner Schatten) */
+    .note-card.note-overdue::before {
+        content: "";
+        position: absolute;
+        inset: -2px; /* Zieht die Ebene exakt über den transparenten Rand */
+        border-radius: inherit;
+        background-color: #fff5f5;
+        border: 2px solid #feb2b2;
+        box-shadow: 0 0 6px 1px rgba(229, 62, 62, 0.35);
+        z-index: -2;
+        pointer-events: none;
+    }
+
+    /* PULSE-LAYER: Aktiver Zustand (sattes Rot, dunkler Rahmen, extremer Schatten) */
+    .note-card.note-overdue::after {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        background-color: #fed7d7;
+        border: 2px solid #e53e3e;
+        box-shadow: 0 0 24px 8px rgba(229, 62, 62, 0.75);
+        z-index: -1;
+        pointer-events: none;
+        will-change: opacity;
+        animation: overdueOpacityPulse 1.8s infinite ease-in-out;
+    }
