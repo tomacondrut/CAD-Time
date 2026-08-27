@@ -371,7 +371,16 @@
 
                 <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
                     <label>Zeitraum:</label>
+                    <!-- =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: Reporting & Filter-Optionen
+     * ERSETZEN IN: index.html (Im Bereich #reportModal -> #repTimeframe Dropdown)
+     * Zeitstempel: 2026-08-27 17:42:00 CEST
+     * Breadcrumb: [2026-08-27] "Heute" und "Gestern" an den Anfang des Zeitfilters gesetzt.
+     * ============================================================================= -->
                     <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
+                        <option value="today">Heute</option>
+                        <option value="yesterday">Gestern</option>
                         <option value="week">Diese Woche</option>
                         <option value="month">Dieser Monat</option>
                         <option value="custom">Benutzerdefiniert</option>

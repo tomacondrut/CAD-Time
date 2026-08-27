@@ -82,19 +82,32 @@ window.populateReportFilters = function () {
     });
 };
 
-window.handleTimeframeChange = function () {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & Filter-Steuerung
+ * ERSETZEN IN: report.js (Funktionen handleTimeframeChange & updateReportData)
+ * Zeitstempel: 2026-08-27 17:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-22 18:30:00 CEST]: Initiale Stichtags-Rekonstruktion & PDF-Export.
+ *   - [2026-08-27 17:45:00 CEST]: Filter-Optionen 'today' und 'yesterday' integriert,
+ *     Zonen-Logs (zone_id) in die Auswertungstabelle und den Filter-Scope aufgenommen.
+ * =============================================================================
+ */
+
+window.handleTimeframeChange = function() {
     const timeframe = document.getElementById('repTimeframe').value;
     const customDiv = document.getElementById('repCustomDates');
     const now = new Date();
 
     if (timeframe === 'custom') {
-        customDiv.style.display = 'flex';
-        // Fallback: Aktueller Monat
+        if (customDiv) customDiv.style.display = 'flex';
+        // Fallback: Aktueller Monat vorbelegen
         const range = getStartAndEndOfMonth(now);
         document.getElementById('repStartDate').value = formatDateForInput(range.start);
         document.getElementById('repEndDate').value = formatDateForInput(range.end);
     } else {
-        customDiv.style.display = 'none';
+        if (customDiv) customDiv.style.display = 'none';
     }
 
     updateReportData();
@@ -145,7 +158,7 @@ function createPieChartImage(spent, budget, baseColor) {
 // --- Engine & Datenaufbereitung ---
 let reportState = { logs: [], startDate: null, endDate: null, projData: null };
 
-window.updateReportData = function () {
+window.updateReportData = function() {
     const filterUser = document.getElementById('repFilterUser').value;
     const timeframe = document.getElementById('repTimeframe').value;
     const filterZone = document.getElementById('repFilterZone').value;
@@ -154,12 +167,20 @@ window.updateReportData = function () {
     const now = new Date();
     let startDate, endDate;
 
-    if (timeframe === 'week') {
+    if (timeframe === 'today') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (timeframe === 'yesterday') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    } else if (timeframe === 'week') {
         const range = getStartAndEndOfWeek(now);
-        startDate = range.start; endDate = range.end;
+        startDate = range.start;
+        endDate = range.end;
     } else if (timeframe === 'month') {
         const range = getStartAndEndOfMonth(now);
-        startDate = range.start; endDate = range.end;
+        startDate = range.start;
+        endDate = range.end;
     } else {
         const sVal = document.getElementById('repStartDate').value;
         const eVal = document.getElementById('repEndDate').value;
@@ -168,7 +189,6 @@ window.updateReportData = function () {
     }
 
     // 1. STICHTAGS-REKONSTRUKTION FÜR DAS GESAMTPROJEKT
-    // Wir nehmen ALLE Logs des Projekts, die vor oder am endDate liegen.
     const proj = getCurrentProject();
     let projTotalD = 0, projTotalDr = 0;
 
@@ -212,10 +232,15 @@ window.updateReportData = function () {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
+
+        // Block-Filter
         if (filterBlock !== 'all' && log.node_id !== filterBlock) return false;
+
+        // Bereichs- / Zonen-Filter (prüft direkte Zonen-Logs und Blöcke innerhalb der Zone)
         if (filterZone !== 'all') {
+            if (log.zone_id && log.zone_id === filterZone) return true;
             const node = currentNodes.find(n => n.id === log.node_id);
-            if (!node || node.zone_id !== filterZone) return false; // In V1 direkte Zone
+            if (!node || node.zone_id !== filterZone) return false;
         }
         return true;
     });

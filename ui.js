@@ -598,19 +598,37 @@ window.handleAddBlock = async function (e) {
     showToast('Block erfolgreich hinzugefügt', 'success');
 };
 
-window.openConfigModal = function (nodeId) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Block-Löschschutz: 1-Stunden-Frist für Ersteller)
+ * ERSETZEN IN: ui.js (Funktionen openConfigModal & handleDeleteNode)
+ * Zeitstempel: 2026-08-27 18:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:30:00 CEST]: Löschberechtigung für Ersteller auf 60 Minuten 
+ *     nach Erstellung begrenzt. Ältere Blöcke können nur noch durch Admins gelöscht werden.
+ * =============================================================================
+ */
+window.openConfigModal = function(nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // Prüfe, ob IRGENDEINE Instanz dieses Blocks Zeiten gebucht hat
     const relatedNodeIds = node.linked_id
         ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
         : [node.id];
     const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
 
     const creator = node.created_by || 'COT';
-    const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
-    const canDelete = isAdmin || ((activeUserCode && activeUserCode === creator) && nodeLogs.length === 0);
+    const isCreator = (activeUserCode && activeUserCode === creator);
+    const isCreatorOrAdmin = isAdmin || isCreator;
+
+    // Zeitprüfung: Liegt die Erstellung weniger als 60 Minuten zurück?
+    const createdAtTime = node.created_at ? new Date(node.created_at).getTime() : 0;
+    const nowTime = Date.now();
+    const isWithinOneHour = (nowTime - createdAtTime) <= (60 * 60 * 1000);
+
+    // Löschen nur für Admin ODER für Ersteller innerhalb 1h ohne gebuchte Zeiten
+    const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
     document.getElementById('editNodeId').value = node.id;
     document.getElementById('editName').value = node.name;
@@ -654,10 +672,6 @@ window.openConfigModal = function (nodeId) {
     const statusGroup = document.getElementById('editStatusGroup');
 
     if (btnDel) btnDel.style.display = canDelete ? 'block' : 'none';
-
-    /**
-     * Breadcrumb: [2026-08-25] Rückwirkendes Eintragen für alle Nutzer freigeschaltet.
-     */
     if (retroBtn) retroBtn.style.display = 'block';
 
     if (isAdmin) {
@@ -670,6 +684,8 @@ window.openConfigModal = function (nodeId) {
 
     openModal('configModal');
 };
+
+
 
 window.handleSaveConfig = async function (e) {
     e.preventDefault();
@@ -722,7 +738,7 @@ window.handleSaveConfig = async function (e) {
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
-window.handleDeleteNode = async function () {
+window.handleDeleteNode = async function() {
     const id = document.getElementById('editNodeId').value;
     const node = currentNodes.find(n => n.id === id);
     if (!node) return;
@@ -733,10 +749,19 @@ window.handleDeleteNode = async function () {
     const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
 
     const isCreator = (activeUserCode && activeUserCode === node.created_by);
-    const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
+    const createdAtTime = node.created_at ? new Date(node.created_at).getTime() : 0;
+    const isWithinOneHour = (Date.now() - createdAtTime) <= (60 * 60 * 1000);
+
+    const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
     if (!canDelete) {
-        showToast('Nur Admins können Blöcke löschen, auf die bereits Zeiten gebucht wurden.', 'error');
+        if (nodeLogs.length > 0) {
+            showToast('Löschen nicht möglich: Auf diesen Block wurden bereits Zeiten gebucht (nur Admin).', 'error');
+        } else if (!isWithinOneHour && !isAdmin) {
+            showToast('Löschen abgelaufen: Ersteller können Blöcke nur innerhalb von 60 Minuten löschen (nur Admin).', 'error');
+        } else {
+            showToast('Keine Berechtigung zum Löschen dieses Blocks.', 'error');
+        }
         return;
     }
 
@@ -1566,15 +1591,33 @@ window.toggleHandles = function () {
 * Breadcrumb: [2026-08-24 20:20:00 CEST]
 * =============================================================================
 */
-window.toggleZoneLogs = function (e, zoneId) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Exklusives Log-Ausklappen für Zonen)
+ * ERSETZEN IN: ui.js (Funktion toggleZoneLogs)
+ * Zeitstempel: 2026-08-27 17:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-24 20:20:00 CEST]: Zonen-Logs Toggle.
+ *   - [2026-08-27 17:50:00 CEST]: Single-Expanded-Log Prinzip: Nur ein Element
+ *     (Block oder Zone) darf gleichzeitig ausgeklappt sein.
+ * =============================================================================
+ */
+window.toggleZoneLogs = function(e, zoneId) {
     if (e) e.stopPropagation();
     if (!window.expandedZones) window.expandedZones = new Set();
+    if (!window.expandedNodes) window.expandedNodes = new Set();
 
-    if (window.expandedZones.has(zoneId)) {
-        window.expandedZones.delete(zoneId);
-    } else {
+    const isCurrentlyOpen = window.expandedZones.has(zoneId);
+
+    // Alle anderen Zonen und Blöcke schließen
+    window.expandedZones.clear();
+    window.expandedNodes.clear();
+
+    if (!isCurrentlyOpen) {
         window.expandedZones.add(zoneId);
     }
+
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
@@ -1585,7 +1628,19 @@ window.toggleZoneLogs = function (e, zoneId) {
  * Breadcrumb: [2026-08-24 20:25:00 CEST] Foreign-Key Error behoben (node_id: null)
  * =============================================================================
  */
-window.handleZoneLog = async function (e, zoneId) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Zonen-Logs & Schema-Fix)
+ * ERSETZEN IN: ui.js (Funktion handleZoneLog)
+ * Zeitstempel: 2026-08-27 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-24 20:25:00 CEST]: Foreign-Key Error behoben (node_id: null).
+ *   - [2026-08-27 17:40:00 CEST]: Abgesichertes Payload-Handling für zone_id
+ *     und verständliche Fehlerbehandlung bei fehlender Schema-Spalte.
+ * =============================================================================
+ */
+window.handleZoneLog = async function(e, zoneId) {
     e.preventDefault();
     const form = e.target;
     const taskType = form.elements[1].value;
@@ -1605,7 +1660,6 @@ window.handleZoneLog = async function (e, zoneId) {
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
 
-    // node_id zwingend null senden, da der Log zur Zone gehört!
     const payload = {
         project_id: activeProjectId,
         user_code: activeUserCode,
@@ -1620,7 +1674,12 @@ window.handleZoneLog = async function (e, zoneId) {
     const { error } = await db.from('time_logs').insert([payload]);
 
     if (error) {
-        showToast('Fehler: ' + error.message, 'error');
+        console.error("Fehler beim Buchen auf Rahmen:", error);
+        if (error.message && error.message.includes("column of 'time_logs'")) {
+            showToast('Datenbankfehler: Spalte zone_id fehlt in time_logs.', 'error');
+        } else {
+            showToast('Fehler: ' + error.message, 'error');
+        }
         return;
     }
 

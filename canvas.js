@@ -126,6 +126,17 @@ window.toggleNoteCollapse = async function (e, nodeId) {
  * Breadcrumb: [2026-08-25 17:45:00 CEST] Notiz-Menüpunkt in Kontext-Steuerung integriert
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Kontextmenü (Löschschutz 1 Stunde)
+ * ERSETZEN IN: canvas.js (Funktionen handleCanvasContextMenu & handleContextMenuAction)
+ * Zeitstempel: 2026-08-27 18:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:30:00 CEST]: 60-Minuten-Zeitfenster auch im Kontextmenü 
+ *     für Rechtsklick-Löschungen integriert.
+ * =============================================================================
+ */
 window.handleCanvasContextMenu = function(e) {
     e.preventDefault();
     if (e.target.closest('button, input, select, .sidebar')) return;
@@ -145,7 +156,10 @@ window.handleCanvasContextMenu = function(e) {
         if (targetNode) {
             const nodeLogs = currentTimeLogs.filter(l => l.node_id === targetNode.id);
             const isCreator = (activeUserCode && activeUserCode === targetNode.created_by);
-            const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
+            const createdAtTime = targetNode.created_at ? new Date(targetNode.created_at).getTime() : 0;
+            const isWithinOneHour = (Date.now() - createdAtTime) <= (60 * 60 * 1000);
+
+            const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
             if (itemDuplicate) itemDuplicate.style.display = targetNode.block_type === 'note' ? 'none' : 'flex';
             if (itemDelete) itemDelete.style.display = canDelete ? 'flex' : 'none';
@@ -449,7 +463,7 @@ function getCanvasCoords(clientX, clientY) {
  * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Instanz-Duplizierung ergänzt
  * =============================================================================
  */
-window.handleContextMenuAction = async function (type) {
+window.handleContextMenuAction = async function(type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
 
@@ -474,7 +488,7 @@ window.handleContextMenuAction = async function (type) {
             originalNode.linked_id = linkedId;
             const { error: updateErr } = await db.from('project_nodes').update({ linked_id: linkedId }).eq('id', originalNode.id);
             if (updateErr) {
-                console.error("Fehler beim Aktualisieren der linked_id:", updateErr);
+                console.error("Fehler beim Verknüpfen der Instanz:", updateErr);
                 showToast('Fehler beim Verknüpfen der Instanz', 'error');
                 return;
             }
@@ -520,10 +534,13 @@ window.handleContextMenuAction = async function (type) {
 
         const nodeLogs = currentTimeLogs.filter(l => l.node_id === nodeToDelete.id);
         const isCreator = (activeUserCode && activeUserCode === nodeToDelete.created_by);
-        const canDelete = isAdmin || (isCreator && nodeLogs.length === 0);
+        const createdAtTime = nodeToDelete.created_at ? new Date(nodeToDelete.created_at).getTime() : 0;
+        const isWithinOneHour = (Date.now() - createdAtTime) <= (60 * 60 * 1000);
+
+        const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
         if (!canDelete) {
-            showToast('Keine Berechtigung zum Löschen dieses Blocks.', 'error');
+            showToast('Löschen nur innerhalb 60 Min. nach Erstellung oder durch Admin.', 'error');
             return;
         }
 
@@ -729,11 +746,29 @@ window.toggleSubtreeCollapse = function(e, nodeId) {
     renderCanvas();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine (Exklusives Log-Ausklappen für Blöcke)
+ * ERSETZEN IN: canvas.js (Funktion toggleInlineLogs)
+ * Zeitstempel: 2026-08-27 17:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:50:00 CEST]: Exklusiver Log-Modus: Schließt andere geöffnete
+ *     Blöcke und Zonen vor dem Öffnen.
+ * =============================================================================
+ */
 window.toggleInlineLogs = function(nodeId) {
-    if (expandedNodes.has(nodeId)) {
-        expandedNodes.delete(nodeId);
-    } else {
-        expandedNodes.add(nodeId);
+    if (!window.expandedNodes) window.expandedNodes = new Set();
+    if (!window.expandedZones) window.expandedZones = new Set();
+
+    const isCurrentlyOpen = window.expandedNodes.has(nodeId);
+
+    // Alle anderen Blöcke und Zonen schließen
+    window.expandedNodes.clear();
+    window.expandedZones.clear();
+
+    if (!isCurrentlyOpen) {
+        window.expandedNodes.add(nodeId);
     }
     renderCanvas();
 };
@@ -781,8 +816,18 @@ function getDeepestZoneAt(x, y, excludeZoneIds = []) {
     return deepestZone;
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine (Zonen- und Node-Sichtbarkeits-Guard)
+ * ERSETZEN IN: canvas.js (Funktion window.isZoneHidden)
+ * Zeitstempel: 2026-08-27 18:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:20:00 CEST]: isZoneHidden gegen fehlerhafte Sets abgesichert.
+ * =============================================================================
+ */
 window.isZoneHidden = function(zoneId) {
-    if (!zoneId || !window.hiddenTopZoneIds) return false;
+    if (!zoneId || !window.hiddenTopZoneIds || window.hiddenTopZoneIds.size === 0) return false;
     if (window.hiddenTopZoneIds.has(zoneId)) return true;
 
     let current = currentZones.find(x => x.id === zoneId);
@@ -872,24 +917,66 @@ window.toggleZoneLock = async function(e, zoneId) {
     renderCanvas();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Rendering
+ * ERSETZEN IN: canvas.js (Funktion renderCanvas)
+ * Zeitstempel: 2026-08-27 17:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:55:00 CEST]: Syntax-Fix: isZoneExpanded vor z-index deklariert,
+ *     doppelten Drag-Block bereinigt und Z-Index Priorisierung für offene Logs gesetzt.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Rendering (Z-Index / Overlap Fix)
+ * ERSETZEN IN: canvas.js (Funktion renderCanvas)
+ * Zeitstempel: 2026-08-27 18:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:15:00 CEST]: Z-Index Architektur komplett überarbeitet.
+ *     Rahmen-Hintergründe liegen nun immer ganz unten (auto), Blöcke auf Ebene 100, 
+ *     und geöffnete Logs brechen aus der Hierarchie aus (Ebene 2000 bzw. 2500).
+ *     Kein Element verdeckt mehr fälschlicherweise andere Blöcke.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Rendering (Crash-Proof Block Render)
+ * ERSETZEN IN: canvas.js (Funktion renderCanvas)
+ * Zeitstempel: 2026-08-27 18:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:25:00 CEST]: Defensives Null- & Set-Guarding eingefügt,
+ *     um JS-Crashes beim Rendern von Blöcken (innen & außen) zuverlässig abzufangen.
+ * =============================================================================
+ */
 function renderCanvas() {
     const canvas = document.getElementById('canvas');
     const svgLayer = document.getElementById('connections-layer');
+    if (!canvas || !svgLayer) return;
 
-    // NEU (nimmt auch bestehende Notizen mit in den Reset):
+    // Globale Sets und Arrays absichern
+    if (!window.selectedNodeIds) window.selectedNodeIds = new Set();
+    if (!window.expandedNodes) window.expandedNodes = new Set();
+    if (!window.expandedZones) window.expandedZones = new Set();
+    if (!window.collapsedParents) window.collapsedParents = new Set();
+    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+
     const existingCards = canvas.querySelectorAll('.assembly-card, .project-zone, .note-card');
     existingCards.forEach(c => c.remove());
     svgLayer.innerHTML = '';
 
-    const rollups = calculateRollups();
+    const rollups = (typeof calculateRollups === 'function') ? calculateRollups() : {};
 
     const nodeDirectStats = {};
-    currentNodes.forEach(n => {
-        const logs = currentTimeLogs.filter(l => l.node_id === n.id);
+    (currentNodes || []).forEach(n => {
+        const logs = (currentTimeLogs || []).filter(l => l.node_id === n.id);
         let dSpent = 0, drSpent = 0;
         logs.forEach(l => {
-            if (l.task_type === 'design') dSpent += parseFloat(l.hours);
-            if (l.task_type === 'drafting') drSpent += parseFloat(l.hours);
+            if (l.task_type === 'design') dSpent += parseFloat(l.hours) || 0;
+            if (l.task_type === 'drafting') drSpent += parseFloat(l.hours) || 0;
         });
         nodeDirectStats[n.id] = {
             dBudg: parseFloat(n.budget_design_hours) || 0,
@@ -899,20 +986,13 @@ function renderCanvas() {
         };
     });
 
-    /**
-         * =============================================================================
-         * Breadcrumb: [2026-08-24 20:20:00 CEST] Direkte Zonen-Logs in Rollups integriert
-         * =============================================================================
-         */
     const zoneRollups = {};
-    if (!window.expandedZones) window.expandedZones = new Set();
-
-    currentZones.forEach(z => {
-        const zLogs = currentTimeLogs.filter(l => l.zone_id === z.id || l.node_id === z.id);
+    (currentZones || []).forEach(z => {
+        const zLogs = (currentTimeLogs || []).filter(l => l.zone_id === z.id || l.node_id === z.id);
         let dSpentDirect = 0, drSpentDirect = 0;
         zLogs.forEach(l => {
-            if (l.task_type === 'design') dSpentDirect += parseFloat(l.hours);
-            if (l.task_type === 'drafting') drSpentDirect += parseFloat(l.hours);
+            if (l.task_type === 'design') dSpentDirect += parseFloat(l.hours) || 0;
+            if (l.task_type === 'drafting') drSpentDirect += parseFloat(l.hours) || 0;
         });
 
         zoneRollups[z.id] = {
@@ -924,44 +1004,30 @@ function renderCanvas() {
         };
     });
 
-    /**
-         * =============================================================================
-         * Breadcrumb: [2026-08-25 17:20:19 CEST] Master-Instanz Logik: Zonen-Rollups
-         * berücksichtigen nur noch die Master-Instanz. Zeiten aller Instanzen werden 
-         * auf die Zone der Master-Instanz umgeleitet.
-         * =============================================================================
-         */
-    /**
-         * =============================================================================
-         * Breadcrumb: [2026-08-25 17:45:00 CEST] Master-Instanz Logik & Notiz-Filter:
-         * Notizen besitzen keine Budgets/Zeiten und werden im Rollup ignoriert.
-         * =============================================================================
-         */
-    currentNodes.forEach(n => {
-        if (n.block_type === 'note' || n.doc_number === 'NOTE') return; // Notizen bei Zonen-Budgets ignorieren
+    (currentNodes || []).forEach(n => {
+        if (n.block_type === 'note' || n.doc_number === 'NOTE') return;
 
         const relatedIds = n.linked_id ? currentNodes.filter(x => x.linked_id === n.linked_id).map(x => x.id) : [n.id];
         const isEffectivelyLinked = relatedIds.length > 1;
+        const masterObj = isEffectivelyLinked ? currentNodes.find(x => x.linked_id === n.linked_id) : n;
+        const isMaster = !isEffectivelyLinked || (masterObj && masterObj.id === n.id);
 
-        // Die Master-Instanz ist der erste Node mit dieser linked_id (oder sich selbst)
-        const isMaster = !isEffectivelyLinked || (currentNodes.find(x => x.linked_id === n.linked_id).id === n.id);
-
-        if (isMaster && n.zone_id && zoneRollups[n.zone_id]) {
-            // Budget nur vom Master an den Kasten übergeben
+        if (isMaster && n.zone_id && zoneRollups[n.zone_id] && nodeDirectStats[n.id]) {
             zoneRollups[n.zone_id].dBudg += nodeDirectStats[n.id].dBudg;
             zoneRollups[n.zone_id].drBudg += nodeDirectStats[n.id].drBudg;
 
-            // Zeiten ALLER referenzierten Instanzen auf den Kasten des Masters summieren
             relatedIds.forEach(relId => {
-                zoneRollups[n.zone_id].dSpent += nodeDirectStats[relId].dSpent;
-                zoneRollups[n.zone_id].drSpent += nodeDirectStats[relId].drSpent;
+                if (nodeDirectStats[relId]) {
+                    zoneRollups[n.zone_id].dSpent += nodeDirectStats[relId].dSpent;
+                    zoneRollups[n.zone_id].drSpent += nodeDirectStats[relId].drSpent;
+                }
             });
         }
     });
 
-    const zonesByDepthDesc = [...currentZones].sort((a, b) => getZoneDepth(b.id) - getZoneDepth(a.id));
+    const zonesByDepthDesc = [...(currentZones || [])].sort((a, b) => getZoneDepth(b.id) - getZoneDepth(a.id));
     zonesByDepthDesc.forEach(z => {
-        if (z.parent_zone_id && zoneRollups[z.parent_zone_id]) {
+        if (z.parent_zone_id && zoneRollups[z.parent_zone_id] && zoneRollups[z.id]) {
             zoneRollups[z.parent_zone_id].dBudg += zoneRollups[z.id].dBudg;
             zoneRollups[z.parent_zone_id].drBudg += zoneRollups[z.id].drBudg;
             zoneRollups[z.parent_zone_id].dSpent += zoneRollups[z.id].dSpent;
@@ -969,15 +1035,16 @@ function renderCanvas() {
         }
     });
 
-    const sortedZones = [...currentZones].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
+    const sortedZones = [...(currentZones || [])].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
 
+    // 1. ZONEN RENDERN
     sortedZones.forEach(zone => {
-        if (window.isZoneHidden(zone.id)) return;
+        if (typeof window.isZoneHidden === 'function' && window.isZoneHidden(zone.id)) return;
 
         const zoneEl = document.createElement('div');
         zoneEl.id = zone.id;
         const canMoveZone = (isAdmin || (activeUserCode && activeUserCode === zone.created_by)) && !zone.is_locked;
-        const zoneDepth = getZoneDepth(zone.id);
+        const isZoneExpanded = window.expandedZones.has(zone.id);
 
         zoneEl.className = `project-zone ${zone.is_locked ? 'zone-locked' : 'no-pan'} ${canMoveZone ? 'draggable-enabled' : ''}`;
         zoneEl.style.left = `${zone.pos_x}px`;
@@ -985,30 +1052,18 @@ function renderCanvas() {
         zoneEl.style.width = `${zone.width}px`;
         zoneEl.style.height = `${zone.height}px`;
         zoneEl.style.borderColor = zone.color_hex || '#a0aec0';
-        zoneEl.style.zIndex = 2 + zoneDepth;
+        zoneEl.style.zIndex = 'auto';
 
-        const zStats = zoneRollups[zone.id];
+        const zStats = zoneRollups[zone.id] || { dSpent: 0, dBudg: 0, drSpent: 0, drBudg: 0, directLogs: [] };
         const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
         const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
-        /**
-                 * =============================================================================
-                 * Breadcrumb: [2026-08-24 19:43:00 CEST] Textuelle Budget-Anzeige (Ist / Soll) 
-                 * direkt neben den Pie-Charts in den Zonen-Headern platziert.
-                 * =============================================================================
-                 */
-        /**
-              * =============================================================================
-              * Breadcrumb: [2026-08-24 20:20:00 CEST] Logging-Formular & Tabelle für Rahmen
-              * =============================================================================
-              */
         const identifier = zone.article_number || zone.doc_number || '';
         let badgeHtml = '';
         if (identifier) {
             badgeHtml = `<div class="assembly-id-badge" style="border-color: ${zone.color_hex || '#a0aec0'};" title="${zone.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
         }
 
-        const isZoneExpanded = window.expandedZones.has(zone.id);
         const zLogs = zStats.directLogs || [];
         let inlineZoneLogsHtml = '';
 
@@ -1042,11 +1097,7 @@ function renderCanvas() {
                   </table>`;
             }
         }
-        /**
-                 * =============================================================================
-                 * Breadcrumb: [2026-08-24 20:30:00 CEST] Zuweisungs-Badges für Rahmen (3D & Zeichnung)
-                 * =============================================================================
-                 */
+
         let assignedBadgesHtml = '';
         if (zone.assigned_design_user) {
             assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:8px; display:inline-flex; align-items:center; gap:3px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
@@ -1057,14 +1108,12 @@ function renderCanvas() {
 
         zoneEl.innerHTML = `
       ${badgeHtml}
-      <div class="project-zone-header no-pan" style="border-bottom-color: ${zone.color_hex || '#a0aec0'}; align-items: flex-start;">
+      <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; align-items: flex-start;">
         <div style="display:flex; flex-direction:column; gap:6px;">
-          
           <div style="display:flex; align-items:center;">
              <span>📍 ${escapeHtml(zone.title)}</span>
              ${assignedBadgesHtml}
           </div>
-
           <div style="display:flex; gap:16px; cursor:default; align-items: center; margin-top: 2px;">
               <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
                   <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;">
@@ -1098,7 +1147,7 @@ function renderCanvas() {
       </div>
       
       ${isZoneExpanded ? `
-      <div class="zone-body no-pan" style="background: rgba(255, 255, 255, 0.96); padding: 10px; border-bottom: 1px dashed #cbd5e0; position: relative; z-index: 10; pointer-events: auto;">
+      <div class="zone-body no-pan" style="position: relative; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border-bottom: 1px dashed #cbd5e0; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
         <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
           <div class="time-inputs-row">
             <select class="log-input" style="font-weight: bold; width: 60px;">
@@ -1122,7 +1171,7 @@ function renderCanvas() {
       </div>
       ` : ''}
 
-      <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
+      <div class="zone-resize-handle no-pan" style="position: absolute; z-index: 50;" title="Größe anpassen"></div>
     `;
 
         if (canMoveZone) {
@@ -1136,155 +1185,13 @@ function renderCanvas() {
             let descendantZones = [];
             let childNodes = [];
 
-            zoneEl.addEventListener('mousedown', (e) => {
-                if (e.target.closest('.zone-actions, .zone-resize-handle')) return;
-
-                window.isDraggingAnything = true;
-                isDragging = true;
-                const scale = window.currentScale;
-                startX = e.clientX;
-                startY = e.clientY;
-
-                initLeft = zone.pos_x;
-                initTop = zone.pos_y;
-
-                descendantZoneIds = getAllDescendantZones(zone.id);
-                allMovedZoneIds = [zone.id, ...descendantZoneIds];
-                descendantZones = currentZones.filter(z => descendantZoneIds.includes(z.id));
-                childNodes = currentNodes.filter(n => allMovedZoneIds.includes(n.zone_id));
-
-                childStartPos = childNodes.map(n => ({ id: n.id, x: n.pos_x, y: n.pos_y }));
-                childZonesStartPos = descendantZones.map(z => ({ id: z.id, x: z.pos_x, y: z.pos_y }));
-
-                e.stopPropagation();
-
-                const onMouseMove = (moveEvent) => {
-                    if (!isDragging) return;
-                    const dx = (moveEvent.clientX - startX) / scale;
-                    const dy = (moveEvent.clientY - startY) / scale;
-
-                    zone.pos_x = Math.max(10, Math.round(initLeft + dx));
-                    zone.pos_y = Math.max(10, Math.round(initTop + dy));
-                    zoneEl.style.left = `${zone.pos_x}px`;
-                    zoneEl.style.top = `${zone.pos_y}px`;
-
-                    descendantZones.forEach((z, idx) => {
-                        z.pos_x = Math.max(10, Math.round(childZonesStartPos[idx].x + dx));
-                        z.pos_y = Math.max(10, Math.round(childZonesStartPos[idx].y + dy));
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) {
-                            zEl.style.left = `${z.pos_x}px`;
-                            zEl.style.top = `${z.pos_y}px`;
-                        }
-                    });
-
-                    childNodes.forEach((n, idx) => {
-                        n.pos_x = Math.max(10, Math.round(childStartPos[idx].x + dx));
-                        n.pos_y = Math.max(10, Math.round(childStartPos[idx].y + dy));
-                        const nEl = document.getElementById(n.id);
-                        if (nEl) {
-                            nEl.style.left = `${n.pos_x}px`;
-                            nEl.style.top = `${n.pos_y}px`;
-                        }
-                    });
-
-                    const headerCenterX = zone.pos_x + (zone.width / 2);
-                    const headerCenterY = zone.pos_y + 20;
-                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
-
-                    currentZones.forEach(z => {
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) {
-                            if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
-                            else zEl.classList.remove('zone-hover-highlight');
-                        }
-                    });
-
-                    renderConnections();
-                };
-
-                const onMouseUp = async () => {
-                    if (!isDragging) return;
-                    isDragging = false;
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
-
-                    const headerCenterX = zone.pos_x + (zone.width / 2);
-                    const headerCenterY = zone.pos_y + 20;
-                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
-                    const newParentId = targetZone ? targetZone.id : null;
-
-                    if (newParentId) {
-                        const parentDepth = getZoneDepth(newParentId);
-                        let maxChildRelativeDepth = 0;
-                        descendantZoneIds.forEach(id => {
-                            let d = getZoneDepth(id) - getZoneDepth(zone.id);
-                            if (d > maxChildRelativeDepth) maxChildRelativeDepth = d;
-                        });
-
-                        if (parentDepth + 1 + maxChildRelativeDepth >= 5) {
-                            showToast('Maximale Verschachtelung von 5 Ebenen erreicht!', 'error');
-                        } else {
-                            zone.parent_zone_id = newParentId;
-                        }
-                    } else {
-                        zone.parent_zone_id = null;
-                    }
-
-                    currentZones.forEach(z => {
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) zEl.classList.remove('zone-hover-highlight');
-                    });
-
-                    const updates = childNodes.map(n => db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id));
-                    descendantZones.forEach(z => {
-                        updates.push(db.from('project_zones').update({ pos_x: z.pos_x, pos_y: z.pos_y }).eq('id', z.id));
-                    });
-                    updates.push(db.from('project_zones').update({
-                        pos_x: zone.pos_x,
-                        pos_y: zone.pos_y,
-                        parent_zone_id: zone.parent_zone_id
-                    }).eq('id', zone.id));
-
-                    await Promise.all(updates);
-
-                    window.isDraggingAnything = false;
-                    if (window.pendingCanvasUpdate) {
-                        window.pendingCanvasUpdate = false;
-                        fetchCanvasData();
-                    } else {
-                        renderCanvas();
-                    }
-                };
-
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
-            });
-        }
-if (canMoveZone) {
-            let isDragging = false;
-            let startX = 0, startY = 0;
-            let initLeft = 0, initTop = 0;
-            let childStartPos = [];
-            let childZonesStartPos = [];
-            let descendantZoneIds = [];
-            let allMovedZoneIds = [];
-            let descendantZones = [];
-            let childNodes = [];
-
-            /**
-             * Breadcrumbs:
-             * - [2026-08-25] Touch-Support: Zonen Drag & Drop integriert
-             * - [2026-08-26] Bugfix: actualDx / actualDy verhindert das Zusammendrücken von Elementen am Canvas-Rand.
-             *   Zusammenführung des redundanten Drag-Codes.
-             */
             const startZoneDrag = (e) => {
-                if (e.target.closest('.zone-actions, .zone-resize-handle')) return;
-                if (e.type === 'touchstart' && e.touches.length > 1) return; // Nur Single-Touch zulassen
+                if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
+                if (e.type === 'touchstart' && e.touches.length > 1) return;
 
                 window.isDraggingAnything = true;
                 isDragging = true;
-                const scale = window.currentScale;
+                const scale = window.currentScale || 1;
 
                 startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                 startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
@@ -1304,7 +1211,7 @@ if (canMoveZone) {
 
                 const onMouseMove = (moveEvent) => {
                     if (!isDragging) return;
-                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault(); // Browser-Scroll stoppen
+                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
 
                     const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
                     const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
@@ -1312,10 +1219,8 @@ if (canMoveZone) {
                     const dx = (clientX - startX) / scale;
                     const dy = (clientY - startY) / scale;
 
-                    // 1. Tatsächliche Verschiebung des Hauptrahmens ermitteln (inklusive der 10px-Barriere)
                     const newParentX = Math.max(10, Math.round(initLeft + dx));
                     const newParentY = Math.max(10, Math.round(initTop + dy));
-                    
                     const actualDx = newParentX - initLeft;
                     const actualDy = newParentY - initTop;
 
@@ -1324,7 +1229,6 @@ if (canMoveZone) {
                     zoneEl.style.left = `${zone.pos_x}px`;
                     zoneEl.style.top = `${zone.pos_y}px`;
 
-                    // 2. Diese tatsächliche Verschiebung auf alle Kinder anwenden
                     descendantZones.forEach((z, idx) => {
                         z.pos_x = childZonesStartPos[idx].x + actualDx;
                         z.pos_y = childZonesStartPos[idx].y + actualDy;
@@ -1360,7 +1264,7 @@ if (canMoveZone) {
                     renderConnections();
                 };
 
-                const onMouseUp = async (upEvent) => {
+                const onMouseUp = async () => {
                     if (!isDragging) return;
                     isDragging = false;
 
@@ -1431,17 +1335,13 @@ if (canMoveZone) {
 
         const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
         if (resizeHandle && (isAdmin || (activeUserCode && activeUserCode === zone.created_by))) {
-
-            /**
-             * Breadcrumb: [2026-08-25] Touch-Support: Zonen-Resizing integriert
-             */
             const startZoneResize = (e) => {
                 if (e.type === 'touchstart' && e.touches.length > 1) return;
                 if (e.cancelable) e.stopPropagation();
 
                 window.isDraggingAnything = true;
                 let isResizing = true;
-                const scale = window.currentScale;
+                const scale = window.currentScale || 1;
                 const startW = zone.width;
                 const startH = zone.height;
 
@@ -1498,49 +1398,25 @@ if (canMoveZone) {
         canvas.appendChild(zoneEl);
     });
 
-    /**
-         * =============================================================================
-         * Breadcrumb: [2026-08-25 17:20:19 CEST] Master-Instanz Logik: Visuelle 
-         * Abgrenzung, Klammer-Budgets und Log-Weiterleitung an den Master.
-         * =============================================================================
-         */
-    /**
-     * =============================================================================
-     * Breadcrumb: [2026-08-25 17:55:00 CEST] Sticky Notes Rendering & Sichtbarkeit gefixt
-     * =============================================================================
-     */
-    currentNodes.forEach(node => {
-        // Notizen besitzen keine Parent-Kanten; nur Kasten-Sichtbarkeit prüfen
-        if (node.zone_id && window.isZoneHidden(node.zone_id)) return;
+    // 2. KNOTEN / BLÖCKE / NOTIZEN RENDERN
+    (currentNodes || []).forEach(node => {
+        // Defensive Sichtbarkeitsprüfung
+        if (node.zone_id && typeof window.isZoneHidden === 'function' && window.isZoneHidden(node.zone_id)) {
+            return;
+        }
 
-        /**
-          * =============================================================================
-          * Projekt: CAD Time Manager
-          * Domain: Sticky Notes Rendering (Drag & Drop, Resize & Collapse-Lock)
-          * ERSETZEN IN: canvas.js (Innerhalb renderCanvas())
-          * Zeitstempel: 2026-08-26 20:00:00 CEST
-          * Breadcrumbs:
-          *   - [2026-08-25 17:55:00 CEST]: Initiales Notiz-Rendering mit Sichtbarkeit & Drag.
-          *   - [2026-08-26 19:30:00 CEST]: Resizing & Zuklappen integriert.
-          *   - [2026-08-26 20:00:00 CEST]: Bugfix Drag-Click: didDrag-Flag verhindert, 
-          *     dass sich zugeklappte Notizen beim Verschieben ungewollt öffnen.
-          *     overflow-y: auto durch overflow: hidden ersetzt (verhindert Zoom-Flickern).
-          * =============================================================================
-          */
-        // 1. STICKY NOTES RENDERING
+        // 2a. STICKY NOTES
         if (node.block_type === 'note' || node.doc_number === 'NOTE') {
             const isPrivate = node.article_number === 'private';
             const userCode = (activeUserCode || '').toUpperCase();
             const noteCreator = (node.created_by || '').toUpperCase();
 
-            // Privat-Check: Nur Ersteller und Admin sehen private Notizen
             if (isPrivate && noteCreator !== userCode && !isAdmin) return;
 
-            // Zustand und Dimensionen parsen
             const isCollapsed = node.completion_status === 'collapsed';
             let noteW = parseFloat(node.budget_design_hours) || 190;
             let noteH = parseFloat(node.budget_drafting_hours) || 80;
-            if (noteW < 100) noteW = 190; // Fallbacks
+            if (noteW < 100) noteW = 190;
             if (noteH < 50) noteH = 80;
 
             const el = document.createElement('div');
@@ -1552,8 +1428,8 @@ if (canMoveZone) {
             el.style.top = `${node.pos_y}px`;
             el.style.backgroundColor = node.color_hex || '#fefcbf';
             el.style.border = '1px solid rgba(0, 0, 0, 0.1)';
+            el.style.zIndex = '150';
 
-            // Dynamische Größe anwenden
             el.style.width = isCollapsed ? '38px' : `${noteW}px`;
             el.style.height = isCollapsed ? '38px' : `${noteH}px`;
             el.style.minHeight = isCollapsed ? '38px' : '80px';
@@ -1561,19 +1437,12 @@ if (canMoveZone) {
             el.style.justifyContent = isCollapsed ? 'center' : 'flex-start';
             el.style.alignItems = isCollapsed ? 'center' : 'stretch';
 
-            const lockIcon = isPrivate ? '<span style="font-size:12px;" title="Private Notiz (Nur für dich sichtbar)">🔒</span>' : '';
-
-            // Datumsstempel formatieren
+            const lockIcon = isPrivate ? '<span style="font-size:12px;" title="Private Notiz">🔒</span>' : '';
             const dateStr = node.created_at ? new Date(node.created_at).toLocaleDateString('de-DE') : '';
             const dateHtml = dateStr ? `<span style="font-weight:normal; font-size:9px; color:#718096; margin-left:6px;">${dateStr}</span>` : '';
 
-            // Layout je nach Status (Zugeklappt vs Offen)
             if (isCollapsed) {
-                el.innerHTML = `
-                    <div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(node.name)}">
-                        📝
-                    </div>
-                `;
+                el.innerHTML = `<div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(node.name)}">📝</div>`;
             } else {
                 el.innerHTML = `
                     <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
@@ -1591,7 +1460,6 @@ if (canMoveZone) {
                 `;
             }
 
-            // Hover-Status fürs Kopieren merken
             el.addEventListener('mouseenter', () => {
                 window.hoveredNodeId = node.id;
                 if (node.linked_id) {
@@ -1618,7 +1486,6 @@ if (canMoveZone) {
                 let initX = 0, initY = 0;
 
                 const startNoteDrag = (e) => {
-                    // Klicks auf den Resize-Handle oder den Zuklapp-Button ignorieren
                     if (e.target.closest('.note-resize-handle, span[title="Notiz zuklappen"]')) return;
                     if (e.type === 'mousedown' && e.button !== 0) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
@@ -1645,9 +1512,7 @@ if (canMoveZone) {
                         const dx = (clientX - startClientX) / scale;
                         const dy = (clientY - startClientY) / scale;
 
-                        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-                            didDrag = true;
-                        }
+                        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true;
 
                         node.pos_x = Math.round(initX + dx);
                         node.pos_y = Math.round(initY + dy);
@@ -1655,7 +1520,7 @@ if (canMoveZone) {
                         el.style.top = `${node.pos_y}px`;
                     };
 
-                    const onMouseUp = async (upEvent) => {
+                    const onMouseUp = async () => {
                         if (!isDragging) return;
                         isDragging = false;
 
@@ -1679,7 +1544,6 @@ if (canMoveZone) {
 
                         window.isDraggingAnything = false;
                         if (typeof renderCanvas === 'function') renderCanvas();
-
                         if (window.pendingCanvasUpdate && typeof fetchCanvasData === 'function') {
                             window.pendingCanvasUpdate = false;
                             fetchCanvasData();
@@ -1696,18 +1560,11 @@ if (canMoveZone) {
                 el.addEventListener('mousedown', startNoteDrag);
                 el.addEventListener('touchstart', startNoteDrag, { passive: false });
 
-                // Klick öffnet zugeklappte Notiz nur bei echtem Klick (nicht nach Verschieben)
                 el.addEventListener('click', (e) => {
-                    if (didDrag) {
-                        didDrag = false;
-                        return;
-                    }
-                    if (isCollapsed) {
-                        toggleNoteCollapse(e, node.id);
-                    }
+                    if (didDrag) { didDrag = false; return; }
+                    if (isCollapsed) toggleNoteCollapse(e, node.id);
                 });
 
-                // ================== RESIZE HANDLE LOGIK ==================
                 if (!isCollapsed) {
                     const resizeHandle = el.querySelector('.note-resize-handle');
                     if (resizeHandle) {
@@ -1739,8 +1596,8 @@ if (canMoveZone) {
 
                                 el.style.width = `${newW}px`;
                                 el.style.height = `${newH}px`;
-                                node.budget_design_hours = newW; // Speichern als Breite
-                                node.budget_drafting_hours = newH; // Speichern als Höhe
+                                node.budget_design_hours = newW;
+                                node.budget_drafting_hours = newH;
                             };
 
                             const onResizeUp = async () => {
@@ -1775,35 +1632,31 @@ if (canMoveZone) {
             }
 
             canvas.appendChild(el);
-            return; // Schleifendurchlauf für diesen Block beenden
+            return;
         }
 
-        // 2. REGULÄRE BAUGRUPPEN / BAUTEILE
-        if (isNodeHiddenByAncestor(node.id)) return;
+        // 2b. REGULÄRE BAUGRUPPEN / BAUTEILE
+        if (typeof isNodeHiddenByAncestor === 'function' && isNodeHiddenByAncestor(node.id)) {
+            return;
+        }
 
-        // --- HIER GEHT DER BESTEHENDE CODE FÜR BAUGRUPPEN WEITER ---
         const relatedNodeIds = node.linked_id
             ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
             : [node.id];
 
-        // Nur wenn es WIRKLICH mehr als ein Element mit dieser ID gibt, ist es eine aktive Instanz
         const isEffectivelyLinked = relatedNodeIds.length > 1;
+        const masterNode = isEffectivelyLinked ? (currentNodes.find(n => n.linked_id === node.linked_id) || node) : node;
+        const isMaster = !isEffectivelyLinked || (masterNode.id === node.id);
 
-        // Master-Erkennung für den aktuellen Block
-        const isMaster = !isEffectivelyLinked || (currentNodes.find(n => n.linked_id === node.linked_id).id === node.id);
-        const masterNode = isEffectivelyLinked ? currentNodes.find(n => n.linked_id === node.linked_id) : node;
-
-        // Zeiten für die Anzeige aggregieren
         let dSpentAgg = 0;
         let drSpentAgg = 0;
         relatedNodeIds.forEach(id => {
             const st = rollups[id] || { totalDesign: 0, totalDrafting: 0, logs: [] };
-            dSpentAgg += st.totalDesign;
-            drSpentAgg += st.totalDrafting;
+            dSpentAgg += st.totalDesign || 0;
+            drSpentAgg += st.totalDrafting || 0;
         });
 
-        const nodeLogs = currentTimeLogs.filter(l => relatedNodeIds.includes(l.node_id));
-
+        const nodeLogs = (currentTimeLogs || []).filter(l => relatedNodeIds.includes(l.node_id));
         const nodeColor = node.color_hex || '#2b6cb0';
         const creator = node.created_by || 'COT';
         const bType = node.block_type || 'assembly';
@@ -1811,7 +1664,6 @@ if (canMoveZone) {
 
         const canDrag = isAdmin || (activeUserCode && activeUserCode === creator);
 
-        // Budgets vom Master übernehmen
         const dBudg = Math.max(0, parseFloat(masterNode.budget_design_hours) || 0);
         const dPct = dBudg > 0 ? Math.round((dSpentAgg / dBudg) * 100) : 0;
         const dPieStyle = generatePieStyle(dSpentAgg, dBudg, nodeColor);
@@ -1820,14 +1672,12 @@ if (canMoveZone) {
         const drPct = drBudg > 0 ? Math.round((drSpentAgg / drBudg) * 100) : 0;
         const drPieStyle = generatePieStyle(drSpentAgg, drBudg, '#38a169');
 
-        // Textuelle Darstellung: Budgets bei Instanzen in Klammern setzen
         const dStr = isMaster ? `${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)}` : `(${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)})`;
         const drStr = isMaster ? `${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)}` : `(${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)})`;
 
-        const isExpanded = expandedNodes.has(node.id);
-
-        const hasChildren = currentEdges.some(e => e.source === node.id);
-        const isSubtreeCollapsed = collapsedParents.has(node.id);
+        const isExpanded = window.expandedNodes.has(node.id);
+        const hasChildren = (currentEdges || []).some(e => e.source === node.id);
+        const isSubtreeCollapsed = window.collapsedParents.has(node.id);
 
         let subtreeBtnHtml = '';
         if (hasChildren) {
@@ -1931,23 +1781,20 @@ if (canMoveZone) {
             badgeHtml = `<div class="assembly-id-badge" style="border-color: ${nodeColor};" title="${node.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
         }
 
-        const isConnectingThisNode = connectingFirstNodeId === node.id;
-        const isSelected = selectedNodeIds.has(node.id);
+        const isConnectingThisNode = (connectingFirstNodeId === node.id);
+        const isSelected = window.selectedNodeIds.has(node.id);
 
         const el = document.createElement('div');
         el.id = node.id;
         if (isEffectivelyLinked) el.dataset.linkedId = node.linked_id;
 
-        // HIGHLIGHT-KLASSE ".selected-node" anwenden
         el.className = `assembly-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isSelected ? 'selected-node' : ''} ${isDimmed ? 'node-dimmed' : ''}`;
         el.style.left = `${node.pos_x}px`;
         el.style.top = `${node.pos_y}px`;
         el.style.borderColor = nodeColor;
-        // Referenz-Instanzen visuell abgrenzen (gestrichelter Rand - NUR wenn es weitere Instanzen gibt)
         el.style.borderStyle = (isEffectivelyLinked && !isMaster) ? 'dashed' : 'solid';
-        el.style.zIndex = "10";
+        el.style.zIndex = isExpanded ? 2000 : 100;
 
-        // Icon mit Tooltip und Text-Suffix für Referenzen (verschwindet, wenn es keine Referenzen mehr gibt)
         const linkedIconHtml = isEffectivelyLinked
             ? `<span class="linked-icon" title="${isMaster ? 'Master-Instanz (Zeiten synchron)' : 'Referenz-Instanz (loggt auf Master)'}">🔗${isMaster ? '' : ' Ref'}</span>`
             : '';
@@ -1967,10 +1814,7 @@ if (canMoveZone) {
       <div id="ep-left-${node.id}" class="ep-handle ep-left ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
       <div id="ep-right-${node.id}" class="ep-handle ep-right ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
 
-
       <div class="assembly-header" style="background: ${nodeColor}; flex-direction: column; align-items: stretch; gap: 6px;">
-        
-        <!-- Zeile 1: Name und Status-Icons -->
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex: 1;">
             ${subtreeBtnHtml}
@@ -1980,16 +1824,14 @@ if (canMoveZone) {
             ${statusIcon}${linkedIconHtml}
           </div>
         </div>
-
-        <!-- Zeile 2: Zuweisungen und Metadaten -->
         <div class="header-meta" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div style="display: flex; gap: 4px; overflow: hidden;">
             ${assignedBadgesHtml}
           </div>
           <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${typeLabel} | Ersteller: ${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
         </div>
-        
       </div>
+
       <div class="assembly-body">
         <div class="charts-grid">
           <div class="chart-box">
@@ -2009,7 +1851,6 @@ if (canMoveZone) {
         </div>
 
         <hr class="divider" />
-        <!-- OnSubmit leitet den Log nun auf die masterNode.id um -->
         <form class="log-form" onsubmit="handleLog(event, '${masterNode.id}')">
           <div class="time-inputs-row">
             <select class="log-input" style="font-weight: bold; width: 60px;">
@@ -2056,16 +1897,15 @@ if (canMoveZone) {
             }
         });
 
-        // Klick markiert den Block sofort (für Strg+C / Strg+V)
         el.addEventListener('click', (e) => {
             if (e.target.closest('button, input, select, .ep-handle')) return;
             e.stopPropagation();
             if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                if (selectedNodeIds.has(node.id)) selectedNodeIds.delete(node.id);
-                else selectedNodeIds.add(node.id);
+                if (window.selectedNodeIds.has(node.id)) window.selectedNodeIds.delete(node.id);
+                else window.selectedNodeIds.add(node.id);
             } else {
-                selectedNodeIds.clear();
-                selectedNodeIds.add(node.id);
+                window.selectedNodeIds.clear();
+                window.selectedNodeIds.add(node.id);
             }
             renderCanvas();
         });
@@ -2081,9 +1921,6 @@ if (canMoveZone) {
             let startClientX = 0, startClientY = 0;
             let initialNodePositions = new Map();
 
-            /**
-             * Breadcrumb: [2026-08-25] Touch-Support: Baugruppen Drag & Drop integriert
-             */
             const startBlockDrag = (e) => {
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
@@ -2097,8 +1934,8 @@ if (canMoveZone) {
 
                 if (e.cancelable) e.stopPropagation();
 
-                const nodesToMove = (selectedNodeIds.has(node.id))
-                    ? Array.from(selectedNodeIds).map(id => currentNodes.find(n => n.id === id)).filter(Boolean)
+                const nodesToMove = (window.selectedNodeIds.has(node.id))
+                    ? Array.from(window.selectedNodeIds).map(id => currentNodes.find(n => n.id === id)).filter(Boolean)
                     : [node];
 
                 initialNodePositions.clear();
@@ -2140,7 +1977,7 @@ if (canMoveZone) {
                         const centerY = (primaryInit.y + dy) + 100;
                         const targetZone = getDeepestZoneAt(centerX, centerY);
 
-                        currentZones.forEach(z => {
+                        (currentZones || []).forEach(z => {
                             const zEl = document.getElementById(z.id);
                             if (zEl) {
                                 if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
@@ -2152,7 +1989,7 @@ if (canMoveZone) {
                     renderConnections();
                 };
 
-                const onMouseUp = async (upEvent) => {
+                const onMouseUp = async () => {
                     if (!isDragging) return;
                     isDragging = false;
 
@@ -2166,14 +2003,13 @@ if (canMoveZone) {
                     const primaryInit = initialNodePositions.get(nodesToMove[0].id);
 
                     if (primaryInit) {
-                        // Wir nutzen direkt die frisch errechnete Position des Knotens aus dem DOM
                         const centerX = nodesToMove[0].pos_x + 160;
                         const centerY = nodesToMove[0].pos_y + 100;
                         const targetZone = getDeepestZoneAt(centerX, centerY);
                         targetZoneId = targetZone ? targetZone.id : null;
                     }
 
-                    currentZones.forEach(z => {
+                    (currentZones || []).forEach(z => {
                         const zEl = document.getElementById(z.id);
                         if (zEl) zEl.classList.remove('zone-hover-highlight');
                     });
@@ -2210,10 +2046,9 @@ if (canMoveZone) {
         canvas.appendChild(el);
     });
 
-    window.adjustCanvasBounds();
+    if (typeof window.adjustCanvasBounds === 'function') window.adjustCanvasBounds();
     renderConnections();
 }
-
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
