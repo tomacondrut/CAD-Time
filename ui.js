@@ -359,7 +359,17 @@ window.selectColorSwatch = function (hex) {
 // =============================================================================
 // 4. SIDEBAR, MAUSRAD-ZEIT & ZONEN-ANSICHT
 // =============================================================================
-window.handleTimeWheel = function(e, type) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar & Mausrad-Eingabe
+ * ERSETZEN IN: ui.js (Funktion handleTimeWheel)
+ * Zeitstempel: 2026-08-28 21:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 21:05]: 'input'-Event nach Wertänderung gefeuert, um State-Updates sicherzustellen.
+ * =============================================================================
+ */
+window.handleTimeWheel = function (e, type) {
     e.preventDefault();
     e.stopPropagation();
 
@@ -381,9 +391,23 @@ window.handleTimeWheel = function(e, type) {
 
     hourInput.value = Math.floor(totalMinutes / 60);
     minInput.value = (totalMinutes % 60).toString().padStart(2, '0');
+
+    // Stellt sicher, dass angebundene UI-Listener aktualisiert werden
+    hourInput.dispatchEvent(new Event('input', { bubbles: true }));
+    minInput.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
-window.updateSidebarStats = function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar-Statistiken
+ * ERSETZEN IN: ui.js (Funktion updateSidebarStats)
+ * Zeitstempel: 2026-08-28 20:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28]: sbValDrafting korrigiert (verwendet jetzt budDr statt budD).
+ * =============================================================================
+ */
+window.updateSidebarStats = function () {
     const proj = getCurrentProject();
     let totalD = 0;
     let totalDr = 0;
@@ -417,95 +441,20 @@ window.updateSidebarStats = function() {
     document.getElementById('sbPctDrafting').textContent = `${pctDr}%`;
 
     document.getElementById('sbValDesign').textContent = `${formatHoursToHM(totalD)} / ${formatHoursToHM(budD)}`;
-    document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budD)}`;
+    document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budDr)}`;
 
     document.getElementById('btnAdminProjects').style.display = isAdmin ? 'inline' : 'none';
 
-    // NEU: Rahmenliste in der Sidebar aktualisieren
     if (window.renderSidebarZones) window.renderSidebarZones();
 };
 
-/**
- * =============================================================================
- * Funktion: window.renderSidebarZones
- * ERSETZEN IN: app.js (oder ui.js, wo auch immer sie zuletzt stand)
- * Update: Sortierung nach Fläche (Breite x Höhe) absteigend.
- * =============================================================================
- */
-window.renderSidebarZones = function() {
-    const container = document.getElementById('sidebarZonesContainer');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    // Top-Level Zonen nach Größe (Fläche: Breite * Höhe) ABSTEIGEND sortieren
-    const topZones = currentZones.filter(z => !z.parent_zone_id)
-        .sort((a, b) => {
-            const areaA = (parseFloat(a.width) || 0) * (parseFloat(a.height) || 0);
-            const areaB = (parseFloat(b.width) || 0) * (parseFloat(b.height) || 0);
-            return areaB - areaA;
-        });
-
-    if (topZones.length === 0) {
-        container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Bereiche definiert.</div>';
-        return;
+window.isolateZone = function (zoneId) {
+    if (typeof window.toggleIsolateZone === 'function') {
+        window.toggleIsolateZone(zoneId);
     }
-
-    topZones.forEach(zone => {
-        const isHidden = window.hiddenTopZoneIds && window.hiddenTopZoneIds.has(zone.id);
-        const el = document.createElement('div');
-
-        el.style.display = 'flex';
-        el.style.justifyContent = 'space-between';
-        el.style.alignItems = 'center';
-        el.style.padding = '6px 10px';
-        el.style.background = '#2d3748';
-        el.style.borderRadius = '4px';
-        el.style.fontSize = '12px';
-        el.style.color = isHidden ? '#718096' : '#e2e8f0';
-
-        el.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px;">
-                <span style="color:${zone.color_hex || '#a0aec0'}; font-size:14px;">■</span>
-                <span style="cursor:pointer; ${isHidden ? 'text-decoration:line-through;' : ''}" onclick="centerViewOnVisible('${zone.id}')">${escapeHtml(zone.title)}</span>
-            </div>
-            <div style="display:flex; gap:6px;">
-                <button title="Sichtbarkeit umschalten" onclick="toggleZoneVisibility('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.5' : '1'};">👁️</button>
-                <button title="Nur diesen Bereich isolieren" onclick="toggleIsolateZone('${zone.id}')" style="background:none; border:none; cursor:pointer;">🎯</button>
-            </div>
-        `;
-        container.appendChild(el);
-    });
 };
 
-window.isolateZone = function(zoneId) {
-    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-    window.hiddenTopZoneIds.clear();
-    currentZones.filter(z => !z.parent_zone_id && z.id !== zoneId).forEach(z => window.hiddenTopZoneIds.add(z.id));
 
-    if (window.renderCanvas) window.renderCanvas();
-    if (window.renderSidebarZones) window.renderSidebarZones();
-
-    requestAnimationFrame(() => {
-        if (window.centerViewOnVisible) window.centerViewOnVisible(zoneId);
-    });
-};
-
-window.toggleZoneVisibility = function(zoneId) {
-    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-    if (window.hiddenTopZoneIds.has(zoneId)) {
-        window.hiddenTopZoneIds.delete(zoneId);
-    } else {
-        window.hiddenTopZoneIds.add(zoneId);
-    }
-
-    if (window.renderCanvas) window.renderCanvas();
-    if (window.renderSidebarZones) window.renderSidebarZones();
-
-    requestAnimationFrame(() => {
-        if (window.centerViewOnVisible) window.centerViewOnVisible();
-    });
-};
 
 // =============================================================================
 // 5. BLÖCKE & ZONEN (ERSTELLEN & BEARBEITEN)
@@ -1405,6 +1354,16 @@ window.renderBudgetAuditLogs = function () {
     container.innerHTML = html;
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Projektverwaltung (Admin)
+ * ERSETZEN IN: ui.js (Funktion handleDeleteProject)
+ * Zeitstempel: 2026-08-28 20:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28]: fetchProjects() und fetchCanvasData() nach Löschen ergänzt.
+ * =============================================================================
+ */
 window.handleDeleteProject = async function (projectId) {
     if (currentProjects.length <= 1) {
         showToast('Das letzte verbleibende Projekt kann nicht gelöscht werden.', 'error');
@@ -1414,9 +1373,13 @@ window.handleDeleteProject = async function (projectId) {
     if (confirmed) {
         await db.from('projects').delete().eq('id', projectId);
         if (activeProjectId === projectId) {
-            activeProjectId = currentProjects[0].id;
+            activeProjectId = currentProjects.find(p => p.id !== projectId)?.id || currentProjects[0].id;
+            localStorage.setItem('cad_tm_project', activeProjectId);
         }
         showToast('Projekt gelöscht', 'success');
+        if (typeof fetchProjects === 'function') fetchProjects();
+        if (typeof fetchCanvasData === 'function') fetchCanvasData();
+        if (typeof fetchAuditLogs === 'function') fetchAuditLogs();
     }
 };
 
@@ -1603,14 +1566,40 @@ window.toggleHandles = function () {
  *     (Block oder Zone) darf gleichzeitig ausgeklappt sein.
  * =============================================================================
  */
-window.toggleZoneLogs = function(e, zoneId) {
-    if (e) e.stopPropagation();
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Exklusives Log-Ausklappen für Zonen)
+ * ERSETZEN IN: ui.js (Funktion toggleZoneLogs)
+ * Zeitstempel: 2026-08-29 20:46:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:50:00 CEST]: Single-Expanded-Log Prinzip.
+ *   - [2026-08-29 20:46:00 CEST]: Direkter Aufruf von renderCanvas() statt 
+ *     asynchronem fetchCanvasData(), um sofortiges Öffnen/Schließen zu gewährleisten.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Exklusives Log-Ausklappen für Zonen)
+ * ERSETZEN IN: ui.js (Funktion toggleZoneLogs)
+ * Zeitstempel: 2026-08-29 20:53:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:53:00 CEST]: stopImmediatePropagation ergänzt, um 
+ *     Event-Bubbling zuverlässig zu stoppen und sofort neu zu zeichnen.
+ * =============================================================================
+ */
+window.toggleZoneLogs = function (e, zoneId) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    }
     if (!window.expandedZones) window.expandedZones = new Set();
     if (!window.expandedNodes) window.expandedNodes = new Set();
 
     const isCurrentlyOpen = window.expandedZones.has(zoneId);
 
-    // Alle anderen Zonen und Blöcke schließen
     window.expandedZones.clear();
     window.expandedNodes.clear();
 
@@ -1618,7 +1607,7 @@ window.toggleZoneLogs = function(e, zoneId) {
         window.expandedZones.add(zoneId);
     }
 
-    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+    if (typeof renderCanvas === 'function') renderCanvas();
 };
 
 /**
@@ -1805,6 +1794,29 @@ window.handleOpenAddNoteModal = function (x, y) {
     openModal('newNoteModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sticky Notes & Automatische Zonen-Zuweisung)
+ * ERSETZEN IN: ui.js (Funktion handleAddNote)
+ * Zeitstempel: 2026-08-28 23:58:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 20:30:00 CEST]: Checklisten & To-Dos.
+ *   - [2026-08-28 23:58:00 CEST]: Automatische Ermittlung von targetZoneId 
+ *     beim Erstellen einer Notiz (getDeepestZoneAt) ergänzt, damit Notizen 
+ *     beim Ausblenden/Isolieren von Rahmen korrekt mit ausgeblendet werden.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sticky Notes & Automatische Zonen-Zuweisung)
+ * ERSETZEN IN: ui.js (Funktion handleAddNote)
+ * Zeitstempel: 2026-08-29 00:30:00 CEST
+ * Breadcrumb: Automatische Ermittlung von targetZoneId beim Erstellen einer Notiz,
+ * damit Notizen beim Ausblenden/Isolieren von Rahmen korrekt mit verschwinden.
+ * =============================================================================
+ */
 window.handleAddNote = async function (e) {
     if (e) e.preventDefault();
     const noteType = document.querySelector('input[name="newNoteType"]:checked').value;
@@ -1843,6 +1855,12 @@ window.handleAddNote = async function (e) {
         items: checklistItems
     });
 
+    // NEU: Automatische Zuweisung der Notiz an den Kasten/Rahmen an diesen Koordinaten
+    const targetZone = (typeof getDeepestZoneAt === 'function')
+        ? getDeepestZoneAt(posX + 100, posY + 50)
+        : null;
+    const targetZoneId = targetZone ? targetZone.id : null;
+
     const { error } = await db.from('project_nodes').insert([{
         project_id: activeProjectId,
         name: payload,
@@ -1856,7 +1874,8 @@ window.handleAddNote = async function (e) {
         color_hex: color,
         created_by: activeUserCode || 'COT',
         pos_x: posX,
-        pos_y: posY
+        pos_y: posY,
+        zone_id: targetZoneId // <--- Verknüpft die Notiz mit dem Rahmen
     }]);
 
     if (error) {

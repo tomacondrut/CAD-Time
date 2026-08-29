@@ -18,13 +18,65 @@ window.isAdmin = false;
 window.activeUserCode = '';
 window.activeProjectId = 'proj_default';
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Farb-Paletten (Global)
+ * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
+ * Zeitstempel: 2026-08-28 22:50:00 CEST
+ * Breadcrumb: [2026-08-28 22:50:00 CEST] 3 neue komplementäre Farben hinzugefügt: 
+ * Ziegelrot, Ockergelb und Aubergine, zur Erweiterung der Block/Rahmen-Auswahl.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Farb-Paletten (High-Contrast Edition)
+ * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
+ * Zeitstempel: 2026-08-28 23:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 22:50:00 CEST]: 9 gedeckte Erdfarben.
+ *   - [2026-08-28 23:05:00 CEST]: Kontrastoptimierung: Helle, gesättigte Töne
+ *     gewählt, um Differenzierung auf Dark-Sidebar und Light-Canvas zu maximieren.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Farb-Paletten (Dunkelgrau & Gelb Update)
+ * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
+ * Zeitstempel: 2026-08-29 20:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition.
+ *   - [2026-08-29 20:50:00 CEST]: Türkis & Koralle ersetzt durch Dunkelgrau 
+ *     und Sonnengelb für eine klarere Differenzierung.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Farb-Paletten (Farblehre & Farbkreis-Sortierung)
+ * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
+ * Zeitstempel: 2026-08-29 21:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition.
+ *   - [2026-08-29 20:50:00 CEST]: Dunkelgrau & Sonnengelb integriert.
+ *   - [2026-08-29 21:15:00 CEST]: Anordnung strikt nach dem Farbkreis (Rot bis 
+ *     Magenta) + neutrale/erdige Akzenttöne am Ende für intuitive Farbwahl.
+ * =============================================================================
+ */
 const COLOR_PRESETS = [
-    { name: 'Stahlblau', hex: '#2b6cb0' },
-    { name: 'Salbeigrün', hex: '#38a169' },
-    { name: 'Schiefergrau', hex: '#4a5568' },
-    { name: 'Kupfer', hex: '#c05621' },
-    { name: 'Dunkel-Petrol', hex: '#319795' },
-    { name: 'Gedämpftes Indigo', hex: '#553c9a' }
+    { name: 'Rubinrot', hex: '#dc2626' },
+    { name: 'Bernstein', hex: '#ea580c' },
+    { name: 'Sonnengelb', hex: '#eab308' },
+    { name: 'Smaragdgrün', hex: '#16a34a' },
+    { name: 'Königsblau', hex: '#2563eb' },
+    { name: 'Violett', hex: '#7c3aed' },
+    { name: 'Magenta', hex: '#c026d3' },
+    { name: 'Ockergold', hex: '#b45309' },
+    { name: 'Dunkelgrau', hex: '#4b5563' }
 ];
 
 // Globale State-Arrays

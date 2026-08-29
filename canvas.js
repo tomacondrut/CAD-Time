@@ -63,32 +63,38 @@ let contextTargetNodeId = null;
  *   - [2026-08-26] Position (PanX, PanY) und Zoom (Scale) im localStorage sichern.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine (Zero-Flicker GPU Transform)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * =============================================================================
+ */
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
     const viewportEl = document.getElementById('viewport');
+    if (!canvasEl || !viewportEl) return;
 
     if (animate) {
-        canvasEl.style.transition = 'transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)';
-        viewportEl.style.transition = 'background-position 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), background-size 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)';
+        canvasEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+        viewportEl.style.transition = 'background-position 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-size 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
         setTimeout(() => {
             canvasEl.style.transition = 'none';
             viewportEl.style.transition = 'none';
-        }, 250);
+        }, 200);
     } else {
         canvasEl.style.transition = 'none';
         viewportEl.style.transition = 'none';
     }
 
     canvasEl.style.transformOrigin = '0 0';
-    canvasEl.style.transform = `translate(${window.currentPanX}px, ${window.currentPanY}px) scale(${window.currentScale})`;
+    // GPU-Beschleunigung erzwingen (translate3d)
+    canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    // Viewport-Raster (Infinite Grid) synchronisieren
+    // Viewport-Raster nur über Position/Größe schieben (KEIN neu zeichnen des radial-gradients!)
     const scaledGridSize = 24 * window.currentScale;
     viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
     viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
-
-    const dotSize = Math.max(1, 1.5 * window.currentScale);
-    viewportEl.style.backgroundImage = `radial-gradient(circle, #cbd5e0 ${dotSize}px, transparent ${dotSize}px)`;
 
     // Viewport-Zustand im Cache sichern
     localStorage.setItem('cad_tm_panX', window.currentPanX);
@@ -96,7 +102,7 @@ function applyCanvasTransform(animate = false) {
     localStorage.setItem('cad_tm_scale', window.currentScale);
 }
 
-window.handleLiveSplineMove = function(e) {
+window.handleLiveSplineMove = function (e) {
     if (connectingFirstNodeId) {
         const coords = getCanvasCoords(e.clientX, e.clientY);
         renderConnections(coords);
@@ -137,7 +143,7 @@ window.toggleNoteCollapse = async function (e, nodeId) {
  *     für Rechtsklick-Löschungen integriert.
  * =============================================================================
  */
-window.handleCanvasContextMenu = function(e) {
+window.handleCanvasContextMenu = function (e) {
     e.preventDefault();
     if (e.target.closest('button, input, select, .sidebar')) return;
 
@@ -186,7 +192,7 @@ window.handleCanvasContextMenu = function(e) {
     contextMenuCoords = getCanvasCoords(e.clientX, e.clientY);
 };
 
-window.cancelConnectionMode = function() {
+window.cancelConnectionMode = function () {
     connectingFirstNodeId = null;
     connectingFirstPoint = null;
     renderConnections();
@@ -233,14 +239,85 @@ function initPanzoom() {
     let isDraggingCanvas = false;
     let startMouseX = 0, startMouseY = 0;
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Panzoom Drag Controller (Button & Zone Action Guard)
+ * ERSETZEN IN: canvas.js (Im mousedown-Listener von initPanzoom)
+ * Zeitstempel: 2026-08-29 20:58:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:58:00 CEST]: .zone-btn, .zone-actions und .zone-body explizit 
+ *     vom Viewport-Canvas-Drag ausgeschlossen, damit Klicks zuverlässig feuern.
+ * =============================================================================
+ */
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Panzoom & Global Zonen-Log Auto-Close
+ * ERSETZEN IN: canvas.js (Im mousedown-Listener von initPanzoom)
+ * Zeitstempel: 2026-08-29 20:42:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:50:00 CEST]: Single-Expanded-Log Prinzip.
+ *   - [2026-08-29 20:42:00 CEST]: Zuverlässiger Auto-Close für offene Zonen-Logs
+ *     über globalen mousedown-Listener implementiert (umgeht pointer-events & Drag-Locks).
+ * =============================================================================
+ */
+    /**
+     * =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: Panzoom & Gezielter Zonen-Auto-Close (Outside-Zone-Click)
+     * ERSETZEN IN: canvas.js (Im mousedown-Listener von initPanzoom)
+     * Zeitstempel: 2026-08-29 20:46:00 CEST
+     * Breadcrumbs:
+     *   - [2026-08-29 20:42:00 CEST]: Globaler Auto-Close.
+     *   - [2026-08-29 20:46:00 CEST]: Bounding-Box-Prüfung integriert. Klicks 
+     *     innerhalb des aktiven Rahmens lassen das Log-Panel offen (Panning möglich), 
+     *     Klicks außerhalb schließen das Panel sofort.
+     * =============================================================================
+     */
     viewport.addEventListener('mousedown', (e) => {
+        // 1. Auto-Close nur wenn AUSSERHALB des geöffneten Rahmens geklickt wird
+        if (window.expandedZones && window.expandedZones.size > 0) {
+            const isInsideLogBody = e.target.closest('.zone-body');
+            const isTimesBtn = e.target.closest('.btn-toggle-zone-times');
+
+            if (!isInsideLogBody && !isTimesBtn) {
+                const canvasCoords = getCanvasCoords(e.clientX, e.clientY);
+                let clickedInsideActiveZone = false;
+
+                for (const zoneId of window.expandedZones) {
+                    const activeZone = (currentZones || []).find(z => z.id === zoneId);
+                    if (activeZone) {
+                        const zX = parseFloat(activeZone.pos_x) || 0;
+                        const zY = parseFloat(activeZone.pos_y) || 0;
+                        const zW = parseFloat(activeZone.width) || 0;
+                        const zH = parseFloat(activeZone.height) || 0;
+
+                        if (
+                            canvasCoords.x >= zX && canvasCoords.x <= (zX + zW) &&
+                            canvasCoords.y >= zY && canvasCoords.y <= (zY + zH)
+                        ) {
+                            clickedInsideActiveZone = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!clickedInsideActiveZone) {
+                    window.expandedZones.clear();
+                    renderCanvas();
+                }
+            }
+        }
+
         if (e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             if (selectedNodeIds.size > 0) {
                 selectedNodeIds.clear();
                 renderCanvas();
             }
         }
-        const isControl = e.target.closest('button, input, select, .assembly-card, .note-card, .project-zone-header, .zone-resize-handle');
+
+        const isControl = e.target.closest('button, input, select, .assembly-card, .note-card, .project-zone-header, .zone-resize-handle, .zone-actions, .zone-body, .zone-btn');
         if (!isControl || e.target.id === 'canvas' || e.target.id === 'viewport' || e.target.id === 'connections-layer') {
             isDraggingCanvas = true;
             startMouseX = e.clientX - window.currentPanX;
@@ -463,7 +540,7 @@ function getCanvasCoords(clientX, clientY) {
  * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Instanz-Duplizierung ergänzt
  * =============================================================================
  */
-window.handleContextMenuAction = async function(type) {
+window.handleContextMenuAction = async function (type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
 
@@ -567,7 +644,7 @@ function getNodeHandleCoords(node, handleType) {
     }
 }
 
-window.handleEndpointClick = async function(e, nodeId, pointType) {
+window.handleEndpointClick = async function (e, nodeId, pointType) {
     e.stopPropagation();
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -625,7 +702,7 @@ window.handleEndpointClick = async function(e, nodeId, pointType) {
     }
 };
 
-window.handleStartZoneFlow = function(e, zoneId) {
+window.handleStartZoneFlow = function (e, zoneId) {
     e.stopPropagation();
     if (!connectingFlowZoneId) {
         connectingFlowZoneId = zoneId;
@@ -682,7 +759,7 @@ async function createZoneFlowArrow(sourceId, targetId) {
     renderConnections();
 }
 
-window.handleDeleteFlowArrow = async function(arrowId) {
+window.handleDeleteFlowArrow = async function (arrowId) {
     const confirmed = await customConfirm('Materialfluss löschen', 'Möchtest du diesen Materialfluss-Pfeil entfernen?');
     if (confirmed) {
         await db.from('zone_flow_arrows').delete().eq('id', arrowId);
@@ -694,7 +771,7 @@ window.handleDeleteFlowArrow = async function(arrowId) {
     }
 };
 
-window.handleDisconnectClick = async function(sourceId, targetId) {
+window.handleDisconnectClick = async function (sourceId, targetId) {
     const edge = currentEdges.find(e => e.source === sourceId && e.target === targetId);
     const edgeCreator = edge ? (edge.created_by || 'COT') : 'COT';
     const canDeleteEdge = isAdmin || (activeUserCode && activeUserCode === edgeCreator);
@@ -736,7 +813,7 @@ function isNodeHiddenByAncestor(nodeId) {
     return false;
 }
 
-window.toggleSubtreeCollapse = function(e, nodeId) {
+window.toggleSubtreeCollapse = function (e, nodeId) {
     e.stopPropagation();
     if (collapsedParents.has(nodeId)) {
         collapsedParents.delete(nodeId);
@@ -757,7 +834,7 @@ window.toggleSubtreeCollapse = function(e, nodeId) {
  *     Blöcke und Zonen vor dem Öffnen.
  * =============================================================================
  */
-window.toggleInlineLogs = function(nodeId) {
+window.toggleInlineLogs = function (nodeId) {
     if (!window.expandedNodes) window.expandedNodes = new Set();
     if (!window.expandedZones) window.expandedZones = new Set();
 
@@ -826,7 +903,7 @@ function getDeepestZoneAt(x, y, excludeZoneIds = []) {
  *   - [2026-08-27 18:20:00 CEST]: isZoneHidden gegen fehlerhafte Sets abgesichert.
  * =============================================================================
  */
-window.isZoneHidden = function(zoneId) {
+window.isZoneHidden = function (zoneId) {
     if (!zoneId || !window.hiddenTopZoneIds || window.hiddenTopZoneIds.size === 0) return false;
     if (window.hiddenTopZoneIds.has(zoneId)) return true;
 
@@ -842,7 +919,7 @@ window.isZoneHidden = function(zoneId) {
     return false;
 };
 
-window.centerViewOnVisible = function(targetZoneId = null) {
+window.centerViewOnVisible = function (targetZoneId = null) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -873,11 +950,20 @@ window.centerViewOnVisible = function(targetZoneId = null) {
         });
     }
 
+    /**
+  * =============================================================================
+  * Projekt: CAD Time Manager
+  * Domain: Viewport & Kamera-Fokus
+  * AUSTAUSCH IN: canvas.js (Funktion window.centerViewOnVisible - Letzte Zeilen)
+  * =============================================================================
+  */
+    // ... (Der obere Teil von centerViewOnVisible bleibt gleich) ...
+
     if (!hasElements || !isFinite(minX) || !isFinite(minY)) {
         window.currentScale = 1;
         window.currentPanX = 50;
         window.currentPanY = 50;
-        applyCanvasTransform(true);
+        applyCanvasTransform(false); // <--- HIER AUF FALSE
         return;
     }
 
@@ -902,10 +988,10 @@ window.centerViewOnVisible = function(targetZoneId = null) {
     window.currentPanX = (vw / 2) - (centerX * window.currentScale);
     window.currentPanY = (vh / 2) - (centerY * window.currentScale);
 
-    applyCanvasTransform(true);
+    applyCanvasTransform(false); // <--- UND HIER AUF FALSE
 };
 
-window.toggleZoneLock = async function(e, zoneId) {
+window.toggleZoneLock = async function (e, zoneId) {
     e.stopPropagation();
     const zone = currentZones.find(z => z.id === zoneId);
     if (!zone) return;
@@ -1037,14 +1123,103 @@ function renderCanvas() {
 
     const sortedZones = [...(currentZones || [])].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
 
+
+    /**
+         * =============================================================================
+         * Projekt: CAD Time Manager
+         * Domain: NATIVE Canvas Engine & Rendering (Visibility DOM Fix)
+         * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+         * Zeitstempel: 2026-08-29 20:30:00 CEST
+         * Breadcrumbs:
+         *   - [2026-08-29 20:30:00 CEST]: Zerstörerische 'return'-Abbrüche bei versteckten 
+         *     Zonen und Blöcken entfernt. Alle Elemente müssen zwingend ins DOM gerendert 
+         *     werden, damit die CSS-Isolation (syncVisibilityToDOM) nach einem Datenbank-Refresh 
+         *     (z.B. Rename) nicht ins Leere greift.
+         * =============================================================================
+         */
+    /**
+     * =============================================================================
+     * Projekt: CAD Time Manager
+     * Domain: NATIVE Canvas Engine & Rendering (Z-Index Fix für Zonen-Logs)
+     * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+     * Zeitstempel: 2026-08-29 20:45:00 CEST
+     * Breadcrumbs:
+     *   - [2026-08-27 18:15:00 CEST]: Z-Index Architektur überarbeitet.
+     *   - [2026-08-29 20:45:00 CEST]: Fix: Der Z-Index des gesamten Rahmens wird beim 
+     *     Ausklappen der Zonen-Logs temporär auf 2500 angehoben, damit das 
+     *     Log-Fenster nicht hinter Baugruppen (Z-Index 100) verschwindet.
+     * =============================================================================
+     */
+    /**
+  * =============================================================================
+  * Projekt: CAD Time Manager
+  * Domain: NATIVE Canvas Engine & Rendering (Zonen Header & Auto-Close Fix)
+  * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+  * Zeitstempel: 2026-08-29 20:45:00 CEST
+  * Breadcrumbs:
+  *   - [2026-08-29 20:30:00 CEST]: Visibility DOM Fix & Z-Index Korrektur.
+  *   - [2026-08-29 20:45:00 CEST]: 
+  *     1. Header-Layout: Buttons direkt neben den Budgets verankert (flex-wrap ohne 100% Stretch).
+  *     2. Auto-Close: Bubble-Schutz für .zone-actions & .zone-btn eingebaut, damit Klick auf '⏱️ Zeiten' nicht sofort wieder schließt.
+  * =============================================================================
+  */
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: NATIVE Canvas Engine & Rendering (Zonen-Logs Fix & Auto-Close)
+ * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+ * Zeitstempel: 2026-08-29 20:52:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:52:00 CEST]: 
+ *     1. mousedown auf .zone-actions stoppt sofortige Drag-Initiierung.
+ *     2. Kompaktes 420px Log-Panel auf der linken Seite fixiert.
+ *     3. Auto-Close: Klick in freie Rahmenfläche schließt offene Logs zuverlässig.
+ * =============================================================================
+ */
+    /**
+   * =============================================================================
+   * Projekt: CAD Time Manager
+   * Domain: NATIVE Canvas Engine & Rendering (Robuste DOM-Event Anbindung)
+   * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+   * Zeitstempel: 2026-08-29 21:00:00 CEST
+   * Breadcrumbs:
+   *   - [2026-08-29 21:00:00 CEST]: Direkte EventListener-Bindung für '⏱️ Zeiten' 
+   *     und den Zonen-Hintergrund (Auto-Close) statt Inline-HTML-Attributen.
+   * =============================================================================
+   */
+    /**
+  * =============================================================================
+  * Projekt: CAD Time Manager
+  * Domain: NATIVE Canvas Engine & Rendering (Zonen Header 1-Line Layout Fix)
+  * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+  * Zeitstempel: 2026-08-29 20:55:00 CEST
+  * Breadcrumbs:
+  *   - [2026-08-29 20:52:00 CEST]: Direct Event-Binding & Auto-Close.
+  *   - [2026-08-29 20:55:00 CEST]: Header auf eine einheitliche Zeile ausgerichtet:
+  *     Titelbereich (260px) -> Budgets -> Zeiten-Button. Aktionen oben rechts verankert.
+  * =============================================================================
+  */
+    // 1. ZONEN RENDERN
+    /**
+  * =============================================================================
+  * Projekt: CAD Time Manager
+  * Domain: NATIVE Canvas Engine & Rendering (Zonen-Header 2-Zeilen-Layout)
+  * ERSETZEN IN: canvas.js (Funktion renderCanvas -> 1. ZONEN RENDERN)
+  * Zeitstempel: 2026-08-29 21:10:00 CEST
+  * Breadcrumbs:
+  *   - [2026-08-29 20:55:00 CEST]: 1-Zeilen Layout.
+  *   - [2026-08-29 21:10:00 CEST]: Header-Layout auf 2 Zeilen umgestellt:
+  *     Zeile 1: Titel & Zuweisungskürzel
+  *     Zeile 2: Pie Charts (CAD & Zeichnung) direkt unterhalb + "⏱️ Zeiten"-Button daneben.
+  *     Top-Right: Aktionen (Fluss, Sperren, Edit, Löschen) oben rechts verankert.
+  * =============================================================================
+  */
     // 1. ZONEN RENDERN
     sortedZones.forEach(zone => {
-        if (typeof window.isZoneHidden === 'function' && window.isZoneHidden(zone.id)) return;
-
         const zoneEl = document.createElement('div');
         zoneEl.id = zone.id;
         const canMoveZone = (isAdmin || (activeUserCode && activeUserCode === zone.created_by)) && !zone.is_locked;
-        const isZoneExpanded = window.expandedZones.has(zone.id);
+        const isZoneExpanded = window.expandedZones && window.expandedZones.has(zone.id);
 
         zoneEl.className = `project-zone ${zone.is_locked ? 'zone-locked' : 'no-pan'} ${canMoveZone ? 'draggable-enabled' : ''}`;
         zoneEl.style.left = `${zone.pos_x}px`;
@@ -1052,7 +1227,7 @@ function renderCanvas() {
         zoneEl.style.width = `${zone.width}px`;
         zoneEl.style.height = `${zone.height}px`;
         zoneEl.style.borderColor = zone.color_hex || '#a0aec0';
-        zoneEl.style.zIndex = 'auto';
+        zoneEl.style.zIndex = isZoneExpanded ? '2500' : 'auto';
 
         const zStats = zoneRollups[zone.id] || { dSpent: 0, dBudg: 0, drSpent: 0, drBudg: 0, directLogs: [] };
         const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
@@ -1100,43 +1275,47 @@ function renderCanvas() {
 
         let assignedBadgesHtml = '';
         if (zone.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:8px; display:inline-flex; align-items:center; gap:3px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
         }
         if (zone.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
         }
 
         zoneEl.innerHTML = `
       ${badgeHtml}
-      <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; align-items: flex-start;">
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <div style="display:flex; align-items:center;">
-             <span>📍 ${escapeHtml(zone.title)}</span>
-             ${assignedBadgesHtml}
-          </div>
-          <div style="display:flex; gap:16px; cursor:default; align-items: center; margin-top: 2px;">
-              <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
-                  <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;">
-                      <div class="pie-inner" style="width: 14px; height: 14px;"></div>
-                  </div>
-                  <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.2;">
-                      <span style="color: #4a5568; font-weight: 800;">CAD</span>
-                      <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
-                  </div>
-              </div>
-              <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
-                  <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;">
-                      <div class="pie-inner" style="width: 14px; height: 14px;"></div>
-                  </div>
-                  <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.2;">
-                      <span style="color: #4a5568; font-weight: 800;">Zeichnung</span>
-                      <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
-                  </div>
-              </div>
-          </div>
+      <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; padding-right: 140px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding: 8px 12px;">
+        
+        <!-- Zeile 1: Titel & Zuweisungen -->
+        <div style="display:flex; align-items:center; overflow: hidden; white-space: nowrap; max-width: 100%;">
+          <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">📍 ${escapeHtml(zone.title)}</span>
+          ${assignedBadgesHtml}
         </div>
-        <div class="zone-actions">
-          <button type="button" class="zone-btn" title="Zeiten auf Rahmen buchen & Details" onclick="toggleZoneLogs(event, '${zone.id}')">⏱️ Zeiten</button>
+
+        <!-- Zeile 2: Pie Charts direkt unterhalb + Button -->
+        <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">
+            <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
+                <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;">
+                    <div class="pie-inner" style="width: 14px; height: 14px;"></div>
+                </div>
+                <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
+                    <span style="color: #4a5568; font-weight: 800;">CAD</span>
+                    <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
+                </div>
+            </div>
+            <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
+                <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;">
+                    <div class="pie-inner" style="width: 14px; height: 14px;"></div>
+                </div>
+                <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
+                    <span style="color: #4a5568; font-weight: 800;">Zeichnung</span>
+                    <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
+                </div>
+            </div>
+            <button type="button" class="zone-btn btn-toggle-zone-times" title="Zeiten auf Rahmen buchen & Details" style="padding: 2px 7px; font-weight: bold; border: 1px solid #cbd5e0; border-radius: 4px; background: #fff; flex-shrink: 0; font-size: 11px;">⏱️ Zeiten</button>
+        </div>
+
+        <!-- Aktionen in der rechten oberen Ecke -->
+        <div class="zone-actions" style="position: absolute; right: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 60;">
           <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
           <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
           ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
@@ -1145,9 +1324,9 @@ function renderCanvas() {
           ` : ''}
         </div>
       </div>
-      
+
       ${isZoneExpanded ? `
-      <div class="zone-body no-pan" style="position: relative; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border-bottom: 1px dashed #cbd5e0; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      <div class="zone-body no-pan" style="position: absolute; top: 56px; left: 10px; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.18); width: 420px; max-width: 420px;">
         <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
           <div class="time-inputs-row">
             <select class="log-input" style="font-weight: bold; width: 60px;">
@@ -1173,6 +1352,25 @@ function renderCanvas() {
 
       <div class="zone-resize-handle no-pan" style="position: absolute; z-index: 50;" title="Größe anpassen"></div>
     `;
+
+        // Direkte Event-Bindung für '⏱️ Zeiten'
+        const btnTimes = zoneEl.querySelector('.btn-toggle-zone-times');
+        if (btnTimes) {
+            btnTimes.addEventListener('mousedown', (e) => e.stopPropagation());
+            btnTimes.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (typeof window.toggleZoneLogs === 'function') {
+                    window.toggleZoneLogs(e, zone.id);
+                }
+            });
+        }
+
+        // Klicks innerhalb der offenen Log-Maske isolieren
+        const zoneBody = zoneEl.querySelector('.zone-body');
+        if (zoneBody) {
+            zoneBody.addEventListener('mousedown', (e) => e.stopPropagation());
+            zoneBody.addEventListener('click', (e) => e.stopPropagation());
+        }
 
         if (canMoveZone) {
             let isDragging = false;
@@ -1399,11 +1597,23 @@ function renderCanvas() {
     });
 
     // 2. KNOTEN / BLÖCKE / NOTIZEN RENDERN
-    (currentNodes || []).forEach(node => {
-        // Defensive Sichtbarkeitsprüfung
-        if (node.zone_id && typeof window.isZoneHidden === 'function' && window.isZoneHidden(node.zone_id)) {
-            return;
-        }
+    const originalNodes = currentNodes || [];
+    const sortedNodes = originalNodes.map((n, idx) => ({ node: n, originalIdx: idx })).sort((a, b) => {
+        const aIsExpanded = window.expandedNodes && window.expandedNodes.has(a.node.id);
+        const bIsExpanded = window.expandedNodes && window.expandedNodes.has(b.node.id);
+        const aIsTop = (window.topNodeId === a.node.id) || (window.selectedNodeIds && window.selectedNodeIds.has(a.node.id));
+        const bIsTop = (window.topNodeId === b.node.id) || (window.selectedNodeIds && window.selectedNodeIds.has(b.node.id));
+
+        const aTier = aIsExpanded ? 3 : (aIsTop ? 2 : 1);
+        const bTier = bIsExpanded ? 3 : (bIsTop ? 2 : 1);
+
+        if (aTier !== bTier) return aTier - bTier;
+        return a.originalIdx - b.originalIdx;
+    }).map(wrapper => wrapper.node);
+
+    sortedNodes.forEach(node => {
+        // HIER ENTFERNT: Die "Defensive Sichtbarkeitsprüfung" mit 'return' wurde gelöscht
+
 
         // 2a. STICKY NOTES & TO-DO CARDS
         // =============================================================================
@@ -1560,6 +1770,18 @@ function renderCanvas() {
                 let startClientX = 0, startClientY = 0;
                 let initX = 0, initY = 0;
 
+                /**
+                           * =============================================================================
+                           * Projekt: CAD Time Manager
+                           * Domain: NATIVE Canvas Engine (Zonen-Highlighting für Notizen)
+                           * ERSETZEN IN: canvas.js (Funktion startNoteDrag innerhalb von renderCanvas)
+                           * Zeitstempel: 2026-08-29 20:15:00 CEST
+                           * Breadcrumbs:
+                           *   - [2026-08-27 20:45:00 CEST]: Filter-Logik geschärft & 'note-overdue' ergänzt.
+                           *   - [2026-08-29 20:15:00 CEST]: Zonen-Hover-Highlighting beim Draggen 
+                           *     von Notizen (analog zu Blöcken) hinzugefügt.
+                           * =============================================================================
+                           */
                 const startNoteDrag = (e) => {
                     if (e.target.closest('.note-resize-handle, span[title="Zuklappen"], input[type="checkbox"]')) return;
                     if (e.type === 'mousedown' && e.button !== 0) return;
@@ -1593,6 +1815,19 @@ function renderCanvas() {
                         node.pos_y = Math.round(initY + dy);
                         el.style.left = `${node.pos_x}px`;
                         el.style.top = `${node.pos_y}px`;
+
+                        // Zonen-Highlighting während des Verschiebens
+                        const targetZone = (typeof getDeepestZoneAt === 'function')
+                            ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
+                            : null;
+
+                        (currentZones || []).forEach(z => {
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) {
+                                if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
+                                else zEl.classList.remove('zone-hover-highlight');
+                            }
+                        });
                     };
 
                     const onMouseUp = async () => {
@@ -1604,6 +1839,12 @@ function renderCanvas() {
                         window.removeEventListener('touchmove', onMouseMove);
                         window.removeEventListener('touchend', onMouseUp);
                         window.removeEventListener('touchcancel', onMouseUp);
+
+                        // Highlights beim Loslassen entfernen
+                        (currentZones || []).forEach(z => {
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) zEl.classList.remove('zone-hover-highlight');
+                        });
 
                         const targetZone = (typeof getDeepestZoneAt === 'function')
                             ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
@@ -1711,9 +1952,7 @@ function renderCanvas() {
         }
 
         // 2b. REGULÄRE BAUGRUPPEN / BAUTEILE
-        if (typeof isNodeHiddenByAncestor === 'function' && isNodeHiddenByAncestor(node.id)) {
-            return;
-        }
+        // HIER ENTFERNT: Die isNodeHiddenByAncestor Abfrage mit 'return' wurde gelöscht
 
         const relatedNodeIds = node.linked_id
             ? currentNodes.filter(n => n.linked_id === node.linked_id).map(n => n.id)
@@ -2123,6 +2362,10 @@ function renderCanvas() {
 
     if (typeof window.adjustCanvasBounds === 'function') window.adjustCanvasBounds();
     renderConnections();
+
+    // NEU: Nachdem alles lückenlos ins DOM geladen wurde, übergeben wir an 
+    // unsere Anti-Flacker-Engine, die isolierte Elemente per CSS versteckt.
+    if (typeof window.syncVisibilityToDOM === 'function') window.syncVisibilityToDOM();
 }
 /**
  * =============================================================================
@@ -2169,10 +2412,18 @@ function renderCanvas() {
  *     Das verhindert schiefe Pfeilspitzen bei sehr knappen Abständen.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Materialfluss & Splines (Anti-Layout-Thrashing Fix)
+ * ERSETZEN IN: canvas.js (Funktion renderConnections)
+ * =============================================================================
+ */
 function renderConnections(mouseCoords = null) {
     const svgLayer = document.getElementById('connections-layer');
     if (!svgLayer) return;
 
+    // 1. SVG-Layer leeren
     svgLayer.innerHTML = `
         <defs>
             <marker id="arrowhead" markerWidth="7" markerHeight="5" refX="1.5" refY="2.5" orient="auto">
@@ -2181,7 +2432,36 @@ function renderConnections(mouseCoords = null) {
         </defs>
     `;
 
-    // 1. Hierarchische Kanten (Block zu Block)
+    // 2. BATCH-DOM-READS: Alle Breiten auf einmal lesen (Verhindert Layout-Thrashing)
+    const nodeRects = {};
+    currentEdges.forEach(edge => {
+        if (!nodeRects[edge.source]) {
+            const el = document.getElementById(edge.source);
+            nodeRects[edge.source] = { w: el ? el.offsetWidth : 320, h: el ? el.offsetHeight : 200 };
+        }
+        if (!nodeRects[edge.target]) {
+            const el = document.getElementById(edge.target);
+            nodeRects[edge.target] = { w: el ? el.offsetWidth : 320, h: el ? el.offsetHeight : 200 };
+        }
+    });
+
+    const getFastCoords = (node, handleType) => {
+        const rect = nodeRects[node.id] || { w: 320, h: 200 };
+        const w = rect.w;
+        const h = rect.h;
+        switch (handleType) {
+            case 'top': return { x: node.pos_x + w / 2, y: node.pos_y };
+            case 'bottom': return { x: node.pos_x + w / 2, y: node.pos_y + h };
+            case 'left': return { x: node.pos_x, y: node.pos_y + h / 2 };
+            case 'right': return { x: node.pos_x + w, y: node.pos_y + h / 2 };
+            default: return { x: node.pos_x + w / 2, y: node.pos_y + h };
+        }
+    };
+
+    // 3. FRAGMENT ERSTELLEN FÜR BATCH-DOM-WRITES
+    const fragment = document.createDocumentFragment();
+
+    // 4. Hierarchische Kanten generieren
     currentEdges.forEach(edge => {
         const srcNode = currentNodes.find(n => n.id === edge.source);
         const tgtNode = currentNodes.find(n => n.id === edge.target);
@@ -2192,8 +2472,8 @@ function renderConnections(mouseCoords = null) {
         if (srcHidden || tgtHidden || collapsedParents.has(edge.source)) return;
 
         if (srcNode && tgtNode) {
-            const p1 = getNodeHandleCoords(srcNode, edge.source_handle || 'bottom');
-            const p2 = getNodeHandleCoords(tgtNode, edge.target_handle || 'top');
+            const p1 = getFastCoords(srcNode, edge.source_handle || 'bottom');
+            const p2 = getFastCoords(tgtNode, edge.target_handle || 'top');
 
             const isHorizontal = (edge.source_handle === 'right' || edge.source_handle === 'left') &&
                 (edge.target_handle === 'right' || edge.target_handle === 'left');
@@ -2213,11 +2493,11 @@ function renderConnections(mouseCoords = null) {
             path.setAttribute('title', `Verbindung (${srcNode.name} ➔ ${tgtNode.name}) - Klick zum Trennen`);
             path.addEventListener('click', () => handleDisconnectClick(edge.source, edge.target));
 
-            svgLayer.appendChild(path);
+            fragment.appendChild(path);
         }
     });
 
-    // 2. Materialfluss-Pfeile (Straffere, tangentiale Bogenführung mit geradem Start/Ziel)
+    // 5. Materialfluss-Pfeile generieren (Ohne DOM Reads)
     const arrowsToRender = window.currentFlowArrows || [];
     arrowsToRender.forEach(arrow => {
         const srcZone = currentZones.find(z => String(z.id) === String(arrow.source_zone_id));
@@ -2239,13 +2519,11 @@ function renderConnections(mouseCoords = null) {
         const tgtX2 = tgtX1 + tgtW;
         const tgtY2 = tgtY1 + tgtH;
 
-        let x1, y1, x2, y2, cp1X, cp1Y, cp2X, cp2Y;
-
+        let x1, y1, x2, y2;
         const isTargetBelow = tgtY1 >= srcY2 - 20;
         const isTargetAbove = tgtY2 <= srcY1 + 20;
         const isTargetLeft = tgtX2 <= srcX1 + 20;
 
-        // "Stutzen": Die Linie verläuft erst 10px gerade, bevor sie abbiegt
         const stub = 10;
         const minTangent = 50;
         let pathD = '';
@@ -2254,7 +2532,6 @@ function renderConnections(mouseCoords = null) {
             x1 = srcX1 + srcW / 2; y1 = srcY2;
             x2 = tgtX1 + tgtW / 2; y2 = tgtY1;
             const dist = Math.max(minTangent, Math.abs(y2 - y1) * 0.4);
-            // M = Start | L = Gerade zu | C = Kurve ab hier | L = Gerade in Pfeil
             pathD = `M ${x1} ${y1} L ${x1} ${y1 + stub} C ${x1} ${y1 + stub + dist}, ${x2} ${y2 - stub - dist}, ${x2} ${y2 - stub} L ${x2} ${y2}`;
         } else if (isTargetAbove) {
             x1 = srcX1 + srcW / 2; y1 = srcY1;
@@ -2267,7 +2544,6 @@ function renderConnections(mouseCoords = null) {
             const dist = Math.max(minTangent, Math.abs(x1 - x2) * 0.4);
             pathD = `M ${x1} ${y1} L ${x1 - stub} ${y1} C ${x1 - stub - dist} ${y1}, ${x2 + stub + dist} ${y2}, ${x2 + stub} ${y2} L ${x2} ${y2}`;
         } else {
-            // Rechts (Default)
             x1 = srcX2; y1 = srcY1 + srcH / 2;
             x2 = tgtX1; y2 = tgtY1 + tgtH / 2;
             const dist = Math.max(minTangent, Math.abs(x2 - x1) * 0.4);
@@ -2281,10 +2557,10 @@ function renderConnections(mouseCoords = null) {
         flowPath.setAttribute('title', `Materialfluss: ${srcZone.title} ➔ ${tgtZone.title} (Klick zum Löschen)`);
         flowPath.addEventListener('click', () => handleDeleteFlowArrow(arrow.id));
 
-        svgLayer.appendChild(flowPath);
+        fragment.appendChild(flowPath);
     });
 
-    // 3. Live Spline Preview
+    // 6. Live Spline Preview
     if (connectingFirstPoint && mouseCoords) {
         const p1 = connectingFirstPoint;
         const p2 = mouseCoords;
@@ -2295,8 +2571,11 @@ function renderConnections(mouseCoords = null) {
         const preview = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         preview.setAttribute('d', pathD);
         preview.setAttribute('class', 'preview-connection-line');
-        svgLayer.appendChild(preview);
+        fragment.appendChild(preview);
     }
+
+    // 7. Alles auf einen Schlag ins DOM hängen
+    svgLayer.appendChild(fragment);
 }
 
 /**
@@ -2359,7 +2638,7 @@ window.addEventListener('mousemove', (e) => {
  * Breadcrumb: [2026-08-25] Zonen-Zuweisung bei Paste & DB-Insert Fehler abfangen
  * =============================================================================
  */
-window.handlePasteNodes = async function() {
+window.handlePasteNodes = async function () {
     if (!window.copiedNodeIds || window.copiedNodeIds.length === 0) return;
 
     const coords = getCanvasCoords(window.lastClientX, window.lastClientY);

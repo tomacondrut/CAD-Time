@@ -310,6 +310,33 @@ function renderReportSummary(logs, timeframe) {
     container.innerHTML = html;
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & Tabellen-Rendering (Zonen-Logs Auflösung)
+ * ERSETZEN IN: report.js (Funktionen renderReportDetailsTable & generatePDF)
+ * Zeitstempel: 2026-08-28 21:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:45:00 CEST]: Filter-Optionen 'today'/'yesterday'.
+ *   - [2026-08-28 21:30:00 CEST]: Zonen-Logs Auflösung korrigiert. Wenn log.zone_id 
+ *     vorliegt (node_id = null), wird der Rahmenname sauber als Bereich und 
+ *     als Baugruppe "[Rahmen / Kasten]" ausgegeben, statt "-" und "Unbekannt".
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & Tabellen-Rendering (Zonen-Logs Textbereinigung)
+ * ERSETZEN IN: report.js (Funktion renderReportDetailsTable)
+ * Zeitstempel: 2026-08-28 20:33:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 21:30:00 CEST]: Zonen-Logs Auflösung korrigiert.
+ *   - [2026-08-28 20:33:00 CEST]: Pin-Symbol und Zusatz "(Direktbuchung)" entfernt.
+ *     Ausgabe erfolgt nun schlicht mit dem reinen Rahmen-/Zonennamen.
+ * =============================================================================
+ */
+
 function renderReportDetailsTable(logs) {
     const container = document.getElementById('repDetailsContainer');
     if (logs.length === 0) {
@@ -334,12 +361,24 @@ function renderReportDetailsTable(logs) {
     `;
 
     logs.forEach(log => {
-        const node = currentNodes.find(n => n.id === log.node_id);
-        const nodeName = node ? node.name : 'Unbekannt';
+        let nodeName = 'Unbekannt';
         let zoneName = '-';
-        if (node && node.zone_id) {
-            const zone = currentZones.find(z => z.id === node.zone_id);
-            if (zone) zoneName = zone.title;
+
+        if (log.node_id) {
+            const node = currentNodes.find(n => n.id === log.node_id);
+            if (node) {
+                nodeName = node.name;
+                if (node.zone_id) {
+                    const zone = currentZones.find(z => z.id === node.zone_id);
+                    if (zone) zoneName = zone.title;
+                }
+            }
+        } else if (log.zone_id) {
+            const zone = currentZones.find(z => z.id === log.zone_id);
+            if (zone) {
+                zoneName = zone.title;
+                nodeName = zone.title;
+            }
         }
 
         const d = new Date(log.logged_at);
@@ -350,7 +389,7 @@ function renderReportDetailsTable(logs) {
 
         let timeStr = formatHoursToHM(log.hours);
         if (log.task_type === 'completion') {
-            timeStr = log.note.includes('Revision') || log.note.includes('Ablehnen') ? '↺' : '✔';
+            timeStr = log.note && (log.note.includes('Revision') || log.note.includes('Ablehnen')) ? '↺' : '✔';
         }
 
         html += `
@@ -429,12 +468,24 @@ window.generatePDF = async function () {
         let filterTotalD = 0, filterTotalDr = 0;
 
         reportState.logs.forEach(log => {
-            const node = currentNodes.find(n => n.id === log.node_id);
-            const nodeName = node ? node.name : 'Unbekannt';
+            let nodeName = 'Unbekannt';
             let zoneName = '-';
-            if (node && node.zone_id) {
-                const zone = currentZones.find(z => z.id === node.zone_id);
-                if (zone) zoneName = zone.title;
+
+            if (log.node_id) {
+                const node = currentNodes.find(n => n.id === log.node_id);
+                if (node) {
+                    nodeName = node.name;
+                    if (node.zone_id) {
+                        const zone = currentZones.find(z => z.id === node.zone_id);
+                        if (zone) zoneName = zone.title;
+                    }
+                }
+            } else if (log.zone_id) {
+                const zone = currentZones.find(z => z.id === log.zone_id);
+                if (zone) {
+                    zoneName = zone.title;
+                    nodeName = `📍 ${zone.title} (Direktbuchung)`;
+                }
             }
 
             const d = new Date(log.logged_at);

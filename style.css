@@ -294,16 +294,46 @@ html, body {
 }
 
 /* Baugruppen-Block */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Anti-Flicker & Layer Isolation)
+ * ERSETZEN IN: style.css (Zeile ~208, Block .assembly-card)
+ * Zeitstempel: 2026-08-28 20:30:00 CEST
+ * Breadcrumb: [2026-08-28] Hardware-Compositing und Stacking-Isolation aktiviert.
+ * =============================================================================
+ */
+/* Baugruppen-Block */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Anti-Flicker & Layer Isolation)
+ * ERSETZEN IN: style.css (Zeile ~208, Block .assembly-card)
+ * Zeitstempel: 2026-08-29 20:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 20:30:00 CEST]: Hardware-Compositing aktiviert.
+ *   - [2026-08-29 20:10:00 CEST]: Hardware-Compositing (backface-visibility, translate3d) 
+ *     entfernt, um VRAM-Überlauf und Flackern beim Rauszoomen zu stoppen.
+ * =============================================================================
+ */
 .assembly-card {
-  position: absolute;
-  width: 320px;
-  background: var(--card-bg);
-  border: 2px solid var(--primary);
-  border-radius: 8px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-  z-index: 10;
-  user-select: none;
+    position: absolute;
+    width: 320px;
+    background: var(--card-bg);
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+    user-select: none;
+    isolation: isolate;
+    pointer-events: auto;
 }
+
+    /* Ausgeklappte Karte erhält absolute Ebenen-Priorität */
+    .assembly-card.is-expanded {
+        z-index: 3000 !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+    }
 
 .assembly-card.draggable-enabled {
   cursor: move !important;
@@ -779,18 +809,43 @@ html, body {
         cursor: move !important;
     }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Zonen-Header Layout & Button-Platzierung)
+ * ERSETZEN IN: style.css (Block .project-zone-header)
+ * Zeitstempel: 2026-08-29 20:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:50:00 CEST]: justify-content auf flex-start gesetzt, 
+ *     damit die Buttons (.zone-actions) direkt links neben den Budget-Werten 
+ *     sitzen und bei breiten Rahmen nicht nach rechts außen wandern.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Zonen-Header Grid-Layout & Top-Right Actions)
+ * ERSETZEN IN: style.css (Block .project-zone-header)
+ * Zeitstempel: 2026-08-29 20:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:50:00 CEST]: Flex-Start Alignment.
+ *   - [2026-08-29 20:55:00 CEST]: 1-Zeilen Layout auf gleicher Höhe mit 
+ *     festem Offset für Budgets und absoluter Positionierung der Admin/Fluss-Buttons oben rechts.
+ * =============================================================================
+ */
 .project-zone-header {
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 6px 10px;
+    font-size: 12px;
     font-weight: 700;
     color: #4a5568;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.85);
     border-bottom: 1px dashed #cbd5e0;
+    min-height: 38px;
 }
 
 .zone-actions {
@@ -919,13 +974,34 @@ html, body {
 /* =============================================================================
  * Highlight-Effekt für Instanz-Verknüpfungen
  * ============================================================================= */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Highlight-Effekt ohne Transition-Flicker)
+ * ERSETZEN IN: style.css (Zeile ~498, Block .linked-highlight)
+ * Zeitstempel: 2026-08-28 20:30:00 CEST
+ * Breadcrumb: [2026-08-28] Transition komplett deaktiviert, um Z-Fighting 
+ * und Repaint-Flickern bei Überlappungen zu unterbinden.
+ * =============================================================================
+ */
+/* =============================================================================
+ * Highlight-Effekt für Instanz-Verknüpfungen
+ * ============================================================================= */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Z-Index Bereinigung für Inline-Stacking)
+ * ERSETZEN IN: style.css
+ * Zeitstempel: 2026-08-28 20:55:00 CEST
+ * Breadcrumb: [2026-08-28 20:55:00 CEST] z-index: !important von Highlight- und
+ * Selektionsklassen entfernt, damit das dynamische DOM-/Inline-Stacking greift.
+ * =============================================================================
+ */
+
 .linked-highlight {
     outline: 3px solid #f6ad55 !important;
     box-shadow: 0 0 15px rgba(246, 173, 85, 0.6) !important;
-    /* WICHTIG: Nur outline und box-shadow animieren, NICHT 'all' ! 
-       Sonst ruckelt das Drag & Drop, weil left/top ebenfalls animiert werden. */
-    transition: outline 0.2s ease, box-shadow 0.2s ease !important;
-    z-index: 50 !important;
+    transition: none !important;
 }
 
 .linked-icon {
@@ -1174,11 +1250,10 @@ html, body {
  * Breadcrumb: [2026-08-25 18:30:00 CEST] Selektions-Highlighting für Blöcke & Notizen
  * =============================================================================
  */
-    .assembly-card.selected-node, .note-card.selected-node {
-        outline: 3px solid #ecc94b !important;
-        box-shadow: 0 0 16px rgba(236, 201, 75, 0.85) !important;
-        z-index: 60 !important;
-    }
+.assembly-card.selected-node, .note-card.selected-node {
+    outline: 3px solid #ecc94b !important;
+    box-shadow: 0 0 16px rgba(236, 201, 75, 0.85) !important;
+}
 
 /**
  * =============================================================================
@@ -1441,3 +1516,122 @@ html, body {
         will-change: opacity;
         animation: overdueOpacityPulse 1.8s infinite ease-in-out;
     }
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Classic Tree Sidebar Styling & Drag-Hover)
+ * ERSETZEN / ANHÄNGEN IN: style.css
+ * Zeitstempel: 2026-08-28 22:30:00 CEST
+ * Breadcrumb: [2026-08-28 22:30:00 CEST] CSS-Architektur für Baumstruktur
+ * komplett überarbeitet. Verhindert das Ragen von Linien in Header-Elemente
+ * oder über das letzte Kind-Element hinaus durch den Einsatz eines Border-Layers
+ * auf dem Parent-Container anstelle von Pseudo-Elementen pro Zeile.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Classic Tree Sidebar Masking Fix)
+ * ERSETZEN / ANHÄNGEN IN: style.css (Am Ende der Datei)
+ * Zeitstempel: 2026-08-28 22:45:00 CEST
+ * Breadcrumb: [2026-08-28 22:45:00 CEST] Überlagernde Masken entfernt, da diese 
+ * bei kleinen Listen über die folgenden Hauptrahmen ragten und deren Linien 
+ * unsichtbar machten. Jedes Kind-Element zeichnet seinen Linien-Abschnitt nun selbst.
+ * =============================================================================
+ */
+
+.sidebar-zone-item {
+    position: relative;
+    z-index: 10;
+}
+
+    .sidebar-zone-item:hover {
+        background-color: #374151 !important;
+    }
+
+    .sidebar-zone-item.sub-zone:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+
+.top-zone-wrapper {
+    margin-bottom: 4px;
+}
+
+.sub-zones-container {
+    display: flex;
+    flex-direction: column;
+    margin-left: 20px;
+    padding-left: 10px;
+    margin-top: 2px;
+    margin-bottom: 4px;
+    border: none; /* Kein durchgehender Border mehr auf dem Container! */
+}
+
+/* Den alten tree-branch Hilfscontainer ausblenden */
+.tree-branch {
+    display: none !important;
+}
+
+/* --------------------------------------------------------
+   NEUE BAUMSTRUKTUR LOGIK (Pro Kind-Element)
+   -------------------------------------------------------- */
+
+/* Horizontaler Ast für jedes Unterelement */
+.sidebar-zone-item.sub-zone::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    width: 10px;
+    height: 1px;
+    background-color: #4a5568;
+    pointer-events: none;
+}
+
+/* Vertikaler Stamm für jedes Unterelement (geht von oben nach unten) */
+.sidebar-zone-item.sub-zone::after {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #4a5568;
+    pointer-events: none;
+}
+
+/* Erstes Unterelement: Linie reicht 2px weiter nach oben zum Header (überbrückt margin-top) */
+.sidebar-zone-item.sub-zone:first-child::after {
+    top: -2px;
+}
+
+/* Letztes Unterelement: Linie endet exakt in der Mitte (beim horizontalen Ast) */
+.sidebar-zone-item.sub-zone:last-child::after {
+    bottom: 50%;
+}
+
+/**
+ * =============================================================================
+ * Breadcrumb: [2026-08-28] Hardware-Acceleration & Isolation für Canvas-Elemente
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (GPU-Compositing & VRAM Fix beim Rauszoomen)
+ * ERSETZEN IN: style.css (Ganz am Ende der Datei)
+ * Zeitstempel: 2026-08-29 20:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28]: Hardware-Acceleration & Isolation für Canvas-Elemente.
+ *   - [2026-08-29 20:15:00 CEST]: Globale GPU-Textur-Erzwingung (will-change, 
+ *     backface-visibility) entfernt, um Render-Abbrüche des Browsers zu fixen.
+ * =============================================================================
+ */
+#canvas {
+    contain: layout style;
+}
+
+.assembly-card, .project-zone, .note-card {
+    contain: layout style;
+}
