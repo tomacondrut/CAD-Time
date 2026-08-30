@@ -44,17 +44,34 @@ function formatDateForInput(date) {
 }
 
 // --- Initialisierung & UI Steuerung ---
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Standard Heute & PDF für alle Benutzer freigeschaltet)
+ * ERSETZEN IN: report.js (Funktion openReportModal)
+ * Zeitstempel: 2026-08-30 14:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-22 18:30:00 CEST]: Initiale Reporting-Steuerung.
+ *   - [2026-08-30 14:30:00 CEST]: 1. Standard-Zeitraum auf 'today' gesetzt.
+ *     2. PDF-Button für alle Benutzer sichtbar geschaltet (Einfache User exportieren
+ *     automatisch gefiltert auf ihr eigenes Kürzel).
+ * =============================================================================
+ */
 window.openReportModal = function () {
     populateReportFilters();
-    document.getElementById('repTimeframe').value = 'week';
+
+    // Standardmäßig den heutigen Tag auswählen
+    const timeframeSelect = document.getElementById('repTimeframe');
+    if (timeframeSelect) timeframeSelect.value = 'today';
+
     handleTimeframeChange();
 
-    // PDF Button nur für Admins einblenden
-    document.getElementById('btnExportPDF').style.display = isAdmin ? 'inline-block' : 'none';
+    // PDF-Export-Button für alle Mitarbeiter anzeigen
+    const btnPdf = document.getElementById('btnExportPDF');
+    if (btnPdf) btnPdf.style.display = 'inline-block';
 
     openModal('reportModal');
 };
-
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
@@ -73,7 +90,10 @@ window.populateReportFilters = function () {
     }
 
     selZone.innerHTML = '<option value="all">Alle Bereiche</option>';
-    currentZones.forEach(z => selZone.add(new Option(`📍 ${z.title}`, z.id)));
+    currentZones.forEach(z => {
+        const zIcon = z.zone_type === 'assembly' ? '📦' : (z.zone_type === 'comment' ? '💬' : '📍');
+        selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
+    });
 
     selBlock.innerHTML = '<option value="all">Alle Blöcke</option>';
     currentNodes.forEach(n => {

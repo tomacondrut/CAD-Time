@@ -1281,15 +1281,18 @@ function renderCanvas() {
             assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
         }
 
+        const zIcon = zone.zone_type === 'assembly' ? '📦' : (zone.zone_type === 'comment' ? '💬' : '📍');
+
         zoneEl.innerHTML = `
       ${badgeHtml}
       <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; padding-right: 140px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding: 8px 12px;">
         
         <!-- Zeile 1: Titel & Zuweisungen -->
         <div style="display:flex; align-items:center; overflow: hidden; white-space: nowrap; max-width: 100%;">
-          <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">📍 ${escapeHtml(zone.title)}</span>
+          <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">${zIcon} ${escapeHtml(zone.title)}</span>
           ${assignedBadgesHtml}
         </div>
+
 
         <!-- Zeile 2: Pie Charts direkt unterhalb + Button -->
         <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">

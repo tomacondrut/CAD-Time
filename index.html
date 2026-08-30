@@ -243,12 +243,28 @@
     <div id="newZoneModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">Bereich / Kasten anlegen</div>
+
             <form id="newZoneForm">
                 <input type="hidden" id="newZoneCustomPos" value="" />
+                <div class="form-group">
+                    <label>Typ des Rahmens:</label>
+                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newZoneType" value="location" checked style="width: auto;" /> 📍 Standort
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newZoneType" value="assembly" style="width: auto;" /> 📦 Baugruppe
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newZoneType" value="comment" style="width: auto;" /> 💬 Kommentarbereich
+                        </label>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label>Bereichsbezeichnung / Baugruppe:</label>
                     <input type="text" id="newZoneTitle" required placeholder="z.B. Schlackenhalle oder Hauptbaugruppe" />
                 </div>
+
                 <div id="newZoneAssignedUserGroup" style="display: flex; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label>Zuweisung CAD:</label>
@@ -296,15 +312,34 @@
     </div>
 
     <!-- Edit Zone / Kasten Bearbeitungs-Modal -->
+    <!-- Edit Zone / Kasten Bearbeitungs-Modal -->
     <div id="editZoneModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">Bereich / Kasten bearbeiten</div>
+
             <form id="editZoneForm">
                 <input type="hidden" id="editZoneId" />
+
+                <div class="form-group">
+                    <label>Typ des Rahmens:</label>
+                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editZoneType" value="location" style="width: auto;" /> 📍 Standort
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editZoneType" value="assembly" style="width: auto;" /> 📦 Baugruppe
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editZoneType" value="comment" style="width: auto;" /> 💬 Kommentarbereich
+                        </label>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Bereichsbezeichnung / Baugruppe:</label>
                     <input type="text" id="editZoneTitle" required />
                 </div>
+
                 <div id="editZoneAssignedUserGroup" style="display: none; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label>Zuweisung CAD:</label>
@@ -315,6 +350,7 @@
                         <select id="editZoneAssignedDraftingUser"><option value="">-- Offen --</option></select>
                     </div>
                 </div>
+
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
                         <label>DOC-Nummer (Vault):</label>
@@ -328,6 +364,7 @@
                         <input type="text" id="editZoneArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
                     </div>
                 </div>
+
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
                         <label>Eigenes Budget CAD (h):</label>
@@ -338,11 +375,13 @@
                         <input type="number" min="0" step="0.5" id="editZoneBudgetDrafting" />
                     </div>
                 </div>
+
                 <div class="form-group">
                     <label>Rahmenfarbe anpassen:</label>
                     <div class="color-presets-grid" id="editZoneColorPresetsContainer"></div>
                     <input type="hidden" id="editZoneColor" />
                 </div>
+
                 <div class="modal-actions">
                     <button type="button" class="btn-sec" onclick="closeModal('editZoneModal')">Abbrechen</button>
                     <button type="submit" class="btn-prim">Speichern</button>
@@ -350,6 +389,7 @@
             </form>
         </div>
     </div>
+
 
     <!-- Admin: Rückwirkenden Zeiteintrag erstellen -->
     <div id="retroLogModal" class="modal-backdrop">
@@ -560,13 +600,18 @@
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
 
             <!-- =============================================================================
-            * Breadcrumb: [2026-08-30] Lokale Datei-Buttons eingefügt
+            * Projekt: CAD Time Manager
+            * Domain: Top Toolbar & Druck-Modal Integration
+            * ERSETZEN IN: index.html (Bereich Top-Right Buttons in #viewport)
+            * Zeitstempel: 2026-08-30 12:05:00 CEST
+            * Breadcrumbs:
+            *   - [2026-08-30 09:54:00 CEST]: Lokale Datei-Buttons (📄, 💾, 📂).
+            *   - [2026-08-30 12:05:00 CEST]: Druck-Icon (🖨️) eingefügt & Button-Positionen harmonisiert.
             * ============================================================================= -->
-            <button id="newFileBtn" class="top-right-btn" style="right: 212px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
-            <button id="saveFileBtn" class="top-right-btn" style="right: 164px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
-            <button id="loadFileBtn" class="top-right-btn" style="right: 116px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
-
-            <!-- Info-Leitfaden Button links vom Schloss -->
+            <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
+            <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
+            <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+            <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
             <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
             <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
 
@@ -867,6 +912,101 @@
                     <button type="submit" class="btn-prim">Speichern</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- =============================================================================
+    * Projekt: CAD Time Manager
+    * Domain: Druck-Auswahlfenster (Canvas Zeichnungsblatt & Strukturbaum)
+    * EINFÜGEN IN: index.html (Vor den <script>-Tags am Ende der Datei)
+    * Zeitstempel: 2026-08-30 12:05:00 CEST
+    * ============================================================================= -->
+    <div id="printModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 480px;">
+            <div class="modal-header">🖨️ Drucken & Zeichnungs-Export</div>
+
+            <!-- =============================================================================
+            * Projekt: CAD Time Manager
+            * Domain: Druck-Auswahlfenster (Zonen-Filter ergänzt)
+            * ERSETZEN IN: index.html (Innerhalb des #printModal)
+            * Zeitstempel: 2026-08-30 12:15:00 CEST
+            * Breadcrumbs:
+            *   - [2026-08-30 12:15:00 CEST]: Auswahlfenster für Top-Level Rahmen vor dem Druck hinzugefügt.
+            * ============================================================================= -->
+            <!-- Auswahl Druck-Modus -->
+            <div class="form-group">
+                <label>Druckmodus wählen:</label>
+                <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="printMode" value="canvas" checked onchange="handlePrintModeChange()" style="width: auto;" /> 📐 Canvas Zeichnungsblatt
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="printMode" value="structure" onchange="handlePrintModeChange()" style="width: auto;" /> 🌲 Strukturbaum
+                    </label>
+                </div>
+            </div>
+
+            <!-- NEU: Sichtbarkeits-Steuerung der Hauptrahmen -->
+            <div style="background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Einzublendende Bereiche (Hauptrahmen)</div>
+                <div id="printZoneTogglesContainer" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748; max-height: 120px; overflow-y: auto;">
+                    <!-- Wird dynamisch durch renderPrintZoneToggles() befüllt -->
+                </div>
+            </div>
+
+            <!-- =============================================================================
+            * Projekt: CAD Time Manager
+            * Domain: Druck-Optionen (Formatauswahl ergänzt)
+            * ERSETZEN IN: index.html (Den Block #printCanvasOptions)
+            * Zeitstempel: 2026-08-30 12:35:00 CEST
+            * Breadcrumbs:
+            *   - [2026-08-30 12:35:00 CEST]: Auswahl-Dropdown für DIN A4 bis A0 ergänzt.
+            * ============================================================================= -->
+            <!-- Optionen für Canvas-Druck -->
+            <div id="printCanvasOptions" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Optionen (Canvas)</div>
+
+                <div style="margin-bottom: 10px;">
+                    <label style="display:block; font-size: 11px; margin-bottom: 4px; color: #4a5568; font-weight: bold;">Plangröße:</label>
+                    <select id="printPaperSize" style="width: 100%; padding: 6px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                        <option value="A4">DIN A4 (297 x 210 mm)</option>
+                        <option value="A3">DIN A3 (420 x 297 mm)</option>
+                        <option value="A2">DIN A2 (594 x 420 mm)</option>
+                        <option value="A1">DIN A1 (841 x 594 mm)</option>
+                        <option value="A0">DIN A0 (1189 x 841 mm)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="printOptNotes" checked style="width: auto;" />
+                        <span>📝 Notizen & To-Do Zettel mitdrucken</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="printOptCharts" checked style="width: auto;" />
+                        <span>🥧 Zeitbudget-Pie Charts anzeigen</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Optionen für Struktur-Druck -->
+            <div id="printStructureOptions" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Optionen (Strukturbaum)</div>
+                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="printStructShowTimes" checked style="width: auto;" />
+                        <span>⏱️ Budget- und Zeitverbrauchs-Werte anzeigen</span>
+                    </label>
+                    <div style="font-size: 11px; color: #718096; margin-top: 4px; border-top: 1px dashed #cbd5e0; padding-top: 6px;">
+                        ℹ️ <em>Erstellt eine hierarchische Baumstruktur aller Rahmen & Blöcke mit vorangestellter DOC-/Artikelnummer und horizontalem Einzug.</em>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-sec" onclick="closeModal('printModal')">Abbrechen</button>
+                <button type="button" class="btn-prim" id="btnExecutePrint" onclick="executePrintJob()">🖨️ Druck starten</button>
+            </div>
         </div>
     </div>
 

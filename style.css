@@ -1211,17 +1211,19 @@ html, body {
     }
 
 /* Resize-Handle unten rechts an der Notiz */
-.note-resize-handle {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 14px;
-    height: 14px;
-    cursor: nwse-resize;
-    background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.15) 50%);
-    border-bottom-right-radius: 12px;
-    pointer-events: auto;
-}
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Notizen-Resize, Isolation, Tabs & Print Engine)
+ * ERSETZEN IN: style.css (Ab .note-resize-handle bis Dateiende)
+ * Zeitstempel: 2026-08-30 12:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26]: Notizen-Styling.
+ *   - [2026-08-28]: Isolation & Hardware-Beschleunigung.
+ *   - [2026-08-30 12:45:00 CEST]: Duplizierten .note-resize-handle entfernt, 
+ *     contain: none im Print-Modus ergänzt, um Mehrseiten-Druck zuverlässig zu garantieren.
+ * =============================================================================
+ */
 
 /* Resize-Handle unten rechts an der Notiz */
 .note-resize-handle {
@@ -1236,22 +1238,12 @@ html, body {
     pointer-events: auto;
 }
 
-    /**
- * =============================================================================
- * Breadcrumb: [2026-08-25 18:30:00 CEST] Selektions-Highlighting für Blöcke & Notizen
- * =============================================================================
- */
 .assembly-card.selected-node, .note-card.selected-node {
     outline: 3px solid #ecc94b !important;
     box-shadow: 0 0 16px rgba(236, 201, 75, 0.85) !important;
 }
 
-/**
- * =============================================================================
- * Breadcrumb: [2026-08-25] Responsive Layout & Mobile Optimierung
- * HINZUFÜGEN AM ENDE DER DATEI: style.css
- * =============================================================================
- */
+/* Responsive Layout & Mobile Optimierung */
 #mobileMenuBtn {
     display: none;
     position: absolute;
@@ -1288,14 +1280,7 @@ html, body {
     }
 }
 
-/**
- * =============================================================================
- * Breadcrumb: [2026-08-25] Styling für Mobile Touch-Wheels (Zeiterfassung)
- * HINZUFÜGEN AM ENDE DER DATEI: style.css
- * =============================================================================
- */
-
-/* Browser-eigene Pfeile bei Number-Inputs ausblenden */
+/* Styling für Mobile Touch-Wheels (Zeiterfassung) */
 .time-inputs-row input[type="number"]::-webkit-inner-spin-button,
 .time-inputs-row input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
@@ -1306,7 +1291,6 @@ html, body {
     -moz-appearance: textfield;
 }
 
-/* Auf Mobile eine Walzen-Optik (Slot-Machine) erzeugen */
 @media (max-width: 768px) {
     .time-inputs-row .log-input {
         background-image: linear-gradient(to bottom, #e2e8f0 0%, #ffffff 40%, #ffffff 60%, #e2e8f0 100%);
@@ -1316,20 +1300,11 @@ html, body {
         font-size: 16px;
         padding: 8px 4px;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        /* Wichtig: Verhindert, dass der Text markiert wird beim Wischen */
         user-select: none;
     }
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (To-Do Notizen, Checklisten-Items & Fälligkeitsanzeige)
- * ERSETZEN / ANHÄNGEN IN: style.css
- * Zeitstempel: 2026-08-27 20:00:00 CEST
- * Breadcrumb: [2026-08-27] Checklisten-Styling, Strikethrough & Fälligkeits-Badges
- * =============================================================================
- */
+/* To-Do Notizen, Checklisten-Items & Fälligkeitsanzeige */
 .note-todo-item {
     display: flex;
     align-items: flex-start;
@@ -1374,17 +1349,6 @@ html, body {
         color: #c05621;
     }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (Fix für Checklisten-Ausrichtung im Modal)
- * ERSETZEN IN: style.css (.modal-checklist-row)
- * Zeitstempel: 2026-08-27 20:30:00 CEST
- * Breadcrumbs:
- *   - [2026-08-27 20:30:00 CEST]: Checkbox, Input und Löschbutton strikt nebeneinander 
- *     fixiert, kein vertikales Brechen von Checkbox/Delete-Button mehr.
- * ============================================================================= -->
- */
 .modal-checklist-row {
     display: flex !important;
     flex-direction: row !important;
@@ -1426,20 +1390,7 @@ html, body {
             color: #9b2c2c;
         }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (GPU-beschleunigter Voll-Puls / 0% CPU)
- * ERSETZEN IN: style.css (Am Ende der Datei)
- * Zeitstempel: 2026-08-27 21:35:00 CEST
- * Breadcrumbs:
- *   - [2026-08-27 21:12:00 CEST]: CPU-basierter Voll-Puls.
- *   - [2026-08-27 21:35:00 CEST]: 100% exakte Optik wiederhergestellt, aber 
- *     über 2 GPU-Ebenen (Base & Pulse) mit reiner Opacity-Überblendung.
- * =============================================================================
- */
-
-/* Skaliert die gesamte Karte (inklusive Inhalt und Rahmen) */
+/* GPU-beschleunigter Überfälligkeits-Puls */
 @keyframes overdueScalePulse {
     0% {
         transform: scale(1) translateZ(0);
@@ -1454,7 +1405,6 @@ html, body {
     }
 }
 
-/* Überblendet nur die leuchtende Ebene */
 @keyframes overdueOpacityPulse {
     0% {
         opacity: 0;
@@ -1469,22 +1419,20 @@ html, body {
     }
 }
 
-/* Die eigentliche Notiz wird transparent und dient nur als Container */
 .note-card.note-overdue {
     background-color: transparent !important;
     border: 2px solid transparent !important;
-    transform: translateZ(0); /* Zwingt Hardware-Beschleunigung (GPU) */
+    transform: translateZ(0);
     will-change: transform;
     animation: overdueScalePulse 1.8s infinite ease-in-out !important;
     transition: none !important;
     z-index: 180 !important;
 }
 
-    /* BASE-LAYER: Ruhiger Zustand (heller Hintergrund, dünner Rahmen, kleiner Schatten) */
     .note-card.note-overdue::before {
         content: "";
         position: absolute;
-        inset: -2px; /* Zieht die Ebene exakt über den transparenten Rand */
+        inset: -2px;
         border-radius: inherit;
         background-color: #fff5f5;
         border: 2px solid #feb2b2;
@@ -1493,7 +1441,6 @@ html, body {
         pointer-events: none;
     }
 
-    /* PULSE-LAYER: Aktiver Zustand (sattes Rot, dunkler Rahmen, extremer Schatten) */
     .note-card.note-overdue::after {
         content: "";
         position: absolute;
@@ -1507,31 +1454,8 @@ html, body {
         will-change: opacity;
         animation: overdueOpacityPulse 1.8s infinite ease-in-out;
     }
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (Classic Tree Sidebar Styling & Drag-Hover)
- * ERSETZEN / ANHÄNGEN IN: style.css
- * Zeitstempel: 2026-08-28 22:30:00 CEST
- * Breadcrumb: [2026-08-28 22:30:00 CEST] CSS-Architektur für Baumstruktur
- * komplett überarbeitet. Verhindert das Ragen von Linien in Header-Elemente
- * oder über das letzte Kind-Element hinaus durch den Einsatz eines Border-Layers
- * auf dem Parent-Container anstelle von Pseudo-Elementen pro Zeile.
- * =============================================================================
- */
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (Classic Tree Sidebar Masking Fix)
- * ERSETZEN / ANHÄNGEN IN: style.css (Am Ende der Datei)
- * Zeitstempel: 2026-08-28 22:45:00 CEST
- * Breadcrumb: [2026-08-28 22:45:00 CEST] Überlagernde Masken entfernt, da diese 
- * bei kleinen Listen über die folgenden Hauptrahmen ragten und deren Linien 
- * unsichtbar machten. Jedes Kind-Element zeichnet seinen Linien-Abschnitt nun selbst.
- * =============================================================================
- */
-
+/* Sidebar Tree-Struktur */
 .sidebar-zone-item {
     position: relative;
     z-index: 10;
@@ -1556,19 +1480,13 @@ html, body {
     padding-left: 10px;
     margin-top: 2px;
     margin-bottom: 4px;
-    border: none; /* Kein durchgehender Border mehr auf dem Container! */
+    border: none;
 }
 
-/* Den alten tree-branch Hilfscontainer ausblenden */
 .tree-branch {
     display: none !important;
 }
 
-/* --------------------------------------------------------
-   NEUE BAUMSTRUKTUR LOGIK (Pro Kind-Element)
-   -------------------------------------------------------- */
-
-/* Horizontaler Ast für jedes Unterelement */
 .sidebar-zone-item.sub-zone::before {
     content: "";
     position: absolute;
@@ -1580,7 +1498,6 @@ html, body {
     pointer-events: none;
 }
 
-/* Vertikaler Stamm für jedes Unterelement (geht von oben nach unten) */
 .sidebar-zone-item.sub-zone::after {
     content: "";
     position: absolute;
@@ -1592,33 +1509,14 @@ html, body {
     pointer-events: none;
 }
 
-/* Erstes Unterelement: Linie reicht 2px weiter nach oben zum Header (überbrückt margin-top) */
 .sidebar-zone-item.sub-zone:first-child::after {
     top: -2px;
 }
 
-/* Letztes Unterelement: Linie endet exakt in der Mitte (beim horizontalen Ast) */
 .sidebar-zone-item.sub-zone:last-child::after {
     bottom: 50%;
 }
 
-/**
- * =============================================================================
- * Breadcrumb: [2026-08-28] Hardware-Acceleration & Isolation für Canvas-Elemente
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (GPU-Compositing & VRAM Fix beim Rauszoomen)
- * ERSETZEN IN: style.css (Ganz am Ende der Datei)
- * Zeitstempel: 2026-08-29 20:15:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28]: Hardware-Acceleration & Isolation für Canvas-Elemente.
- *   - [2026-08-29 20:15:00 CEST]: Globale GPU-Textur-Erzwingung (will-change, 
- *     backface-visibility) entfernt, um Render-Abbrüche des Browsers zu fixen.
- * =============================================================================
- */
 #canvas {
     contain: layout style;
 }
@@ -1627,20 +1525,13 @@ html, body {
     contain: layout style;
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Stylesheet (Info Modal Tabs)
- * Zeitstempel: 2026-08-30 11:35:00 CEST
- * =============================================================================
- */
+/* Info Modal Tabs */
 .info-tabs-header {
     display: flex;
     border-bottom: 2px solid #edf2f7;
     margin-bottom: 15px;
     gap: 8px;
     overflow-x: auto;
-    /* Versteckt den Scrollbar, behält aber die Funktionalität */
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
@@ -1659,7 +1550,7 @@ html, body {
     color: #a0aec0;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin-bottom: -2px; /* Zieht die Border über die Container-Border */
+    margin-bottom: -2px;
     white-space: nowrap;
 }
 
@@ -1673,3 +1564,157 @@ html, body {
         color: #2b6cb0;
         border-bottom-color: #2b6cb0;
     }
+
+/* =============================================================================
+ * PRINT ENGINE (Zeichnungsblatt & Multi-Page Tree)
+ * ============================================================================= */
+@media print {
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    html, body {
+        width: 100% !important;
+        height: auto !important;
+        background: #ffffff !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Containment für den Druck aufheben, um Seitenumbrüche zu ermöglichen */
+    #canvas, .assembly-card, .project-zone, .note-card {
+        contain: none !important;
+    }
+
+    #sidebar, #mobileMenuBtn, .top-right-btn, .zoom-controls,
+    #canvasContextMenu, .modal-backdrop, #toast, #app-container {
+        display: none !important;
+    }
+
+    #print-render-container {
+        display: block !important;
+        width: 100% !important;
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Print Engine: DIN-Schriftfeld in festen Millimetern)
+ * ERSETZEN IN: style.css (Bereich .cad-drawing-sheet bis .cad-tb-val im @media print)
+ * Zeitstempel: 2026-08-30 13:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 13:00:00 CEST]: 1. Plankopf auf feste ISO-Norm-Maße (185mm) in Millimetern fixiert.
+ *     2. Zeichnungsrahmen und Innenabstände in mm definiert, identisch über alle Formate.
+ * =============================================================================
+ */
+
+    /* 1. ZEICHNUNGSBLATT-RAHMEN (CANVAS-DRUCK) */
+    .cad-drawing-sheet {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        box-sizing: border-box;
+        background: #ffffff;
+        overflow: hidden;
+    }
+
+    /* Äußerer technischer Zeichnungsrahmen (5mm vom Blattrand) */
+    .cad-drawing-border {
+        position: absolute;
+        top: 5mm;
+        left: 5mm;
+        right: 5mm;
+        bottom: 5mm;
+        border: 1.5pt solid #000;
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    /* Plankopf unten rechts (feste ISO-Größe: 185mm breit, unabhängig vom Papierformat) */
+    .cad-title-block {
+        position: absolute;
+        bottom: 5mm;
+        right: 5mm;
+        width: 185mm;
+        border: 1.5pt solid #000;
+        background: #ffffff;
+        font-family: Arial, sans-serif;
+        z-index: 500;
+        box-sizing: border-box;
+    }
+
+    .cad-title-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .cad-title-table td {
+            border: 0.75pt solid #000;
+            padding: 2mm 2.5mm;
+            font-size: 8.5pt;
+            line-height: 1.2;
+        }
+
+    .cad-tb-label {
+        font-size: 7pt;
+        color: #4a5568;
+        vertical-align: top;
+        background: #f8fafc;
+    }
+
+    .cad-tb-val {
+        font-weight: bold;
+        color: #000;
+        vertical-align: bottom;
+        font-size: 8.5pt;
+    }
+
+    /* 2. STRUKTURBAUM-DRUCK (MEHRSEITIG) */
+    .struct-print-sheet {
+        font-family: Arial, sans-serif;
+        padding: 0;
+        color: #000;
+        width: 100%;
+    }
+
+    .struct-header {
+        border-bottom: 2px solid #2b6cb0;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .struct-row {
+        display: flex;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px solid #edf2f7;
+        font-size: 12px;
+        page-break-inside: avoid;
+    }
+
+    .struct-doc-badge {
+        display: inline-block;
+        font-family: monospace;
+        font-size: 10px;
+        font-weight: bold;
+        background: #edf2f7;
+        border: 1px solid #cbd5e0;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-right: 8px;
+    }
+
+    .struct-connector-line {
+        color: #a0aec0;
+        font-family: monospace;
+        margin-right: 6px;
+    }
+}

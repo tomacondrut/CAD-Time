@@ -8,8 +8,22 @@
 // =============================================================================
 // 1. HELPER & DIALOGE
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Helper, Dual-Prompt & Dialoge)
+ * ERSETZEN IN: ui.js (Abschnitt 1: Helper & Dialoge)
+ * Zeitstempel: 2026-08-30 14:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:30:00 CEST]: HTML-Dual-Inputs vorbereitet.
+ *   - [2026-08-30 14:30:00 CEST]: customPromptDual implementiert, um den 
+ *     Button "Neue lokale Datei" (handleNewFile) funktionsfähig zu machen.
+ * =============================================================================
+ */
+
 window.showToast = function (msg, type = 'info') {
     const toast = document.getElementById('toast');
+    if (!toast) return;
     toast.textContent = msg;
     toast.className = '';
     if (type === 'error') toast.classList.add('toast-error');
@@ -24,17 +38,51 @@ window.customPrompt = function (title, message, defaultValue = '', isPassword = 
         document.getElementById('dialogTitle').textContent = title;
         document.getElementById('dialogMessage').textContent = message;
 
-        const inputCont = document.getElementById('dialogInputContainer');
-        const input = document.getElementById('dialogInput');
-        inputCont.style.display = 'block';
-        input.type = isPassword ? 'password' : 'text';
-        input.value = defaultValue;
+        const singleCont = document.getElementById('dialogInputContainer');
+        const dualCont = document.getElementById('dialogDualInputContainer');
+        if (dualCont) dualCont.style.display = 'none';
 
-        document.getElementById('dialogBtnConfirm').textContent = 'Anmelden';
+        const input = document.getElementById('dialogInput');
+        if (singleCont) singleCont.style.display = 'block';
+        if (input) {
+            input.type = isPassword ? 'password' : 'text';
+            input.value = defaultValue;
+        }
+
+        document.getElementById('dialogBtnConfirm').textContent = 'Bestätigen';
         document.getElementById('dialogBtnCancel').textContent = 'Abbrechen';
 
         openModal('dialogModal');
-        input.focus();
+        if (input) input.focus();
+    });
+};
+
+window.customPromptDual = function (title, message, label1, defaultVal1, label2, defaultVal2) {
+    return new Promise((resolve) => {
+        dialogResolve = resolve;
+        document.getElementById('dialogTitle').textContent = title;
+        document.getElementById('dialogMessage').textContent = message;
+
+        const singleCont = document.getElementById('dialogInputContainer');
+        const dualCont = document.getElementById('dialogDualInputContainer');
+        if (singleCont) singleCont.style.display = 'none';
+        if (dualCont) dualCont.style.display = 'flex';
+
+        const l1 = document.getElementById('dialogLabel1');
+        const i1 = document.getElementById('dialogInput1');
+        const l2 = document.getElementById('dialogLabel2');
+        const i2 = document.getElementById('dialogInput2');
+
+        if (l1) l1.textContent = label1;
+        if (i1) i1.value = defaultVal1;
+        if (l2) l2.textContent = label2;
+        if (i2) i2.value = defaultVal2;
+
+        document.getElementById('dialogBtnConfirm').textContent = 'Erstellen';
+        document.getElementById('dialogBtnCancel').textContent = 'Abbrechen';
+
+        openModal('dialogModal');
+        if (i1) i1.focus();
     });
 };
 
@@ -43,7 +91,11 @@ window.customConfirm = function (title, message, confirmText = 'Bestätigen', ca
         dialogResolve = resolve;
         document.getElementById('dialogTitle').textContent = title;
         document.getElementById('dialogMessage').textContent = message;
-        document.getElementById('dialogInputContainer').style.display = 'none';
+
+        const singleCont = document.getElementById('dialogInputContainer');
+        const dualCont = document.getElementById('dialogDualInputContainer');
+        if (singleCont) singleCont.style.display = 'none';
+        if (dualCont) dualCont.style.display = 'none';
 
         document.getElementById('dialogBtnConfirm').textContent = confirmText;
         document.getElementById('dialogBtnCancel').textContent = cancelText;
@@ -55,9 +107,16 @@ window.customConfirm = function (title, message, confirmText = 'Bestätigen', ca
 window.closeDialog = function (isConfirmed) {
     closeModal('dialogModal');
     if (dialogResolve) {
-        const input = document.getElementById('dialogInput');
-        if (document.getElementById('dialogInputContainer').style.display !== 'none') {
-            dialogResolve(isConfirmed ? input.value : null);
+        const singleCont = document.getElementById('dialogInputContainer');
+        const dualCont = document.getElementById('dialogDualInputContainer');
+
+        if (singleCont && singleCont.style.display !== 'none') {
+            const input = document.getElementById('dialogInput');
+            dialogResolve(isConfirmed ? (input ? input.value : '') : null);
+        } else if (dualCont && dualCont.style.display !== 'none') {
+            const val1 = document.getElementById('dialogInput1')?.value || '';
+            const val2 = document.getElementById('dialogInput2')?.value || '';
+            dialogResolve(isConfirmed ? { val1, val2 } : null);
         } else {
             dialogResolve(isConfirmed);
         }
@@ -797,6 +856,7 @@ window.handleAddZone = async function (e) {
     const title = document.getElementById('newZoneTitle').value.trim();
     const color_hex = document.getElementById('newZoneColor').value;
     const customPosVal = document.getElementById('newZoneCustomPos').value;
+    const zone_type = document.querySelector('input[name="newZoneType"]:checked').value;
 
     const docInputEl = document.getElementById('newZoneDocNumber');
     const docNumber = (docInputEl && docInputEl.value.trim()) ? 'DOC' + docInputEl.value.trim() : '';
@@ -837,7 +897,7 @@ window.handleAddZone = async function (e) {
         budget_design_hours: designBudget, budget_drafting_hours: draftingBudget,
         color_hex, pos_x: posX, pos_y: posY, width: 600, height: 450,
         created_by: activeUserCode || 'COT',
-        assigned_design_user, assigned_drafting_user
+        assigned_design_user, assigned_drafting_user, zone_type
     }]);
 
     closeModal('newZoneModal');
@@ -855,6 +915,10 @@ window.openEditZoneModal = function (zoneId) {
 
     document.getElementById('editZoneId').value = zone.id;
     document.getElementById('editZoneTitle').value = zone.title;
+
+    const zType = zone.zone_type || 'location';
+    const typeRadio = document.querySelector(`input[name="editZoneType"][value="${zType}"]`);
+    if (typeRadio) typeRadio.checked = true;
 
     const docEl = document.getElementById('editZoneDocNumber');
     if (docEl) docEl.value = zone.doc_number ? zone.doc_number.replace(/^DOC/i, '') : '';
@@ -910,6 +974,7 @@ window.handleSaveZoneConfig = async function (e) {
     const id = document.getElementById('editZoneId').value;
     const title = document.getElementById('editZoneTitle').value.trim();
     const color_hex = document.getElementById('editZoneColor').value;
+    const zone_type = document.querySelector('input[name="editZoneType"]:checked').value;
 
     const docInputEl = document.getElementById('editZoneDocNumber');
     const doc_number = (docInputEl && docInputEl.value.trim()) ? 'DOC' + docInputEl.value.trim() : '';
@@ -923,7 +988,7 @@ window.handleSaveZoneConfig = async function (e) {
     const creator = zone ? zone.created_by : 'COT';
     const isCreatorOrAdmin = isAdmin || (activeUserCode && activeUserCode === creator);
 
-    const updateData = { title, color_hex, doc_number, article_number };
+    const updateData = { title, color_hex, doc_number, article_number, zone_type };
 
     if (isAdmin) {
         const bD = document.getElementById('editZoneBudgetDesign');
@@ -2102,6 +2167,22 @@ document.addEventListener('click', (e) => {
  * HINZUFÜGEN IN: ui.js (am Ende der Datei)
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Mobile Touch-Wheel Zeiterfassung)
+ * ERSETZEN IN: ui.js (Ab Abschnitt 9 bis Dateiende)
+ * Zeitstempel: 2026-08-30 12:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-25]: Wisch-Gesten auf Stunden/Minuten-Feldern ergänzt.
+ *   - [2026-08-30 12:40:00 CEST]: Reihenfolge bereinigt: Event-Listener 
+ *     direkt unter endTimeSwipe platziert, Druck-Engine sauber als finaler Block angehängt.
+ * =============================================================================
+ */
+
+// =============================================================================
+// 9. MOBILE TOUCH-WHEEL (Zeiterfassung durch Wischen)
+// =============================================================================
 let timeSwipeStartY = 0;
 let timeSwipeStartVal = 0;
 let timeSwipeType = '';
@@ -2114,33 +2195,27 @@ document.addEventListener('touchstart', (e) => {
         timeSwipeStartY = e.touches[0].clientY;
         timeSwipeStartVal = parseInt(input.value, 10) || 0;
         timeSwipeType = input.classList.contains('input-hours') ? 'hour' : 'min';
-
-        // Verhindern, dass sich das Canvas beim Drehen des Rades verschiebt
         window.isDraggingAnything = true;
     }
 }, { passive: true });
 
 document.addEventListener('touchmove', (e) => {
     if (timeSwipeInput && e.touches.length === 1) {
-        if (e.cancelable) e.preventDefault(); // Stoppt Seiten-Scrollen beim Wischen
+        if (e.cancelable) e.preventDefault();
 
         const currentY = e.touches[0].clientY;
-        const diff = timeSwipeStartY - currentY; // Hochwischen = positive Zahl
-
-        // Sensibilität: Alle 15 Pixel Wischbewegung = 1 Schritt
+        const diff = timeSwipeStartY - currentY;
         const steps = Math.trunc(diff / 15);
 
         let stepValue = (timeSwipeType === 'hour') ? 1 : 5;
         let newVal = timeSwipeStartVal + (steps * stepValue);
 
-        // Grenzen definieren
         if (newVal < 0) newVal = 0;
         if (timeSwipeType === 'min' && newVal > 55) newVal = 55;
 
-        // Wert direkt ins Feld schreiben
         timeSwipeInput.value = (timeSwipeType === 'min') ? newVal.toString().padStart(2, '0') : newVal;
     }
-}, { passive: false }); // passive: false erlaubt e.preventDefault()
+}, { passive: false });
 
 const endTimeSwipe = () => {
     if (timeSwipeInput) {
@@ -2151,3 +2226,553 @@ const endTimeSwipe = () => {
 
 document.addEventListener('touchend', endTimeSwipe);
 document.addEventListener('touchcancel', endTimeSwipe);
+
+// =============================================================================
+// 10. DRUCK-CONTROLLER (A4-A0 Canvas Skalierung, DIN-Schriftkopf & Multi-Page Tree)
+// =============================================================================
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Dynamische Großformat-Einpassung A4 bis A0)
+ * ERSETZEN IN: ui.js (Funktion renderCanvasPrintSheet)
+ * Zeitstempel: 2026-08-30 12:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 12:35:00 CEST]: Initiale A-Formate.
+ *   - [2026-08-30 12:50:00 CEST]: 1. Feste 3000px Canvas-Grenze entfernt (dynamisch auf targetW/targetH).
+ *     2. Proportionale Schriftkopf- und Ränder-Kompensation für A1 und A0 integriert.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Präzise mm-Einpassung & fixes DIN-Schriftfeld)
+ * ERSETZEN IN: ui.js (Funktion renderCanvasPrintSheet)
+ * Zeitstempel: 2026-08-30 13:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 12:50:00 CEST]: Großformat-Einpassung.
+ *   - [2026-08-30 13:00:00 CEST]: 1. Umstellung auf millimeter-basierte Berechnung 
+ *     für A4 bis A0. 2. Schriftfeld bleibt über alle Formate exakt 185mm x 35mm.
+ *     3. Exakte Zentrierung im verfügbaren Bereich oberhalb/neben dem Plankopf.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller & Großformat-Einpassung (A4 bis A0)
+ * ERSETZEN IN: ui.js (Abschnitt 10 bis Dateiende)
+ * Zeitstempel: 2026-08-30 13:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 13:00:00 CEST]: Millimeter-Berechnung.
+ *   - [2026-08-30 13:45:00 CEST]: 1. Virtuelle 96-DPI Druck-Auflösung für echte Großformat-
+ *     Einpassung (A4–A0). 2. Dateinamen nach Schema 'OBJnr_Projektname_Modus_Datum' implementiert.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller & Großformat-Einpassung (A4 bis A0)
+ * ERSETZEN IN: ui.js (Abschnitt 10 bis Dateiende)
+ * Zeitstempel: 2026-08-30 13:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 13:00:00 CEST]: Millimeter-Berechnung.
+ *   - [2026-08-30 13:45:00 CEST]: 1. Ghost-Overlay Bug behoben (Ausblenden für Screen 
+ *     via CSS & afterprint Cleanup). 2. Canvas-Dimensionen für Klon erweitert (verhindert SVG-Cutoffs).
+ *     3. Dateinamen nach Schema 'OBJnr_Projektname_Modus_Datum' implementiert.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller & Großformat-Einpassung (A4 bis A0)
+ * ERSETZEN IN: ui.js (Abschnitt 10 bis Dateiende)
+ * Zeitstempel: 2026-08-30 14:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 13:45:00 CEST]: Ghost-Overlay Bug behoben.
+ *   - [2026-08-30 14:15:00 CEST]: 1. Formate A2-A0 repariert (Browser-Fallback auf A4 
+ *     verhindert, indem harte mm-Werte im @page CSS gesetzt werden). 
+ *     2. Rahmen im Druckmenü analog zur Sidebar sortiert (sort_order & Fläche).
+ * =============================================================================
+ */
+
+// =============================================================================
+// 10. DRUCK-CONTROLLER (A4-A0 Canvas Skalierung, DIN-Schriftkopf & Multi-Page Tree)
+// =============================================================================
+window.openPrintModal = function () {
+    renderPrintZoneToggles();
+    openModal('printModal');
+};
+
+window.renderPrintZoneToggles = function () {
+    const container = document.getElementById('printZoneTogglesContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const sortZonesByOrder = (zones) => {
+        return [...zones].sort((a, b) => {
+            const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
+            const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
+            if (ordA !== ordB) return ordA - ordB;
+            const areaA = (parseFloat(a.width) || 0) * (parseFloat(a.height) || 0);
+            const areaB = (parseFloat(b.width) || 0) * (parseFloat(b.height) || 0);
+            return areaB - areaA;
+        });
+    };
+
+    const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
+
+    if (topZones.length === 0) {
+        container.innerHTML = '<div style="color:#718096; font-style:italic;">Keine Rahmen vorhanden.</div>';
+        return;
+    }
+
+    topZones.forEach(z => {
+        const isHidden = window.isZoneHidden(z.id);
+
+        let zIcon = '📍';
+        if (z.zone_type === 'assembly') zIcon = '📦';
+        if (z.zone_type === 'comment') zIcon = '💬';
+
+        container.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" onchange="window.toggleZoneVisibility('${z.id}')" ${!isHidden ? 'checked' : ''} style="width: auto;" />
+                <span>${zIcon} ${escapeHtml(z.title)}</span>
+            </label>
+        `;
+    });
+};
+window.handlePrintModeChange = function () {
+    const mode = document.querySelector('input[name="printMode"]:checked').value;
+    const canvasOpts = document.getElementById('printCanvasOptions');
+    const structOpts = document.getElementById('printStructureOptions');
+
+    if (mode === 'canvas') {
+        if (canvasOpts) canvasOpts.style.display = 'block';
+        if (structOpts) structOpts.style.display = 'none';
+    } else {
+        if (canvasOpts) canvasOpts.style.display = 'none';
+        if (structOpts) structOpts.style.display = 'block';
+    }
+};
+
+function applyPrintPageStyle(mode, paperSize = 'A4', customTitle = '') {
+    let styleTag = document.getElementById('dynamic-print-style');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dynamic-print-style';
+        document.head.appendChild(styleTag);
+    }
+
+    // Feste Millimeter-Dimensionen (verhindert Browser-Fallback auf A4 bei unbekannten Keywords wie A0)
+    const dims = {
+        'A4': { w: 297, h: 210 },
+        'A3': { w: 420, h: 297 },
+        'A2': { w: 594, h: 420 },
+        'A1': { w: 841, h: 594 },
+        'A0': { w: 1189, h: 841 }
+    };
+    const dim = dims[paperSize] || dims['A4'];
+
+    let css = `@media screen { #print-render-container { display: none !important; } }\n`;
+
+    if (mode === 'canvas') {
+        // Zwingt das Druckmodul exakte Millimetergrößen anzunehmen!
+        css += `@media print { @page { size: ${dim.w}mm ${dim.h}mm; margin: 0; } }\n`;
+        css += `@media print { html, body { width: ${dim.w}mm; height: ${dim.h}mm; overflow: hidden; margin: 0; padding: 0; } }`;
+    } else {
+        css += `@media print { @page { size: A4 portrait; margin: 15mm; } }`;
+    }
+
+    styleTag.innerHTML = css;
+
+    if (customTitle) {
+        document.title = customTitle;
+    }
+}
+
+window.executePrintJob = function () {
+    const mode = document.querySelector('input[name="printMode"]:checked').value;
+    const proj = getCurrentProject();
+
+    let printCont = document.getElementById('print-render-container');
+    if (printCont) printCont.remove();
+
+    printCont = document.createElement('div');
+    printCont.id = 'print-render-container';
+    document.body.appendChild(printCont);
+
+    let paperSize = 'A4';
+    if (mode === 'canvas') paperSize = document.getElementById('printPaperSize').value;
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    const safeObj = (proj.object_number || 'OBJ').replace(/[^a-zA-Z0-9\-_]/g, '');
+    const safeName = (proj.name || 'Projekt').replace(/[^a-zA-Z0-9\-_ÄÖÜäöü]/g, '_');
+    const modeName = mode === 'canvas' ? 'Canvas' : 'Strukturbaum';
+    const exportFileName = `${safeObj}_${safeName}_${modeName}_${dateStr}`;
+
+    applyPrintPageStyle(mode, paperSize, exportFileName);
+
+    if (mode === 'canvas') {
+        const includeNotes = document.getElementById('printOptNotes').checked;
+        const includeCharts = document.getElementById('printOptCharts').checked;
+        renderCanvasPrintSheet(printCont, proj, includeNotes, includeCharts, paperSize);
+    } else {
+        const showTimes = document.getElementById('printStructShowTimes').checked;
+        renderStructurePrintSheet(printCont, proj, showTimes);
+    }
+
+    closeModal('printModal');
+
+    window.addEventListener('afterprint', function cleanup() {
+        const pc = document.getElementById('print-render-container');
+        if (pc) pc.remove();
+        document.title = "CAD Time Manager";
+        window.removeEventListener('afterprint', cleanup);
+    });
+
+    setTimeout(() => {
+        window.print();
+    }, 400);
+};
+
+function renderCanvasPrintSheet(container, proj, includeNotes, includeCharts, paperSize) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasElements = false;
+
+    const expandBBox = (x, y, w, h) => {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+        hasElements = true;
+    };
+
+    const visibleZones = (currentZones || []).filter(z => !window.isZoneHidden(z.id));
+    visibleZones.forEach(z => {
+        expandBBox(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 400, parseFloat(z.height) || 300);
+    });
+
+    const visibleNodes = (currentNodes || []).filter(n => {
+        if (n.block_type === 'note') return includeNotes && !(n.zone_id && window.isZoneHidden(n.zone_id));
+        return !(n.zone_id && window.isZoneHidden(n.zone_id));
+    });
+
+    visibleNodes.forEach(n => {
+        const isNote = n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO';
+        const w = isNote ? (parseFloat(n.budget_design_hours) || 220) : 320;
+        const h = isNote ? (parseFloat(n.budget_drafting_hours) || 120) : 200;
+        expandBBox(parseFloat(n.pos_x) || 0, parseFloat(n.pos_y) || 0, w, h);
+    });
+
+    if (!hasElements) {
+        minX = 0; minY = 0; maxX = 1200; maxY = 800;
+    }
+
+    const mmDimensions = {
+        'A4': { width: 297, height: 210 },
+        'A3': { width: 420, height: 297 },
+        'A2': { width: 594, height: 420 },
+        'A1': { width: 841, height: 594 },
+        'A0': { width: 1189, height: 841 }
+    };
+
+    const sheetMm = mmDimensions[paperSize] || mmDimensions['A4'];
+    const marginMm = 15;
+    const titleBlockHeightMm = 38;
+
+    const availWidthMm = sheetMm.width - (marginMm * 2);
+    const availHeightMm = sheetMm.height - (marginMm * 2) - titleBlockHeightMm;
+
+    const mmToPx = 3.7795275591;
+    const availWidthPx = availWidthMm * mmToPx;
+    const availHeightPx = availHeightMm * mmToPx;
+
+    const bboxWidthPx = Math.max(10, maxX - minX);
+    const bboxHeightPx = Math.max(10, maxY - minY);
+
+    const canvasClone = document.getElementById('canvas').cloneNode(true);
+    canvasClone.id = 'print-canvas-clone';
+    canvasClone.style.background = 'transparent';
+    canvasClone.style.position = 'absolute';
+    canvasClone.style.left = '0';
+    canvasClone.style.top = '0';
+    canvasClone.style.transformOrigin = '0 0';
+
+    canvasClone.style.width = `${Math.max(3000, maxX + 500)}px`;
+    canvasClone.style.height = `${Math.max(3000, maxY + 500)}px`;
+
+    canvasClone.querySelectorAll('.log-form, .inline-logs-container, .zone-body, .btn-expand-toggle, .btn-toggle-zone-times, .ep-handle, .zone-resize-handle, .note-resize-handle, .btn-tree-toggle, .zone-actions').forEach(el => el.remove());
+
+    if (!includeNotes) {
+        canvasClone.querySelectorAll('.note-card').forEach(n => n.remove());
+    }
+
+    if (!includeCharts) {
+        canvasClone.querySelectorAll('.charts-grid, .pie-chart, .chart-sub').forEach(c => c.style.display = 'none');
+    }
+
+    canvasClone.querySelectorAll('.project-zone').forEach(z => {
+        z.style.border = '2px dashed ' + (z.style.borderColor || '#a0aec0');
+        z.style.backgroundColor = 'transparent';
+    });
+
+    const sheetWrapper = document.createElement('div');
+    sheetWrapper.className = 'cad-drawing-sheet';
+    // Harte Dimensionen für das Layouting erzwingen
+    sheetWrapper.style.width = `${sheetMm.width}mm`;
+    sheetWrapper.style.height = `${sheetMm.height}mm`;
+
+    const viewportClipper = document.createElement('div');
+    viewportClipper.style.position = 'absolute';
+    viewportClipper.style.left = `${marginMm}mm`;
+    viewportClipper.style.top = `${marginMm}mm`;
+    viewportClipper.style.width = `${availWidthMm}mm`;
+    viewportClipper.style.height = `${availHeightMm}mm`;
+    viewportClipper.style.overflow = 'hidden';
+
+    sheetWrapper.appendChild(viewportClipper);
+    viewportClipper.appendChild(canvasClone);
+
+    const today = new Date().toLocaleDateString('de-DE');
+    const titleBlockHtml = `
+        <div class="cad-drawing-border"></div>
+        <div class="cad-title-block">
+            <table class="cad-title-table">
+                <tr>
+                    <td colspan="3" style="font-size: 10pt; font-weight: 800; text-align: center; letter-spacing: 0.5px; padding: 1.5mm; background: #edf2f7;">CAD TIME MANAGER</td>
+                </tr>
+                <tr>
+                    <td class="cad-tb-label" style="width: 25%;">Projekt / Objekt:</td>
+                    <td colspan="2" class="cad-tb-val" style="font-size: 9pt;">${escapeHtml(proj.object_number)} – ${escapeHtml(proj.name)}</td>
+                </tr>
+                <tr>
+                    <td class="cad-tb-label">Planart:</td>
+                    <td class="cad-tb-val" style="width: 45%;">Canvas Layout (DIN ${paperSize})</td>
+                    <td class="cad-tb-label" style="width: 30%;">Datum: <span class="cad-tb-val" style="float: right;">${today}</span></td>
+                </tr>
+                <tr>
+                    <td class="cad-tb-label">Erstellt durch:</td>
+                    <td class="cad-tb-val">${escapeHtml(activeUserCode || 'COT')}</td>
+                    <td class="cad-tb-label">Format: <span class="cad-tb-val" style="float: right;">DIN ${paperSize}</span></td>
+                </tr>
+            </table>
+        </div>
+    `;
+
+    sheetWrapper.insertAdjacentHTML('beforeend', titleBlockHtml);
+    container.appendChild(sheetWrapper);
+
+    const scale = Math.min(availWidthPx / bboxWidthPx, availHeightPx / bboxHeightPx);
+    const scaledW = bboxWidthPx * scale;
+    const scaledH = bboxHeightPx * scale;
+
+    const offsetX = (availWidthPx - scaledW) / 2;
+    const offsetY = (availHeightPx - scaledH) / 2;
+
+    canvasClone.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale}) translate(${-minX}px, ${-minY}px)`;
+}
+
+function calcTreeStats() {
+    const statsNodes = {};
+    const statsZones = {};
+
+    (currentNodes || []).forEach(n => {
+        statsNodes[n.id] = { budD: parseFloat(n.budget_design_hours) || 0, budDr: parseFloat(n.budget_drafting_hours) || 0, spentD: 0, spentDr: 0 };
+    });
+    (currentZones || []).forEach(z => {
+        statsZones[z.id] = { budD: parseFloat(z.budget_design_hours) || 0, budDr: parseFloat(z.budget_drafting_hours) || 0, spentD: 0, spentDr: 0 };
+    });
+
+    (currentTimeLogs || []).forEach(l => {
+        const hrs = parseFloat(l.hours) || 0;
+        if (l.node_id && statsNodes[l.node_id]) {
+            if (l.task_type === 'design') statsNodes[l.node_id].spentD += hrs;
+            if (l.task_type === 'drafting') statsNodes[l.node_id].spentDr += hrs;
+        } else if (l.zone_id && statsZones[l.zone_id]) {
+            if (l.task_type === 'design') statsZones[l.zone_id].spentD += hrs;
+            if (l.task_type === 'drafting') statsZones[l.zone_id].spentDr += hrs;
+        }
+    });
+
+    const nodeChildren = {};
+    (currentEdges || []).forEach(e => {
+        if (!nodeChildren[e.source]) nodeChildren[e.source] = [];
+        nodeChildren[e.source].push(e.target);
+    });
+
+    function rollupNode(nId, visited = new Set()) {
+        if (visited.has(nId)) return statsNodes[nId];
+        visited.add(nId);
+        const st = statsNodes[nId] || { budD: 0, budDr: 0, spentD: 0, spentDr: 0 };
+        (nodeChildren[nId] || []).forEach(cId => {
+            const cSt = rollupNode(cId, visited);
+            st.budD += cSt.budD;
+            st.budDr += cSt.budDr;
+            st.spentD += cSt.spentD;
+            st.spentDr += cSt.spentDr;
+        });
+        return st;
+    }
+
+    const rootNodeIds = (currentNodes || []).filter(n => !(currentEdges || []).some(e => e.target === n.id)).map(n => n.id);
+    rootNodeIds.forEach(id => rollupNode(id));
+
+    const zoneChildren = {};
+    (currentZones || []).forEach(z => {
+        if (z.parent_zone_id) {
+            if (!zoneChildren[z.parent_zone_id]) zoneChildren[z.parent_zone_id] = [];
+            zoneChildren[z.parent_zone_id].push(z.id);
+        }
+    });
+
+    function rollupZone(zId, visited = new Set()) {
+        if (visited.has(zId)) return statsZones[zId];
+        visited.add(zId);
+        const st = statsZones[zId] || { budD: 0, budDr: 0, spentD: 0, spentDr: 0 };
+
+        const rNodes = rootNodeIds.filter(id => {
+            const n = currentNodes.find(x => x.id === id);
+            return n && n.zone_id === zId && n.block_type !== 'note';
+        });
+        rNodes.forEach(nId => {
+            const nSt = statsNodes[nId];
+            if (nSt) {
+                st.budD += nSt.budD;
+                st.budDr += nSt.budDr;
+                st.spentD += nSt.spentD;
+                st.spentDr += nSt.spentDr;
+            }
+        });
+
+        (zoneChildren[zId] || []).forEach(czId => {
+            const czSt = rollupZone(czId, visited);
+            st.budD += czSt.budD;
+            st.budDr += czSt.budDr;
+            st.spentD += czSt.spentD;
+            st.spentDr += czSt.spentDr;
+        });
+        return st;
+    }
+
+    const topZoneIds = (currentZones || []).filter(z => !z.parent_zone_id).map(z => z.id);
+    topZoneIds.forEach(id => rollupZone(id));
+
+    return { nodes: statsNodes, zones: statsZones };
+}
+
+function renderStructurePrintSheet(container, proj, showTimes) {
+    const today = new Date().toLocaleDateString('de-DE');
+    const stats = calcTreeStats();
+
+    let html = `
+        <div class="struct-print-sheet">
+            <div class="struct-header">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <h2 style="margin: 0 0 4px 0; color: #2b6cb0;">Projekt-Strukturbaum</h2>
+                        <div style="font-size: 13px; font-weight: bold; color: #4a5568;">${escapeHtml(proj.object_number)} – ${escapeHtml(proj.name)}</div>
+                    </div>
+                    <div style="font-size: 11px; color: #718096; text-align: right;">
+                        <div><strong>Gedruckt am:</strong> ${today}</div>
+                        <div><strong>Benutzer:</strong> ${escapeHtml(activeUserCode || 'COT')}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="struct-tree-body">
+    `;
+
+    const getIndentSpaces = (level) => {
+        let str = '';
+        for (let i = 0; i < level; i++) str += '<span style="display:inline-block; width: 22px; color: #a0aec0;">│&nbsp;&nbsp;</span>';
+        return str;
+    };
+
+    const formatStatsHtml = (st) => {
+        if (!showTimes || !st) return '';
+        return `
+            <div style="font-size: 11px; color: #4a5568; font-family: monospace; white-space: nowrap;">
+                <span style="color:#2b6cb0; font-weight: bold;">CAD: ${formatHoursToHM(st.spentD)} / ${formatHoursToHM(st.budD)}</span> &nbsp;│&nbsp; 
+                <span style="color:#38a169; font-weight: bold;">Zeichn: ${formatHoursToHM(st.spentDr)} / ${formatHoursToHM(st.budDr)}</span>
+            </div>
+        `;
+    };
+
+    const printZoneAndChildren = (zoneId, level) => {
+        const zone = currentZones.find(z => z.id === zoneId);
+
+        // Kommentarbereiche vollständig vom Baum-Druck ausschließen
+        if (!zone || window.isZoneHidden(zone.id) || zone.zone_type === 'comment') return;
+
+        const docNum = zone.doc_number || (zone.article_number ? `ART-${zone.article_number}` : '');
+        const badgeHtml = docNum ? `<span class="struct-doc-badge" style="border-color:${zone.color_hex || '#cbd5e0'};">${escapeHtml(docNum)}</span>` : '';
+        const indentHtml = getIndentSpaces(level);
+        const zSt = stats.zones[zone.id];
+
+        // Richtiges Icon basierend auf dem Typ
+        let zIcon = '📍';
+        if (zone.zone_type === 'assembly') zIcon = '📦';
+
+        html += `
+            <div class="struct-row" style="background: #f8fafc; font-weight: bold; margin-top: 8px;">
+                <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
+                    ${indentHtml}<span class="struct-connector-line">📁</span>
+                    ${badgeHtml}<span style="color:${zone.color_hex || '#2d3748'};">${zIcon} ${escapeHtml(zone.title)}</span>
+                </div>
+                ${formatStatsHtml(zSt)}
+            </div>
+        `;
+
+        const rootNodesInZone = (currentNodes || []).filter(n => n.zone_id === zone.id && n.block_type !== 'note' && !currentEdges.some(e => e.target === n.id));
+        rootNodesInZone.forEach(n => printNodeTree(n.id, level + 1));
+
+        const childZones = (currentZones || []).filter(z => z.parent_zone_id === zone.id);
+        childZones.forEach(cz => printZoneAndChildren(cz.id, level + 1));
+    };
+
+    const printNodeTree = (nodeId, level) => {
+        const node = currentNodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        const docNum = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+        const badgeHtml = docNum ? `<span class="struct-doc-badge">${escapeHtml(docNum)}</span>` : '';
+        const indentHtml = getIndentSpaces(level);
+        const nSt = stats.nodes[node.id];
+
+        html += `
+            <div class="struct-row">
+                <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
+                    ${indentHtml}<span class="struct-connector-line">└──</span>
+                    ${badgeHtml}<span>${node.block_type === 'part' ? '📄' : '📦'} ${escapeHtml(node.name)}</span>
+                </div>
+                ${formatStatsHtml(nSt)}
+            </div>
+        `;
+
+        const childEdges = (currentEdges || []).filter(e => e.source === node.id);
+        childEdges.forEach(edge => printNodeTree(edge.target, level + 1));
+    };
+
+    const topZones = (currentZones || []).filter(z => !z.parent_zone_id);
+    topZones.forEach(tz => printZoneAndChildren(tz.id, 0));
+
+    const unzonedRootNodes = (currentNodes || []).filter(n => !n.zone_id && n.block_type !== 'note' && !currentEdges.some(e => e.target === n.id));
+    if (unzonedRootNodes.length > 0) {
+        html += `<div class="struct-row" style="background: #edf2f7; font-weight: bold; margin-top: 15px;"><span>📌 Freie Blöcke (Ohne Rahmenzuweisung)</span></div>`;
+        unzonedRootNodes.forEach(n => printNodeTree(n.id, 1));
+    }
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
