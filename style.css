@@ -242,29 +242,6 @@ html, body {
   background: var(--primary-hover);
 }
 
-#adminLockBtn {
-  position: absolute;
-  top: 16px;
-  right: 20px;
-  z-index: 50;
-  background: #fff;
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  width: 38px;
-  height: 38px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  font-size: 16px;
-}
-
-#adminLockBtn.logged-in {
-  background: #38a169;
-  color: #fff;
-  border-color: #38a169;
-}
 
 /* Zoom Controls */
 .zoom-controls {
@@ -948,29 +925,6 @@ html, body {
         pointer-events: auto !important;
     }
 
-/* Info-Button neben dem Schloss */
-#infoGuideBtn {
-    position: absolute;
-    top: 16px;
-    right: 68px;
-    z-index: 50;
-    background: #fff;
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    width: 38px;
-    height: 38px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    font-size: 16px;
-}
-
-    #infoGuideBtn:hover {
-        background: #edf2f7;
-    }
-
 /* =============================================================================
  * Highlight-Effekt für Instanz-Verknüpfungen
  * ============================================================================= */
@@ -1009,6 +963,43 @@ html, body {
     margin-left: 6px;
     color: #dd6b20;
     cursor: help;
+}
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Top-Right Buttons für Lokale Verwaltung)
+ * ERSETZEN IN: style.css (Im Bereich Top Toolbar & AdminLockBtn)
+ * Zeitstempel: 2026-08-30 09:54:00 CEST
+ * Breadcrumb: [2026-08-30] Konsolidierte .top-right-btn Klasse für alle Menü-Icons.
+ * =============================================================================
+ */
+.top-right-btn {
+    position: absolute;
+    top: 16px;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-size: 16px;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+    .top-right-btn:hover {
+        background: #edf2f7;
+    }
+
+#adminLockBtn.logged-in {
+    background: #38a169;
+    color: #fff;
+    border-color: #38a169;
 }
 
 /* =============================================================================
@@ -1635,3 +1626,50 @@ html, body {
 .assembly-card, .project-zone, .note-card {
     contain: layout style;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Info Modal Tabs)
+ * Zeitstempel: 2026-08-30 11:35:00 CEST
+ * =============================================================================
+ */
+.info-tabs-header {
+    display: flex;
+    border-bottom: 2px solid #edf2f7;
+    margin-bottom: 15px;
+    gap: 8px;
+    overflow-x: auto;
+    /* Versteckt den Scrollbar, behält aber die Funktionalität */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+    .info-tabs-header::-webkit-scrollbar {
+        display: none;
+    }
+
+.info-tab-btn {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #a0aec0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: -2px; /* Zieht die Border über die Container-Border */
+    white-space: nowrap;
+}
+
+    .info-tab-btn:hover {
+        color: #4a5568;
+        background: #f7fafc;
+        border-radius: 4px 4px 0 0;
+    }
+
+    .info-tab-btn.active {
+        color: #2b6cb0;
+        border-bottom-color: #2b6cb0;
+    }

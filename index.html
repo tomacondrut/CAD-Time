@@ -54,6 +54,19 @@
             <div id="dialogInputContainer" class="form-group" style="display: none;">
                 <input type="text" id="dialogInput" />
             </div>
+            <!-- =============================================================================
+            * Breadcrumb: [2026-08-30 10:30:00 CEST] Zweites Eingabefeld für Dual-Prompts hinzugefügt
+            * ============================================================================= -->
+            <div id="dialogDualInputContainer" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label id="dialogLabel1" style="display: block; font-size: 11px; font-weight: bold; color: #4a5568; margin-bottom: 4px;">Feld 1:</label>
+                    <input type="text" id="dialogInput1" style="width: 100%; padding: 8px; font-size: 13px; border: 1px solid #cbd5e0; border-radius: 4px;" />
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label id="dialogLabel2" style="display: block; font-size: 11px; font-weight: bold; color: #4a5568; margin-bottom: 4px;">Feld 2:</label>
+                    <input type="text" id="dialogInput2" style="width: 100%; padding: 8px; font-size: 13px; border: 1px solid #cbd5e0; border-radius: 4px;" />
+                </div>
+            </div>
             <div class="modal-actions">
                 <button type="button" class="btn-sec" id="dialogBtnCancel" onclick="closeDialog(false)">Abbrechen</button>
                 <button type="button" class="btn-prim" id="dialogBtnConfirm" onclick="closeDialog(true)">Bestätigen</button>
@@ -61,50 +74,90 @@
         </div>
     </div>
 
-    <!-- Info & Leitfaden Modal -->
+    <!-- =============================================================================
+         * Projekt: CAD Time Manager
+         * Domain: Info & Leitfaden Modal (Tabbed Layout)
+         * ERSETZEN IN: index.html
+         * Zeitstempel: 2026-08-30 11:35:00 CEST
+         * Breadcrumbs:
+         *   - [2026-08-30 11:35:00 CEST]: Modal in Tabs aufgeteilt und um die
+         *     neuen Backup- und Offline-Funktionen erweitert.
+         * ============================================================================= -->
     <div id="infoGuideModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 650px;">
-            <div class="modal-header">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
-            <div style="font-size: 12px; color: #4a5568; line-height: 1.6; max-height: 500px; overflow-y: auto; padding-right: 8px;">
+        <div class="modal-content" style="width: 720px; max-width: 95%;">
+            <div class="modal-header" style="margin-bottom: 10px;">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
 
-                <strong style="color: #2b6cb0; font-size: 13px;">🧭 Navigation & Grundlagen</strong>
-                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
-                    <li><strong>Pan & Zoom:</strong> Bewege dich mit gedrückter linker Maustaste über das Raster. Zoomen erfolgt über das Mausrad oder die Buttons (unten rechts).</li>
-                    <li><strong>Persönlicher Filter:</strong> Ein Klick auf dein Kürzel oben links in der Sidebar (unter "CAD TIME MANAGER") dimmt alle Blöcke ab, die nicht dir zugewiesen sind.</li>
-                    <li><strong>Erstellen:</strong> Ein Rechtsklick auf eine leere Stelle öffnet das Menü für neue Blöcke, Rahmen oder Notizen.</li>
-                </ul>
+            <!-- Tab Navigation -->
+            <div class="info-tabs-header">
+                <button class="info-tab-btn active" onclick="switchInfoTab('tabNav')">🧭 Navigation</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabElements')">📦 Elemente</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabStorage')">💾 Speichern & Lokal</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabTimes')">⏱️ Zeiten</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabNotes')">📝 Notizen</button>
+            </div>
 
-                <strong style="color: #2b6cb0; font-size: 13px;">📦 Blöcke, Instanzen & Verbindungen</strong>
-                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
-                    <li><strong>Hierarchien (Splines):</strong> Klicke auf einen der 4 Knotenpunkte (🔌) eines Blocks und danach auf ein Ziel, um eine Verknüpfung zu ziehen.</li>
-                    <li><strong>Referenz-Instanzen:</strong> Über Rechtsklick auf einen Block kann dieser "Als Instanz dupliziert" werden. Das Original fungiert als Master (durchgezogener Rand). Referenzen (gestrichelter Rand) leiten alle gebuchten Zeiten an den Master weiter. Budgets werden in Klammern dargestellt. Strg+C / Strg+V kopiert Blöcke ebenfalls als Instanz.</li>
-                    <li><strong>Doppelklick:</strong> Öffnet die Einstellungen eines Blocks zur Bearbeitung von Namen, DOC-Nummer, Farbe und Zuweisungen.</li>
-                </ul>
+            <div class="info-tabs-content" style="font-size: 13px; color: #4a5568; line-height: 1.6; min-height: 280px; max-height: 480px; overflow-y: auto; padding-right: 8px;">
 
-                <strong style="color: #2b6cb0; font-size: 13px;">📍 Bereiche / Rahmen (Hallen & Zonen)</strong>
-                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
-                    <li><strong>Verschachtelung:</strong> Blöcke und kleinere Rahmen ordnen sich beim Hineinziehen automatisch dem Rahmen zu, in dem sie liegen. Rahmen können bis zu 5 Ebenen tief verschachtelt werden.</li>
-                    <li><strong>Isolation (Sidebar):</strong> Das 🎯-Icon in der Sidebar isoliert einen Rahmen – alle anderen werden ausgeblendet. Über 👁️ kann die Sichtbarkeit einzeln gesteuert werden.</li>
-                    <li><strong>Materialfluss:</strong> Klicke auf "➔ Fluss" im Header eines Rahmens und wähle einen Ziel-Rahmen an, um einen dynamischen Materialfluss-Pfeil zu zeichnen.</li>
-                    <li><strong>Sperren (🔒):</strong> Fixiert die Position des Rahmens, damit du per Klick und Ziehen durch ihn hindurch auf dem Canvas navigieren kannst.</li>
-                </ul>
+                <!-- TAB 1: NAVIGATION -->
+                <div id="tabNav" class="info-tab-pane" style="display: block;">
+                    <strong style="color: #2b6cb0; font-size: 14px;">Navigation & Grundlagen</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
+                        <li><strong>Pan & Zoom:</strong> Bewege dich mit gedrückter linker Maustaste über das Raster. Zoomen erfolgt über das Mausrad oder die Buttons (unten rechts).</li>
+                        <li><strong>Mobile Steuerung:</strong> Auf Touchscreens kannst du mit zwei Fingern zoomen (Pinch) und mit einem Finger scrollen. Halte den Finger lange auf einen Block, um das Rechtsklick-Menü zu öffnen.</li>
+                        <li><strong>Persönlicher Filter:</strong> Ein Klick auf dein Kürzel oben links in der Sidebar dimmt alle Blöcke ab, die nicht dir zugewiesen sind (oder die du nicht erstellt hast).</li>
+                        <li><strong>Isolation (Sidebar):</strong> Das 🎯-Icon in der Sidebar isoliert einen Rahmen – alle anderen werden ausgeblendet. Über 👁️ kann die Sichtbarkeit einzeln gesteuert werden.</li>
+                    </ul>
+                </div>
 
-                <strong style="color: #2b6cb0; font-size: 13px;">⏱️ Zeiterfassung & Status</strong>
-                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
-                    <li><strong>Schnelleingabe:</strong> Nutze das Mausrad über den Stunden- (+/- 1h) und Minuten-Feldern (+/- 5m), um Zeiten rasant anzupassen.</li>
-                    <li><strong>Direktbuchung auf Rahmen:</strong> Über "⏱️ Zeiten" im Rahmen-Header können Stunden auch allgemein auf ganze Zonen/Hallen gebucht werden.</li>
-                    <li><strong>Rückwirkend Eintragen:</strong> Im Bearbeitungsmenü (Doppelklick) eines Blocks kann nachträglich Zeit erfasst werden. Admins geben diese direkt frei, für Kollegen landen sie vorerst im Status "Wartend".</li>
-                    <li><strong>Fertigmelden:</strong> Klick auf "✔ Fertigmelden" reicht den Block zur Freigabe ein (Status ⏳). Nach Admin-Freigabe gilt er als erledigt (✅).</li>
-                </ul>
+                <!-- TAB 2: ELEMENTE -->
+                <div id="tabElements" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 14px;">Blöcke, Rahmen & Verbindungen</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
+                        <li><strong>Erstellen:</strong> Ein Rechtsklick auf eine leere Stelle öffnet das Menü für neue Blöcke oder Rahmen.</li>
+                        <li><strong>Hierarchien (Splines):</strong> Klicke auf einen der 4 Knotenpunkte (🔌) eines Blocks und danach auf ein Ziel, um eine Verknüpfung zu ziehen. (Ausblendbar über das Kontextmenü).</li>
+                        <li><strong>Referenz-Instanzen:</strong> Über Rechtsklick auf einen Block kann dieser "Als Instanz dupliziert" werden. Das Original fungiert als Master (durchgezogener Rand). Referenzen (gestrichelter Rand) leiten alle gebuchten Zeiten an den Master weiter. Strg+C / Strg+V kopiert Blöcke ebenfalls als Instanz.</li>
+                        <li><strong>Verschachtelung:</strong> Blöcke und kleinere Rahmen ordnen sich beim Hineinziehen automatisch dem Rahmen zu, in dem sie liegen (bis zu 5 Ebenen tief).</li>
+                        <li><strong>Materialfluss:</strong> Klicke auf "➔ Fluss" im Header eines Rahmens und wähle einen Ziel-Rahmen an, um einen dynamischen Materialfluss-Pfeil zu zeichnen.</li>
+                        <li><strong>Sperren (🔒):</strong> Fixiert die Position des Rahmens, damit du per Klick und Ziehen durch ihn hindurch auf dem Canvas navigieren kannst.</li>
+                    </ul>
+                </div>
 
-                <strong style="color: #2b6cb0; font-size: 13px;">📝 Sticky Notes (Notizzettel)</strong>
-                <ul style="margin-top: 4px; padding-left: 18px; margin-bottom: 12px;">
-                    <li><strong>Post-its:</strong> Frei auf dem Canvas platzierbar und genau wie Blöcke einem Rahmen zuordnungsbar.</li>
-                    <li><strong>Sichtbarkeit:</strong> Du kannst beim Erstellen entscheiden, ob eine Notiz öffentlich (für alle) oder privat (🔒 nur für dich und Admins sichtbar) sein soll.</li>
-                </ul>
+                <!-- TAB 3: SPEICHERN & LOKAL (NEU) -->
+                <div id="tabStorage" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 14px;">Lokal arbeiten, Backups & Supabase</strong>
+                    <p style="margin-top: 6px; margin-bottom: 12px;">Das System trennt strikt zwischen Cloud-Projekten (gesynct mit Supabase) und Offline-Projekten, die rein lokal in deinem Browser existieren.</p>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
+                        <li><strong>Erkennen (☁️ vs. 💾):</strong> Im Projekt-Dropdown siehst du sofort, ob ein Projekt in der Cloud (☁️) oder lokal im Browser-Cache (💾 [LOKAL]) liegt.</li>
+                        <li><strong>Neues lokales Projekt (📄):</strong> Startet ein neues Offline-Projekt. Änderungen hierin werden im Hintergrund automatisch in deinem Browser gesichert. Supabase erfährt hiervon nichts.</li>
+                        <li><strong>Backup erstellen (💾):</strong> Bist du in einem Cloud-Projekt (☁️), lädt ein Klick auf Speichern ein komplettes Backup als HTML-Datei herunter (inkl. Zeitstempel). In einem lokalen Projekt überschreibt dieser Button die zuvor geladene oder erstellte Datei direkt (In-Place Save).</li>
+                        <li><strong>Datei laden / Wiederherstellen (📂):</strong> Lädst du eine gesicherte HTML-Datei, wird diese <strong>zwingend</strong> als neues lokales Projekt (💾 [LOKAL]) geöffnet. Das verhindert, dass du aus Versehen ein Backup über eine aktive Cloud-Datenbank drüberbügelst.</li>
+                    </ul>
+                </div>
+
+                <!-- TAB 4: ZEITEN & STATUS -->
+                <div id="tabTimes" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 14px;">Zeiterfassung & Status-Workflow</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
+                        <li><strong>Schnelleingabe:</strong> Nutze das Mausrad über den Stunden- (+/- 1h) und Minuten-Feldern (+/- 5m), um Zeiten auf Touchpads oder mit der Maus rasend schnell anzupassen. Oder wische auf dem Handy einfach nach oben/unten.</li>
+                        <li><strong>Direktbuchung auf Rahmen:</strong> Über "⏱️ Zeiten" im Rahmen-Header können Stunden auch allgemein auf ganze Zonen/Hallen gebucht werden.</li>
+                        <li><strong>Rückwirkend Eintragen:</strong> Im Bearbeitungsmenü (Doppelklick auf Block) kann nachträglich Zeit erfasst werden. Admins geben diese direkt frei, für Kollegen landen sie vorerst im Status "Wartend".</li>
+                        <li><strong>Fertigmelden:</strong> Klick auf "✔ Fertigmelden" am Block reicht diesen zur Freigabe ein (Status ⏳). Nach Admin-Freigabe gilt er als erledigt (✅).</li>
+                    </ul>
+                </div>
+
+                <!-- TAB 5: NOTIZEN -->
+                <div id="tabNotes" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 14px;">Notizen & To-Do Listen</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
+                        <li><strong>Sticky Notes (📝):</strong> Frei auf dem Canvas platzierbar und genau wie Blöcke einem Rahmen zuordnungsbar.</li>
+                        <li><strong>To-Do Listen (☑️):</strong> Enthalten eine Checkliste. Der rote Warn-Rand fängt an zu pulsieren, wenn das Fälligkeitsdatum überschritten wurde und noch nicht alle Punkte abgehakt sind.</li>
+                        <li><strong>Sichtbarkeit:</strong> Du kannst beim Erstellen entscheiden, ob eine Notiz öffentlich (für alle) oder privat (🔒 nur für dich und Admins sichtbar) sein soll.</li>
+                        <li><strong>Zuklappen:</strong> Klick auf das Minus (−) im Header der Notiz klappt diese auf Icon-Größe zusammen.</li>
+                    </ul>
+                </div>
 
             </div>
-            <div class="modal-actions" style="margin-top: 15px;">
+            <div class="modal-actions" style="margin-top: 15px; border-top: 1px solid #edf2f7; padding-top: 15px;">
                 <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Verstanden, los geht's!</button>
             </div>
         </div>
@@ -506,9 +559,16 @@
             <!-- Neuer Mobile-Menü Button (nur auf kleinen Screens sichtbar) -->
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
 
+            <!-- =============================================================================
+            * Breadcrumb: [2026-08-30] Lokale Datei-Buttons eingefügt
+            * ============================================================================= -->
+            <button id="newFileBtn" class="top-right-btn" style="right: 212px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
+            <button id="saveFileBtn" class="top-right-btn" style="right: 164px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
+            <button id="loadFileBtn" class="top-right-btn" style="right: 116px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+
             <!-- Info-Leitfaden Button links vom Schloss -->
-            <button id="infoGuideBtn" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
-            <button id="adminLockBtn" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
+            <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
+            <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
 
             <div class="zoom-controls">
                 <button class="btn-zoom" id="btnZoomIn">+</button>
@@ -815,6 +875,7 @@
     <script src="db.js"></script>
     <script src="report.js"></script>
     <script src="canvas.js"></script>
+    <script src="file_manager.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

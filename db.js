@@ -1,70 +1,172 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Datenbank, Realtime-Sync, State & Hierarchie-Rollup Engine
- * Zeitstempel: 2026-08-23 21:10:00 CEST
+ * Domain: Datenbank, Supabase-Proxy, State & Hierarchie-Rollup Engine
+ * ERSETZEN IN: db.js (Gesamte Datei)
+ * Zeitstempel: 2026-08-30 10:27:00 CEST
  * Breadcrumbs:
- *   - Komplette Bereinigung redundanter Fetch-Funktionen.
- *   - Paralleles Laden aller Projektdaten inkl. Materialfluss-Pfeile (zone_flow_arrows).
+ *   - [2026-08-23 21:10:00 CEST]: Initiale DB-Anbindung, paralleles Laden aller 
+ *     Projektdaten inkl. Materialfluss-Pfeile (zone_flow_arrows).
+ *   - [2026-08-28 22:50:00 - 2026-08-29 21:15:00 CEST]: Farbpaletten-Optimierung 
+ *     (High-Contrast Edition & Farbkreis-Sortierung).
+ *   - [2026-08-30 10:20:00 CEST]: Supabase-Proxy integriert zur strikten Isolation 
+ *     lokaler Projekte vor unbeabsichtigtem Cloud-Sync.
+ *   - [2026-08-30 10:45:00 CEST]: Hardcodiertes ADMIN_PASS entfernt und dynamische 
+ *     Abfrage über Supabase-Tabelle 'app_config' zur Proxy-Whitelist hinzugefügt.
+ *   - [2026-08-30 10:50:00 CEST]: Doppelte Deklarationen von fetchCanvasData bereinigt 
+ *     und direkte realDb-Instanz für Systemabfragen stabilisiert.
  * =============================================================================
  */
 
 const SUPABASE_URL = 'https://oazqaykiffiznfgrmihi.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_9XeDSb2HEkzK8yDL1ralIQ_HERPIq3C';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const realDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ADMIN_PASS = '787456c';
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & Lokaler Mock (Sofortiger Response & Single-Select Fix)
+ * ERSETZEN IN: db.js (Konstante localDbMock)
+ * Zeitstempel: 2026-08-30 10:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:20:00 CEST]: Initiale Mock-Engine.
+ *   - [2026-08-30 10:35:00 CEST]: Promise-Rückgabe für insert().select().single()
+ *     vollständig kompatibel zur Supabase-Client-Syntax gemacht, damit neu 
+ *     erstellte Blöcke und Verbindungen ohne Reload/Projektwechsel sofort gerendert werden.
+ * =============================================================================
+ */
+const localDbMock = {
+    from: function (table) {
+        return {
+            select: () => ({
+                eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+                order: () => Promise.resolve({ data: [], error: null }),
+                single: () => Promise.resolve({ data: null, error: null })
+            }),
+            insert: (arr) => {
+                const insertedItems = arr.map(item => ({
+                    ...item,
+                    id: item.id || ('loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+                    created_at: item.created_at || new Date().toISOString()
+                }));
+
+                if (table === 'project_nodes') currentNodes.push(...insertedItems);
+                else if (table === 'project_edges') currentEdges.push(...insertedItems);
+                else if (table === 'project_zones') currentZones.push(...insertedItems);
+                else if (table === 'time_logs') currentTimeLogs.push(...insertedItems);
+                else if (table === 'zone_flow_arrows') window.currentFlowArrows.push(...insertedItems);
+
+                if (window.handleSaveFile) window.handleSaveFile(true); // Silent Auto-save
+
+                return {
+                    select: () => ({
+                        single: () => Promise.resolve({ data: insertedItems[0], error: null }),
+                        then: (resolve) => resolve({ data: insertedItems, error: null })
+                    }),
+                    then: (resolve) => resolve({ data: insertedItems, error: null })
+                };
+            },
+            update: (obj) => ({
+                eq: (col, val) => {
+                    let targetArr = [];
+                    if (table === 'project_nodes') targetArr = currentNodes;
+                    else if (table === 'project_zones') targetArr = currentZones;
+                    else if (table === 'time_logs') targetArr = currentTimeLogs;
+
+                    const item = targetArr.find(x => x[col] === val);
+                    if (item) Object.assign(item, obj);
+                    if (window.handleSaveFile) window.handleSaveFile(true);
+                    return Promise.resolve({ data: item, error: null });
+                }
+            }),
+            delete: () => ({
+                eq: (col, val) => {
+                    if (table === 'project_nodes') currentNodes = currentNodes.filter(x => x[col] !== val);
+                    else if (table === 'project_zones') currentZones = currentZones.filter(x => x[col] !== val);
+                    else if (table === 'time_logs') currentTimeLogs = currentTimeLogs.filter(x => x[col] !== val);
+                    else if (table === 'zone_flow_arrows') window.currentFlowArrows = window.currentFlowArrows.filter(x => x[col] !== val);
+
+                    if (window.handleSaveFile) window.handleSaveFile(true);
+                    return Promise.resolve({ data: null, error: null });
+                },
+                match: (queryObj) => {
+                    if (table === 'project_edges') {
+                        currentEdges = currentEdges.filter(e => !(e.source === queryObj.source && e.target === queryObj.target));
+                    }
+                    if (window.handleSaveFile) window.handleSaveFile(true);
+                    return Promise.resolve({ data: null, error: null });
+                }
+            })
+        };
+    }
+};
+// Globaler DB-Proxy: Leitet Anfragen je nach Projekt-Präfix ('local_') um
+const db = new Proxy(realDb, {
+    get(target, prop) {
+        if (prop === 'from') {
+            return function (table) {
+                const isLocalActive = window.activeProjectId && window.activeProjectId.startsWith('local_');
+
+                // Blockiere Supabase strikt für lokale Projekte (Ausnahmen bleiben ansprechbar)
+                if (isLocalActive && table !== 'projects' && table !== 'app_users' && table !== 'budget_audit_logs' && table !== 'app_config') {
+                    return localDbMock.from(table);
+                }
+
+                // Lokale Projekt-Updates/-Löschungen in IndexedDB abfangen
+                if (table === 'projects') {
+                    return {
+                        ...target.from(table),
+                        update: (obj) => ({
+                            eq: (col, val) => {
+                                if (val.startsWith('local_')) {
+                                    const p = currentProjects.find(x => x.id === val);
+                                    if (p) {
+                                        Object.assign(p, obj);
+                                        if (window.localDB) {
+                                            const tx = window.localDB.transaction('projects', 'readwrite');
+                                            tx.objectStore('projects').put(p);
+                                        }
+                                        if (window.renderProjectDropdowns) window.renderProjectDropdowns();
+                                    }
+                                    return Promise.resolve({ data: null, error: null });
+                                }
+                                return target.from(table).update(obj).eq(col, val);
+                            }
+                        }),
+                        delete: () => ({
+                            eq: (col, val) => {
+                                if (val.startsWith('local_')) {
+                                    if (window.localDB) {
+                                        const tx = window.localDB.transaction('projects', 'readwrite');
+                                        tx.objectStore('projects').delete(val);
+                                    }
+                                    currentProjects = currentProjects.filter(x => x.id !== val);
+                                    return Promise.resolve({ data: null, error: null });
+                                }
+                                return target.from(table).delete().eq(col, val);
+                            }
+                        })
+                    };
+                }
+                return target.from(table);
+            };
+        }
+        return target[prop];
+    }
+});
+
 window.isAdmin = false;
 window.activeUserCode = '';
 window.activeProjectId = 'proj_default';
 
 /**
  * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Farb-Paletten (Global)
- * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
- * Zeitstempel: 2026-08-28 22:50:00 CEST
- * Breadcrumb: [2026-08-28 22:50:00 CEST] 3 neue komplementäre Farben hinzugefügt: 
- * Ziegelrot, Ockergelb und Aubergine, zur Erweiterung der Block/Rahmen-Auswahl.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Farb-Paletten (High-Contrast Edition)
- * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
- * Zeitstempel: 2026-08-28 23:05:00 CEST
+ * Domain: Farbpaletten (Global)
  * Breadcrumbs:
- *   - [2026-08-28 22:50:00 CEST]: 9 gedeckte Erdfarben.
- *   - [2026-08-28 23:05:00 CEST]: Kontrastoptimierung: Helle, gesättigte Töne
- *     gewählt, um Differenzierung auf Dark-Sidebar und Light-Canvas zu maximieren.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Farb-Paletten (Dunkelgrau & Gelb Update)
- * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
- * Zeitstempel: 2026-08-29 20:50:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition.
- *   - [2026-08-29 20:50:00 CEST]: Türkis & Koralle ersetzt durch Dunkelgrau 
- *     und Sonnengelb für eine klarere Differenzierung.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Farb-Paletten (Farblehre & Farbkreis-Sortierung)
- * ERSETZEN IN: db.js (Konstante COLOR_PRESETS)
- * Zeitstempel: 2026-08-29 21:15:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition.
- *   - [2026-08-29 20:50:00 CEST]: Dunkelgrau & Sonnengelb integriert.
- *   - [2026-08-29 21:15:00 CEST]: Anordnung strikt nach dem Farbkreis (Rot bis 
- *     Magenta) + neutrale/erdige Akzenttöne am Ende für intuitive Farbwahl.
+ *   - [2026-08-28 22:50:00 CEST]: 9 komplementäre Erdfarben.
+ *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition für Dark-Sidebar/Light-Canvas.
+ *   - [2026-08-29 20:50:00 CEST]: Dunkelgrau und Sonnengelb integriert.
+ *   - [2026-08-29 21:15:00 CEST]: Farbkreis-Sortierung von Rot bis Magenta.
  * =============================================================================
  */
 const COLOR_PRESETS = [
@@ -108,7 +210,7 @@ window.pendingCanvasUpdate = false;
 
 async function fetchUsers() {
     try {
-        const { data, error } = await db.from('app_users').select('*').order('code', { ascending: true });
+        const { data, error } = await realDb.from('app_users').select('*').order('code', { ascending: true });
         if (error) throw error;
         currentUsers = data || [];
     } catch (err) {
@@ -120,11 +222,25 @@ async function fetchUsers() {
     }
 }
 
+/**
+ * =============================================================================
+ * Domain: Projekt-Abruf & Session-Wiederherstellung
+ * Breadcrumbs:
+ *   - [2026-08-30 10:25:00 CEST]: IndexedDB-Merge für lokale Projekte integriert.
+ *   - [2026-08-30 10:50:00 CEST]: Strikte Trennung zwischen realDb und lokalem Speicher.
+ * =============================================================================
+ */
 async function fetchProjects() {
     try {
-        const { data, error } = await db.from('projects').select('*').order('object_number', { ascending: true });
+        const { data, error } = await realDb.from('projects').select('*').order('object_number', { ascending: true });
         if (error) throw error;
         currentProjects = data || [];
+
+        // Lokale Projekte laden und zusammenführen
+        if (window.loadLocalProjects) {
+            const localProjs = await window.loadLocalProjects();
+            currentProjects = [...localProjs, ...currentProjects];
+        }
 
         const activeProjects = currentProjects.filter(p => !p.is_archived);
         if (activeProjects.length > 0 && !activeProjects.some(p => p.id === activeProjectId)) {
@@ -132,7 +248,7 @@ async function fetchProjects() {
         }
     } catch (err) {
         console.error("Fehler beim Laden der Projekte:", err);
-        currentProjects = [];
+        if (window.loadLocalProjects) currentProjects = await window.loadLocalProjects();
     } finally {
         if (typeof window.renderProjectDropdowns === 'function') window.renderProjectDropdowns();
         if (typeof window.updateSidebarStats === 'function') window.updateSidebarStats();
@@ -141,6 +257,19 @@ async function fetchProjects() {
     }
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas-Datenabfrage (Race-Condition Fix für lokale Dateien)
+ * ERSETZEN IN: db.js (Funktionen getCurrentProject & fetchCanvasData)
+ * Zeitstempel: 2026-08-30 11:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:50:00 CEST]: Bereinigung redundanter Deklarationen.
+ *   - [2026-08-30 11:15:00 CEST]: loadedLocalProjectId eingeführt. Verhindert 
+ *     permanentes Lesen von der Festplatte bei jedem UI-Update (Race Condition Fix). 
+ *     Lokale Modifikationen (Löschen/Erstellen) sind nun augenblicklich.
+ * =============================================================================
+ */
 function getCurrentProject() {
     return currentProjects.find(p => p.id === activeProjectId) || {
         object_number: 'OBJ-2026-01',
@@ -150,55 +279,98 @@ function getCurrentProject() {
     };
 }
 
+// Speichert, welches lokale Projekt aktuell im Arbeitsspeicher liegt
+window.loadedLocalProjectId = null;
 
-// =============================================================================
-// 2. CANVAS-SPEZIFISCHE DATEN-ABFRAGEN (Nodes, Edges, Zones, Logs, Pfeile)
-// =============================================================================
-
-window.fetchCanvasData = async function() {
+window.fetchCanvasData = async function () {
     if (!activeProjectId) return;
 
-    // Parallel-Fetch für maximale Performance
-    const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
-        db.from('project_nodes').select('*').eq('project_id', activeProjectId),
-        db.from('project_edges').select('*').eq('project_id', activeProjectId),
-        db.from('project_zones').select('*').eq('project_id', activeProjectId),
-        db.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false }),
-        db.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId)
-    ]);
+    // 1. Lokaler Modus
+    if (activeProjectId.startsWith('local_')) {
+        // NUR von der Festplatte laden, wenn wir das Projekt gewechselt haben
+        if (window.loadedLocalProjectId !== activeProjectId) {
+            const proj = currentProjects.find(p => p.id === activeProjectId);
+            if (proj && proj.handle) {
+                try {
+                    const perm = await proj.handle.queryPermission({ mode: 'readwrite' });
+                    if (perm !== 'granted') {
+                        const confirmRestore = await customConfirm('Lokaler Dateizugriff', `Bitte erlaube den Dateizugriff auf "${proj.name}", um das lokale Projekt zu laden.`, 'Zugriff Erlauben', 'Abbrechen');
+                        if (confirmRestore) {
+                            const req = await proj.handle.requestPermission({ mode: 'readwrite' });
+                            if (req !== 'granted') throw new Error('Berechtigung verweigert');
+                        } else {
+                            throw new Error('Vom Nutzer abgebrochen');
+                        }
+                    }
+                    const file = await proj.handle.getFile();
+                    const text = await file.text();
+                    window.processLoadedHtml(text, false); // false = Kein Render-Trigger
+                    window.isLocalFileOpen = true;
+                    window.localFileHandle = proj.handle;
+                    window.loadedLocalProjectId = activeProjectId; // Im Speicher verankert
+                } catch (e) {
+                    console.error("Lokale Datei Fehler:", e);
+                    showToast('Lokale HTML-Datei gelöscht oder Zugriff verweigert.', 'error');
 
-    if (arrowsRes.error) {
-        console.error("Supabase Fehler beim Pfeile laden:", arrowsRes.error);
+                    if (window.localDB) {
+                        const tx = window.localDB.transaction('projects', 'readwrite');
+                        tx.objectStore('projects').delete(activeProjectId);
+                    }
+                    currentProjects = currentProjects.filter(p => p.id !== activeProjectId);
+
+                    activeProjectId = currentProjects.find(p => !p.is_local && !p.is_archived)?.id;
+                    if (typeof window.renderProjectDropdowns === 'function') window.renderProjectDropdowns();
+                    fetchCanvasData();
+                    return;
+                }
+            } else if (proj && !proj.handle) {
+                // Neues Projekt oder Auto-Import (noch ohne Dateireferenz)
+                window.isLocalFileOpen = true;
+                window.loadedLocalProjectId = activeProjectId;
+            }
+        }
+
+        // Reine UI-Aktualisierung aus dem pfeilschnellen Arbeitsspeicher
+        if (window.renderCanvas) window.renderCanvas();
+        if (window.updateSidebarStats) window.updateSidebarStats();
+        if (window.renderSidebarZones) window.renderSidebarZones();
+        if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
+        return;
     }
 
+    // 2. Cloud Modus: Supabase Parallel-Fetch
+    const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
+        realDb.from('project_nodes').select('*').eq('project_id', activeProjectId),
+        realDb.from('project_edges').select('*').eq('project_id', activeProjectId),
+        realDb.from('project_zones').select('*').eq('project_id', activeProjectId),
+        realDb.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false }),
+        realDb.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId)
+    ]);
+
+    if (arrowsRes.error) console.error("Supabase Fehler beim Pfeile laden:", arrowsRes.error);
     if (window.isDraggingAnything) {
         window.pendingCanvasUpdate = true;
         return;
     }
 
-    // State updaten
     currentNodes = nodesRes.data || [];
     currentEdges = edgesRes.data || [];
     currentZones = zonesRes.data || [];
     currentTimeLogs = logsRes.data || [];
     window.currentFlowArrows = arrowsRes.data || [];
 
-    // UI Trigger
+    // Status sauber zurücksetzen
+    window.isLocalFileOpen = false;
+    window.loadedLocalProjectId = null;
+
     if (window.renderCanvas) window.renderCanvas();
     if (window.updateSidebarStats) window.updateSidebarStats();
     if (window.renderSidebarZones) window.renderSidebarZones();
     if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
 };
 
-async function fetchAuditLogs() {
-    const { data } = await db.from('budget_audit_logs').select('*').order('changed_at', { ascending: false }).limit(50);
-    currentAuditLogs = data || [];
-    if (isAdmin && window.renderBudgetAuditLogs) window.renderBudgetAuditLogs();
-}
-
-
 // =============================================================================
-// 3. HIERARCHISCHE ROLLUP ENGINE (Child -> Parent Zeit-Aggregation)
+// 2. HIERARCHISCHE ROLLUP ENGINE (Child -> Parent Zeit-Aggregation)
 // =============================================================================
 
 function calculateRollups() {

@@ -87,44 +87,61 @@ window.generatePieStyle = function (spent, budget, baseColor) {
     return `background: conic-gradient(${fillCol} 0% ${pct}%, #e2e8f0 ${pct}% 100%);`;
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Info Modal Tab Switching)
+ * Zeitstempel: 2026-08-30 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 11:35:00 CEST]: Logik für die Registerkarten im Leitfaden.
+ * =============================================================================
+ */
+window.switchInfoTab = function (tabId) {
+    // 1. Alle Inhalte ausblenden
+    const panes = document.querySelectorAll('.info-tab-pane');
+    panes.forEach(pane => pane.style.display = 'none');
+
+    // 2. Alle Buttons zurücksetzen
+    const btns = document.querySelectorAll('.info-tab-btn');
+    btns.forEach(btn => btn.classList.remove('active'));
+
+    // 3. Ziel-Inhalt einblenden
+    const targetPane = document.getElementById(tabId);
+    if (targetPane) targetPane.style.display = 'block';
+
+    // 4. Geklickten Button aktivieren
+    const targetBtn = document.querySelector(`.info-tab-btn[onclick="switchInfoTab('${tabId}')"]`);
+    if (targetBtn) targetBtn.classList.add('active');
+};
+
 // =============================================================================
 // 2. DROPDOWNS, LOGIN & PROJEKTWECHSEL
 // =============================================================================
-window.renderUserDropdowns = function() {
-    const selectLogin = document.getElementById('userSelectDropdown');
-    const selectRetro = document.getElementById('retroLogUserCode');
-
-    if (selectLogin) {
-        selectLogin.innerHTML = '';
-        if (currentUsers.length === 0) {
-            selectLogin.innerHTML = '<option value="">Keine Benutzer</option>';
-        } else {
-            currentUsers.forEach(u => {
-                const opt = document.createElement('option');
-                opt.value = u.code;
-                opt.textContent = u.code;
-                if (activeUserCode && u.code === activeUserCode) opt.selected = true;
-                selectLogin.appendChild(opt);
-            });
-        }
-    }
-
-    if (selectRetro) {
-        selectRetro.innerHTML = '';
-        currentUsers.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.code;
-            opt.textContent = u.code;
-            selectRetro.appendChild(opt);
-        });
-    }
-};
-
-window.renderProjectDropdowns = function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Projekt-Dropdowns (Visuelle Trennung Lokal vs Cloud)
+ * ERSETZEN IN: ui.js (Funktion renderProjectDropdowns)
+ * Zeitstempel: 2026-08-30 10:28:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:28:00 CEST]: 💾 [LOKAL] und ☁️ Icons für Dropdowns eingefügt.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Projekt-Dropdowns (Visuelle Trennung Lokal vs Cloud)
+ * ERSETZEN IN: ui.js (Funktion renderProjectDropdowns)
+ * Zeitstempel: 2026-08-30 10:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:50:00 CEST]: Doppelte Deklaration bereinigt.
+ * =============================================================================
+ */
+window.renderProjectDropdowns = function () {
     const selectLogin = document.getElementById('projectSelectLoginDropdown');
     const selectSidebar = document.getElementById('sidebarProjectSelect');
 
-    const activeProjects = currentProjects.filter(p => !p.is_archived);
+    const activeProjects = (currentProjects || []).filter(p => !p.is_archived);
 
     if (selectLogin) {
         selectLogin.innerHTML = '';
@@ -134,7 +151,8 @@ window.renderProjectDropdowns = function() {
             activeProjects.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
-                opt.textContent = `${p.object_number} - ${p.name}`;
+                const icon = p.is_local ? '💾 [LOKAL]' : '☁️';
+                opt.textContent = `${icon} ${p.object_number} - ${p.name}`;
                 if (p.id === activeProjectId) opt.selected = true;
                 selectLogin.appendChild(opt);
             });
@@ -149,14 +167,14 @@ window.renderProjectDropdowns = function() {
             activeProjects.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
-                opt.textContent = `${p.object_number} - ${p.name}`;
+                const icon = p.is_local ? '💾 [LOKAL]' : '☁️';
+                opt.textContent = `${icon} ${p.object_number} - ${p.name}`;
                 if (p.id === activeProjectId) opt.selected = true;
                 selectSidebar.appendChild(opt);
             });
         }
     }
 };
-
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
@@ -473,6 +491,18 @@ window.handleOpenAddBlockModal = function (customX = null, customY = null, paren
     openModal('newBlockModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sofort-Render bei lokaler Blockerstellung)
+ * ERSETZEN IN: ui.js (Funktion handleAddBlock)
+ * Zeitstempel: 2026-08-30 10:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-24 20:15:00 CEST]: Initiale Block-Erstellung.
+ *   - [2026-08-30 10:35:00 CEST]: fetchCanvasData() und renderCanvas() direkt
+ *     nach dem Einfügen aufgerufen, damit lokale Blöcke ohne Projektwechsel sichtbar sind.
+ * =============================================================================
+ */
 window.handleAddBlock = async function (e) {
     e.preventDefault();
     const name = document.getElementById('newBlockName').value.trim();
@@ -511,6 +541,11 @@ window.handleAddBlock = async function (e) {
         parentConnectId = posObj.parentConnectId;
     }
 
+    // Automatische Zonen-Zuordnung ermitteln
+    const targetZone = (typeof getDeepestZoneAt === 'function')
+        ? getDeepestZoneAt(posX + 160, posY + 100)
+        : null;
+
     const { data: insertedNode } = await db.from('project_nodes').insert([{
         project_id: activeProjectId,
         name,
@@ -522,29 +557,39 @@ window.handleAddBlock = async function (e) {
         color_hex: '#2b6cb0',
         created_by: activeUserCode || 'COT',
         pos_x: posX,
-        pos_y: posY
+        pos_y: posY,
+        zone_id: targetZone ? targetZone.id : null
     }]).select().single();
 
     if (parentConnectId && insertedNode) {
         const parentNode = currentNodes.find(n => n.id === parentConnectId);
-        let pId = parentNode.id;
-        let cId = insertedNode.id;
-        if (parentNode.pos_y > insertedNode.pos_y) {
-            pId = insertedNode.id;
-            cId = parentNode.id;
+        if (parentNode) {
+            let pId = parentNode.id;
+            let cId = insertedNode.id;
+            if (parentNode.pos_y > insertedNode.pos_y) {
+                pId = insertedNode.id;
+                cId = parentNode.id;
+            }
+            await db.from('project_edges').insert([{
+                project_id: activeProjectId,
+                source: pId,
+                target: cId,
+                created_by: activeUserCode || 'COT'
+            }]);
+            cancelConnectionMode();
         }
-        await db.from('project_edges').insert([{
-            project_id: activeProjectId,
-            source: pId,
-            target: cId,
-            created_by: activeUserCode || 'COT'
-        }]);
-        cancelConnectionMode();
     }
 
     closeModal('newBlockModal');
     document.getElementById('newBlockForm').reset();
     showToast('Block erfolgreich hinzugefügt', 'success');
+
+    // Erzwingt sofortige Aktualisierung auf dem Canvas
+    if (typeof fetchCanvasData === 'function') {
+        fetchCanvasData();
+    } else if (typeof renderCanvas === 'function') {
+        renderCanvas();
+    }
 };
 
 /**
@@ -1131,7 +1176,18 @@ window.handleSaveRetroLog = async function (e) {
 // =============================================================================
 // 8. ADMIN KONTROLLZENTRUM & AUDIT-LOGS
 // =============================================================================
-window.handleAdminIconClick = async function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin Kontrollzentrum & Sicherheit)
+ * ERSETZEN IN: ui.js (Funktion handleAdminIconClick)
+ * Zeitstempel: 2026-08-30 10:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:45:00 CEST]: Passwort wird nun sicher dynamisch 
+ *     aus der Supabase 'app_config' Tabelle geladen, anstatt aus dem Quellcode.
+ * =============================================================================
+ */
+window.handleAdminIconClick = async function () {
     if (isAdmin) {
         const wantLogout = await customConfirm(
             'Erweiterte Optionen',
@@ -1155,17 +1211,30 @@ window.handleAdminIconClick = async function() {
         }
     } else {
         const pwd = await customPrompt('Erweiterte Optionen freischalten', 'Bitte Freischalt-Passwort eingeben:', '', true);
-        if (pwd === ADMIN_PASS) {
-            isAdmin = true;
-            const btn = document.getElementById('adminLockBtn');
-            btn.classList.add('logged-in');
-            btn.textContent = '🔓';
-            showToast('Erweiterte Optionen freigeschaltet', 'success');
-            renderCanvas();
-            updateSidebarStats();
-            openAdminModal();
-        } else if (pwd !== null) {
-            showToast('Falsches Passwort', 'error');
+
+        if (pwd !== null) {
+            // 1. Passwort sicher aus der Datenbank abrufen
+            const { data, error } = await db.from('app_config').select('value').eq('key', 'admin_password').single();
+
+            if (error || !data) {
+                console.error("Fehler beim Abrufen des Passworts:", error);
+                showToast('Fehler bei der Server-Kommunikation. DB-Konfiguration prüfen.', 'error');
+                return;
+            }
+
+            // 2. Eingabe mit Datenbank-Eintrag vergleichen
+            if (pwd === data.value) {
+                isAdmin = true;
+                const btn = document.getElementById('adminLockBtn');
+                btn.classList.add('logged-in');
+                btn.textContent = '🔓';
+                showToast('Erweiterte Optionen freigeschaltet', 'success');
+                renderCanvas();
+                updateSidebarStats();
+                openAdminModal();
+            } else {
+                showToast('Falsches Passwort', 'error');
+            }
         }
     }
 };
