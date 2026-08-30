@@ -2298,6 +2298,20 @@ document.addEventListener('touchcancel', endTimeSwipe);
  * =============================================================================
  */
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller & Strukturbaum-Engine (Reine sort_order Sortierung & Bereinigung)
+ * ERSETZEN IN: ui.js (Abschnitt 10 bis Dateiende)
+ * Zeitstempel: 2026-08-30 22:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:05:00 CEST]: Flächen-Fallback entfernt.
+ *   - [2026-08-30 22:25:00 CEST]: 1. calcTreeStats filtert Notizen strikt aus dem Rollup aus.
+ *     2. rootNodesInZone nach Canvas-Position (pos_y/pos_x) sortiert.
+ *     3. Fertigmelde-Buttons aus dem Canvas-Druck entfernt (nur ✅ Erledigt bleibt stehen).
+ * =============================================================================
+ */
+
 // =============================================================================
 // 10. DRUCK-CONTROLLER (A4-A0 Canvas Skalierung, DIN-Schriftkopf & Multi-Page Tree)
 // =============================================================================
@@ -2315,10 +2329,7 @@ window.renderPrintZoneToggles = function () {
         return [...zones].sort((a, b) => {
             const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
             const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
-            if (ordA !== ordB) return ordA - ordB;
-            const areaA = (parseFloat(a.width) || 0) * (parseFloat(a.height) || 0);
-            const areaB = (parseFloat(b.width) || 0) * (parseFloat(b.height) || 0);
-            return areaB - areaA;
+            return ordA - ordB;
         });
     };
 
@@ -2344,6 +2355,7 @@ window.renderPrintZoneToggles = function () {
         `;
     });
 };
+
 window.handlePrintModeChange = function () {
     const mode = document.querySelector('input[name="printMode"]:checked').value;
     const canvasOpts = document.getElementById('printCanvasOptions');
@@ -2366,7 +2378,6 @@ function applyPrintPageStyle(mode, paperSize = 'A4', customTitle = '') {
         document.head.appendChild(styleTag);
     }
 
-    // Feste Millimeter-Dimensionen (verhindert Browser-Fallback auf A4 bei unbekannten Keywords wie A0)
     const dims = {
         'A4': { w: 297, h: 210 },
         'A3': { w: 420, h: 297 },
@@ -2379,7 +2390,6 @@ function applyPrintPageStyle(mode, paperSize = 'A4', customTitle = '') {
     let css = `@media screen { #print-render-container { display: none !important; } }\n`;
 
     if (mode === 'canvas') {
-        // Zwingt das Druckmodul exakte Millimetergrößen anzunehmen!
         css += `@media print { @page { size: ${dim.w}mm ${dim.h}mm; margin: 0; } }\n`;
         css += `@media print { html, body { width: ${dim.w}mm; height: ${dim.h}mm; overflow: hidden; margin: 0; padding: 0; } }`;
     } else {
@@ -2461,7 +2471,9 @@ function renderCanvasPrintSheet(container, proj, includeNotes, includeCharts, pa
     });
 
     const visibleNodes = (currentNodes || []).filter(n => {
-        if (n.block_type === 'note') return includeNotes && !(n.zone_id && window.isZoneHidden(n.zone_id));
+        if (n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO') {
+            return includeNotes && !(n.zone_id && window.isZoneHidden(n.zone_id));
+        }
         return !(n.zone_id && window.isZoneHidden(n.zone_id));
     });
 
@@ -2509,7 +2521,22 @@ function renderCanvasPrintSheet(container, proj, includeNotes, includeCharts, pa
     canvasClone.style.width = `${Math.max(3000, maxX + 500)}px`;
     canvasClone.style.height = `${Math.max(3000, maxY + 500)}px`;
 
+    // Interaktive Elemente und Formulare entfernen
     canvasClone.querySelectorAll('.log-form, .inline-logs-container, .zone-body, .btn-expand-toggle, .btn-toggle-zone-times, .ep-handle, .zone-resize-handle, .note-resize-handle, .btn-tree-toggle, .zone-actions').forEach(el => el.remove());
+
+    // Fertigmelde-Buttons sowie Wartend-/Revisions-Buttons beim Drucken bereinigen (nur ✅ Erledigt bleibt stehen)
+    canvasClone.querySelectorAll('.assembly-card').forEach(card => {
+        const node = currentNodes.find(n => n.id === card.id);
+        const actionRow = card.querySelector('.assembly-body > div[style*="justify-content: space-between"]');
+        if (actionRow) {
+            if (node && node.completion_status === 'completed') {
+                actionRow.innerHTML = `<span style="font-size: 10px; color: #38a169; font-weight: bold;">✅ Erledigt</span>`;
+                actionRow.style.justifyContent = 'flex-end';
+            } else {
+                actionRow.remove();
+            }
+        }
+    });
 
     if (!includeNotes) {
         canvasClone.querySelectorAll('.note-card').forEach(n => n.remove());
@@ -2526,7 +2553,6 @@ function renderCanvasPrintSheet(container, proj, includeNotes, includeCharts, pa
 
     const sheetWrapper = document.createElement('div');
     sheetWrapper.className = 'cad-drawing-sheet';
-    // Harte Dimensionen für das Layouting erzwingen
     sheetWrapper.style.width = `${sheetMm.width}mm`;
     sheetWrapper.style.height = `${sheetMm.height}mm`;
 
@@ -2585,6 +2611,7 @@ function calcTreeStats() {
     const statsZones = {};
 
     (currentNodes || []).forEach(n => {
+        if (n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO') return;
         statsNodes[n.id] = { budD: parseFloat(n.budget_design_hours) || 0, budDr: parseFloat(n.budget_drafting_hours) || 0, spentD: 0, spentDr: 0 };
     });
     (currentZones || []).forEach(z => {
@@ -2614,15 +2641,20 @@ function calcTreeStats() {
         const st = statsNodes[nId] || { budD: 0, budDr: 0, spentD: 0, spentDr: 0 };
         (nodeChildren[nId] || []).forEach(cId => {
             const cSt = rollupNode(cId, visited);
-            st.budD += cSt.budD;
-            st.budDr += cSt.budDr;
-            st.spentD += cSt.spentD;
-            st.spentDr += cSt.spentDr;
+            if (cSt) {
+                st.budD += cSt.budD;
+                st.budDr += cSt.budDr;
+                st.spentD += cSt.spentD;
+                st.spentDr += cSt.spentDr;
+            }
         });
         return st;
     }
 
-    const rootNodeIds = (currentNodes || []).filter(n => !(currentEdges || []).some(e => e.target === n.id)).map(n => n.id);
+    const rootNodeIds = (currentNodes || [])
+        .filter(n => n.block_type !== 'note' && n.doc_number !== 'NOTE' && n.doc_number !== 'TODO' && !(currentEdges || []).some(e => e.target === n.id))
+        .map(n => n.id);
+
     rootNodeIds.forEach(id => rollupNode(id));
 
     const zoneChildren = {};
@@ -2640,7 +2672,7 @@ function calcTreeStats() {
 
         const rNodes = rootNodeIds.filter(id => {
             const n = currentNodes.find(x => x.id === id);
-            return n && n.zone_id === zId && n.block_type !== 'note';
+            return n && n.zone_id === zId;
         });
         rNodes.forEach(nId => {
             const nSt = statsNodes[nId];
@@ -2654,10 +2686,12 @@ function calcTreeStats() {
 
         (zoneChildren[zId] || []).forEach(czId => {
             const czSt = rollupZone(czId, visited);
-            st.budD += czSt.budD;
-            st.budDr += czSt.budDr;
-            st.spentD += czSt.spentD;
-            st.spentDr += czSt.spentDr;
+            if (czSt) {
+                st.budD += czSt.budD;
+                st.budDr += czSt.budDr;
+                st.spentD += czSt.spentD;
+                st.spentDr += czSt.spentDr;
+            }
         });
         return st;
     }
@@ -2671,6 +2705,15 @@ function calcTreeStats() {
 function renderStructurePrintSheet(container, proj, showTimes) {
     const today = new Date().toLocaleDateString('de-DE');
     const stats = calcTreeStats();
+
+    // Reine Sortierung nach sort_order
+    const sortZonesByOrder = (zones) => {
+        return [...zones].sort((a, b) => {
+            const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
+            const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
+            return ordA - ordB;
+        });
+    };
 
     let html = `
         <div class="struct-print-sheet">
@@ -2705,10 +2748,42 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         `;
     };
 
+    const printNodeTree = (nodeId, level) => {
+        const node = currentNodes.find(n => n.id === nodeId);
+        if (!node || node.block_type === 'note' || node.doc_number === 'NOTE' || node.doc_number === 'TODO') return;
+
+        const docNum = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+        const badgeHtml = docNum ? `<span class="struct-doc-badge">${escapeHtml(docNum)}</span>` : '';
+        const indentHtml = getIndentSpaces(level);
+        const nSt = stats.nodes[node.id];
+
+        let completionBadge = '';
+        if (node.completion_status === 'completed') {
+            completionBadge = ' <span style="font-size: 10px; color: #38a169; font-weight: bold;">✅ Erledigt</span>';
+        }
+
+        html += `
+            <div class="struct-row">
+                <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
+                    ${indentHtml}<span class="struct-connector-line">└──</span>
+                    ${badgeHtml}<span>${node.block_type === 'part' ? '📄' : '📦'} ${escapeHtml(node.name)}</span>
+                    ${completionBadge}
+                </div>
+                ${formatStatsHtml(nSt)}
+            </div>
+        `;
+
+        const childEdges = (currentEdges || []).filter(e => e.source === node.id);
+        const childNodes = childEdges.map(e => currentNodes.find(n => n.id === e.target)).filter(Boolean);
+
+        // Kinder nach vertikaler Position sortieren
+        childNodes.sort((a, b) => (parseFloat(a.pos_y) || 0) - (parseFloat(b.pos_y) || 0));
+        childNodes.forEach(child => printNodeTree(child.id, level + 1));
+    };
+
     const printZoneAndChildren = (zoneId, level) => {
         const zone = currentZones.find(z => z.id === zoneId);
 
-        // Kommentarbereiche vollständig vom Baum-Druck ausschließen
         if (!zone || window.isZoneHidden(zone.id) || zone.zone_type === 'comment') return;
 
         const docNum = zone.doc_number || (zone.article_number ? `ART-${zone.article_number}` : '');
@@ -2716,7 +2791,6 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         const indentHtml = getIndentSpaces(level);
         const zSt = stats.zones[zone.id];
 
-        // Richtiges Icon basierend auf dem Typ
         let zIcon = '📍';
         if (zone.zone_type === 'assembly') zIcon = '📦';
 
@@ -2730,40 +2804,36 @@ function renderStructurePrintSheet(container, proj, showTimes) {
             </div>
         `;
 
-        const rootNodesInZone = (currentNodes || []).filter(n => n.zone_id === zone.id && n.block_type !== 'note' && !currentEdges.some(e => e.target === n.id));
+        // 1. Wurzel-Blöcke der Zone nach Position von oben nach unten sortiert
+        const rootNodesInZone = (currentNodes || []).filter(n =>
+            n.zone_id === zone.id &&
+            n.block_type !== 'note' &&
+            n.doc_number !== 'NOTE' &&
+            n.doc_number !== 'TODO' &&
+            !(currentEdges || []).some(e => e.target === n.id)
+        );
+        rootNodesInZone.sort((a, b) => (parseFloat(a.pos_y) || 0) - (parseFloat(b.pos_y) || 0));
         rootNodesInZone.forEach(n => printNodeTree(n.id, level + 1));
 
-        const childZones = (currentZones || []).filter(z => z.parent_zone_id === zone.id);
+        // 2. Unterzonen nach sort_order
+        const childZones = sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id));
         childZones.forEach(cz => printZoneAndChildren(cz.id, level + 1));
     };
 
-    const printNodeTree = (nodeId, level) => {
-        const node = currentNodes.find(n => n.id === nodeId);
-        if (!node) return;
-
-        const docNum = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
-        const badgeHtml = docNum ? `<span class="struct-doc-badge">${escapeHtml(docNum)}</span>` : '';
-        const indentHtml = getIndentSpaces(level);
-        const nSt = stats.nodes[node.id];
-
-        html += `
-            <div class="struct-row">
-                <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
-                    ${indentHtml}<span class="struct-connector-line">└──</span>
-                    ${badgeHtml}<span>${node.block_type === 'part' ? '📄' : '📦'} ${escapeHtml(node.name)}</span>
-                </div>
-                ${formatStatsHtml(nSt)}
-            </div>
-        `;
-
-        const childEdges = (currentEdges || []).filter(e => e.source === node.id);
-        childEdges.forEach(edge => printNodeTree(edge.target, level + 1));
-    };
-
-    const topZones = (currentZones || []).filter(z => !z.parent_zone_id);
+    // 1. Hauptrahmen nach sort_order
+    const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
     topZones.forEach(tz => printZoneAndChildren(tz.id, 0));
 
-    const unzonedRootNodes = (currentNodes || []).filter(n => !n.zone_id && n.block_type !== 'note' && !currentEdges.some(e => e.target === n.id));
+    // 2. Freie Wurzel-Blöcke ohne Rahmen (nach pos_y sortiert)
+    const unzonedRootNodes = (currentNodes || []).filter(n =>
+        !n.zone_id &&
+        n.block_type !== 'note' &&
+        n.doc_number !== 'NOTE' &&
+        n.doc_number !== 'TODO' &&
+        !(currentEdges || []).some(e => e.target === n.id)
+    );
+    unzonedRootNodes.sort((a, b) => (parseFloat(a.pos_y) || 0) - (parseFloat(b.pos_y) || 0));
+
     if (unzonedRootNodes.length > 0) {
         html += `<div class="struct-row" style="background: #edf2f7; font-weight: bold; margin-top: 15px;"><span>📌 Freie Blöcke (Ohne Rahmenzuweisung)</span></div>`;
         unzonedRootNodes.forEach(n => printNodeTree(n.id, 1));

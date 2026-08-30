@@ -1,14 +1,16 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Haupt-Bootstrap / Entry Point
+ * Domain: Haupt-Bootstrap, Sidebar Zonen-Rendering & Visibility Engine
  * ERSETZEN IN: app.js (Gesamte Datei)
- * Zeitstempel: 2026-08-26 20:25:00 CEST
+ * Zeitstempel: 2026-08-30 22:30:00 CEST
  * Breadcrumbs:
  *   - [2026-08-23 15:00:00 CEST]: Initialer Start & Realtime-Sync.
- *   - [2026-08-23 16:30:00 CEST]: Hierarchische Sidebar-Zonen & Isolation.
- *   - [2026-08-26 20:25:00 CEST]: Auto-Login & Session-Restore aus localStorage,
- *     Syntax-Bereinigung und Schließen von initApp().
+ *   - [2026-08-26 20:25:00 CEST]: Auto-Login & Session-Restore aus localStorage.
+ *   - [2026-08-28 23:35:00 CEST]: DocumentFragment-Fix gegen Flackern.
+ *   - [2026-08-29 20:20:00 CEST]: Notizen-Ausblendung mit !important geschützt.
+ *   - [2026-08-30 22:05:00 CEST]: Flächen-Fallback entfernt, strikte sort_order.
+ *   - [2026-08-30 22:15:00 CEST]: canReorderZones Berechtigung für Admins und lokale Projekte.
  * =============================================================================
  */
 
@@ -98,39 +100,9 @@ if (document.readyState === 'loading') {
     initApp();
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering & Hierarchische Isolation
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering (Classic Tree & Robuste Drag/Drop Reorder)
- * ERSETZEN IN: app.js (Funktion renderSidebarZones)
- * Zeitstempel: 2026-08-28 22:25:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 22:15:00 CEST]: 1. Klassische Baumstruktur (Tree-Branches) anstelle
- *     von dicken Farbrändern. 2. Drag & Drop repariert durch echte DOM-Verschachtelung 
- *     (Sub-Zonen leben in eigenen Containern).
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering, Hierarchische Isolation & Sichtbarkeit
- * ERSETZEN IN: app.js (Ab if (!window.collapsedZoneIds) bis Dateiende)
- * Zeitstempel: 2026-08-28 22:40:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 22:40:00 CEST]: 1. toggleIsolateZone repariert (Hierarchie-Isolation 
- *     inkl. Vorfahren/Nachkommen & De-Isolation).
- *     2. Flickern behoben: isZoneHidden als zentraler Guard & animierten Zoom 
- *     bei einfacher Sichtbarkeitsänderung gedämpft.
- * =============================================================================
- */
-
+// =============================================================================
+// SIDEBAR ZONEN-RENDERING & HIERARCHISCHE ISOLATION
+// =============================================================================
 if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
 if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
 
@@ -144,40 +116,12 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
     if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering & Performance-Isolierung
- * ERSETZEN IN: app.js (Ab window.renderSidebarZones bis Dateiende)
- * Zeitstempel: 2026-08-28 23:35:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:35:00 CEST]: 1. DocumentFragment-Fix: Sidebar flackert 
- *     nicht mehr, da das DOM erst im Speicher gebaut und am Stück getauscht wird.
- *     2. Layout-Thrashing-Fix: Sichtbarkeits-Toggles und Isolation laufen über 
- *     doppeltes requestAnimationFrame, um die DOM-Erstellung vom Kamera-Zoom zu entkoppeln.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering (Standardmäßig eingeklappte Unterrahmen)
- * ERSETZEN IN: app.js (Funktion renderSidebarZones)
- * Zeitstempel: 2026-08-29 20:50:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:35:00 CEST]: DocumentFragment-Fix gegen Flackern.
- *   - [2026-08-29 20:50:00 CEST]: Initialer Kollaps-Status hinzugefügt: 
- *     Beim ersten Laden werden alle Eltern-Rahmen automatisch in window.collapsedZoneIds 
- *     aufgenommen, damit der Menübaum initial geschlossen bleibt.
- * =============================================================================
- */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
     if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
     if (!window.collapsedZonesInitialized && currentZones && currentZones.length > 0) {
-        // Alle Zonen mit Unterzonen beim ersten Laden initial einklappen
         currentZones.forEach(z => {
             const hasChildren = currentZones.some(child => child.parent_zone_id === z.id);
             if (hasChildren) {
@@ -187,17 +131,18 @@ window.renderSidebarZones = function () {
         window.collapsedZonesInitialized = true;
     }
 
-    // 1. Fragment erstellen (Unsichtbarer Zwischenspeicher gegen Flackern)
     const fragment = document.createDocumentFragment();
 
+    // Berechtigung: Admin ODER lokales Offline-Projekt
+    const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    const canReorderZones = isAdmin || isLocalProject;
+
+    // Reine Sortierung nach sort_order
     const sortZonesByOrder = (zones) => {
         return [...zones].sort((a, b) => {
             const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
             const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
-            if (ordA !== ordB) return ordA - ordB;
-            const areaA = (parseFloat(a.width) || 0) * (parseFloat(a.height) || 0);
-            const areaB = (parseFloat(b.width) || 0) * (parseFloat(b.height) || 0);
-            return areaB - areaA;
+            return ordA - ordB;
         });
     };
 
@@ -211,7 +156,7 @@ window.renderSidebarZones = function () {
     let draggedEl = null;
 
     const saveDatabaseZoneOrder = async (parentContainer) => {
-        if (!isAdmin) return;
+        if (!canReorderZones) return;
 
         const itemEls = Array.from(parentContainer.children)
             .map(child => child.classList.contains('sidebar-zone-item') ? child : child.querySelector('.sidebar-zone-item'))
@@ -229,7 +174,7 @@ window.renderSidebarZones = function () {
 
         if (updates.length > 0) {
             await Promise.all(updates);
-            showToast('Rahmen-Reihenfolge global aktualisiert', 'success');
+            showToast('Rahmen-Reihenfolge aktualisiert', 'success');
         }
     };
 
@@ -243,7 +188,7 @@ window.renderSidebarZones = function () {
         el.className = `sidebar-zone-item ${isSubZone ? 'sub-zone' : 'top-zone'}`;
         el.dataset.zoneId = zone.id;
         el.dataset.parentId = zone.parent_zone_id || 'root';
-        el.draggable = !!isAdmin;
+        el.draggable = canReorderZones;
 
         el.style.display = 'flex';
         el.style.justifyContent = 'space-between';
@@ -254,7 +199,7 @@ window.renderSidebarZones = function () {
         el.style.fontSize = '12px';
         el.style.color = isHidden ? '#718096' : '#e2e8f0';
         el.style.marginBottom = isSubZone ? '0' : '4px';
-        el.style.cursor = isAdmin ? 'grab' : 'default';
+        el.style.cursor = canReorderZones ? 'grab' : 'default';
         el.style.transition = 'background 0.15s ease';
 
         let toggleBtnHtml = '';
@@ -264,8 +209,8 @@ window.renderSidebarZones = function () {
             toggleBtnHtml = `<span style="width: 16px; display:inline-block;"></span>`;
         }
 
-        const dragHandleHtml = isAdmin
-            ? `<span style="color:#718096; font-size:12px; cursor:grab; user-select:none; margin-right: 4px;" title="Admin: Ziehen zum Neuanordnen">⋮⋮</span>`
+        const dragHandleHtml = canReorderZones
+            ? `<span style="color:#718096; font-size:12px; cursor:grab; user-select:none; margin-right: 4px;" title="Ziehen zum Neuanordnen">⋮⋮</span>`
             : '';
 
         const nodeIconHtml = `<span style="color:${zone.color_hex || '#a0aec0'}; font-size: 14px; margin-right: 6px;">■</span>`;
@@ -283,7 +228,7 @@ window.renderSidebarZones = function () {
             </div>
         `;
 
-        if (isAdmin) {
+        if (canReorderZones) {
             el.addEventListener('dragstart', (e) => {
                 draggedEl = !isSubZone ? el.parentElement : el;
                 e.dataTransfer.effectAllowed = 'move';
@@ -371,34 +316,6 @@ window.renderSidebarZones = function () {
     container.appendChild(fragment);
 };
 
-// Sichtbarkeit: Asynchron entkoppelt, um Rendering-Flackern zu vermeiden
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Performance & State Sync (Anti-Ruckel DOM-Patcher)
- * ERSETZEN IN: app.js (Ab window.toggleZoneVisibility bis Dateiende)
- * Zeitstempel: 2026-08-28 23:45:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:45:00 CEST]: Das zerstörerische Komplett-Rendern 
- *     (renderCanvas & renderSidebarZones) beim Umschalten der Sichtbarkeit 
- *     wurde durch gezieltes CSS-Patching (display: none) ersetzt. 
- *     Vorteil: 0% Sidebar-Flackern und flüssiger Kamera-Zoom (kein Layout-Thrashing).
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Anti-Flicker State & Visibility Sync (CSS !important Override Fix)
- * ERSETZEN IN: app.js (Funktion syncVisibilityToDOM)
- * Zeitstempel: 2026-08-29 20:20:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 23:55:00 CEST]: Flackern vollständig beseitigt.
- *   - [2026-08-29 20:20:00 CEST]: Fix: Notizen wurden beim Isolieren nicht 
- *     ausgeblendet, da ihr CSS "display: flex !important" normale inline-Styles 
- *     blockiert hat. Lösung: setProperty('display', 'none', 'important').
- * =============================================================================
- */
 window.syncVisibilityToDOM = function () {
     // 1. Sidebar Styles anpassen (Striche, Deckkraft)
     const sidebarItems = document.querySelectorAll('.sidebar-zone-item');
@@ -438,10 +355,8 @@ window.syncVisibilityToDOM = function () {
             const treeHidden = typeof isNodeHiddenByAncestor === 'function' && isNodeHiddenByAncestor(n.id);
 
             if (zoneHidden || treeHidden) {
-                // Erzwingt das Ausblenden gegen das !important in der style.css
                 el.style.setProperty('display', 'none', 'important');
             } else {
-                // Leerer String lässt den Browser auf die CSS-Klassen zurückfallen
                 el.style.display = '';
             }
         }
@@ -509,7 +424,6 @@ window.toggleIsolateZone = function (zoneId) {
 
     window.syncVisibilityToDOM();
 
-    // Sofortige Ausrichtung ohne CSS-Animation (verhindert das Ruckeln/Flackern)
     if (typeof window.centerViewOnVisible === 'function') {
         window.centerViewOnVisible(currentlyIsolated ? null : zoneId);
     }

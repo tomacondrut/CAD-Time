@@ -72,6 +72,28 @@ window.openReportModal = function () {
 
     openModal('reportModal');
 };
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Zonen-Sortierung analog zur Sidebar)
+ * ERSETZEN IN: report.js (Funktion populateReportFilters)
+ * Zeitstempel: 2026-08-30 21:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 21:55:00 CEST]: Filterauswahl 'Bereich / Kasten' sortiert Rahmen
+ *     analog zur Sidebar nach sort_order und Fläche (statt ungeordnetem Default-Array).
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Strikte sort_order Sortierung)
+ * ERSETZEN IN: report.js (Funktion populateReportFilters)
+ * Zeitstempel: 2026-08-30 22:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:05:00 CEST]: Filterauswahl 'Bereich / Kasten' sortiert Rahmen
+ *     ausschließlich nach sort_order (Drag & Drop) ohne Flächenberechnung.
+ * =============================================================================
+ */
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
@@ -90,7 +112,18 @@ window.populateReportFilters = function () {
     }
 
     selZone.innerHTML = '<option value="all">Alle Bereiche</option>';
-    currentZones.forEach(z => {
+
+    // Reine Sortierung nach sort_order
+    const sortZonesByOrder = (zones) => {
+        return [...zones].sort((a, b) => {
+            const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
+            const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
+            return ordA - ordB;
+        });
+    };
+
+    const sortedZones = sortZonesByOrder(currentZones || []);
+    sortedZones.forEach(z => {
         const zIcon = z.zone_type === 'assembly' ? '📦' : (z.zone_type === 'comment' ? '💬' : '📍');
         selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
     });
@@ -431,6 +464,18 @@ function renderReportDetailsTable(logs) {
 // =============================================================================
 // 4. PDF EXPORT GENERATOR
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & PDF Export (Textbereinigung & Zonen-Konsistenz)
+ * ERSETZEN IN: report.js (Funktion generatePDF)
+ * Zeitstempel: 2026-08-30 22:18:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:05:00 CEST]: Zonen-Sortierung harmonisiert.
+ *   - [2026-08-30 22:18:00 CEST]: PDF-Tabelle bereinigt: Zonen-Direktbuchungen 
+ *     geben analog zur HTML-Ansicht den reinen Namen ohne '📍 (Direktbuchung)' aus.
+ * =============================================================================
+ */
 window.generatePDF = async function () {
     const btn = document.getElementById('btnExportPDF');
     if (!btn) return;
@@ -483,7 +528,6 @@ window.generatePDF = async function () {
             </div>
         `;
 
-        // Gesamttabelle HTML generieren (ohne DOM-Elemente)
         let tableRows = '';
         let filterTotalD = 0, filterTotalDr = 0;
 
@@ -504,7 +548,7 @@ window.generatePDF = async function () {
                 const zone = currentZones.find(z => z.id === log.zone_id);
                 if (zone) {
                     zoneName = zone.title;
-                    nodeName = `📍 ${zone.title} (Direktbuchung)`;
+                    nodeName = zone.title; // Bereinigt: Kein '📍 (Direktbuchung)' mehr
                 }
             }
 
