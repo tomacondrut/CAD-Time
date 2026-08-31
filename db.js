@@ -250,6 +250,17 @@ window.pendingCanvasUpdate = false;
 // 1. GLOBALE DATEN-ABFRAGEN (User & Projekte)
 // =============================================================================
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Globale Datenabfragen (Benutzer laden & synchronisieren)
+ * ERSETZEN IN: db.js (Funktion fetchUsers)
+ * Zeitstempel: 2026-08-31 18:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:35:00 CEST]: fetchUsers gegen fehlende Tabellen abgesichert
+ *     und direkte UI-Befüllung garantiert.
+ * =============================================================================
+ */
 async function fetchUsers() {
     try {
         const { data, error } = await realDb.from('app_users').select('*').order('code', { ascending: true });
@@ -263,6 +274,7 @@ async function fetchUsers() {
         if (isAdmin && typeof window.renderAdminUserList === 'function') window.renderAdminUserList();
     }
 }
+window.fetchUsers = fetchUsers;
 
 /**
  * =============================================================================

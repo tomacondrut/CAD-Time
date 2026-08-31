@@ -258,6 +258,49 @@ window.renderProjectDropdowns = function () {
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
+ * Domain: UI Controller (Benutzer-Dropdowns Initialisierung)
+ * EINFÜGEN IN: ui.js (Abschnitt 2: Dropdowns, Login & Projektwechsel)
+ * Zeitstempel: 2026-08-31 18:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:35:00 CEST]: renderUserDropdowns implementiert, damit das
+ *     Login-Dropdown und alle Zuweisungs-Listen zuverlässig mit Benutzerkürzeln befüllt werden.
+ * =============================================================================
+ */
+window.renderUserDropdowns = function () {
+    const selectLogin = document.getElementById('userSelectDropdown');
+    const cachedUser = localStorage.getItem('cad_tm_user');
+
+    if (selectLogin) {
+        selectLogin.innerHTML = '';
+        if (!currentUsers || currentUsers.length === 0) {
+            selectLogin.innerHTML = '<option value="">Keine Benutzer gefunden</option>';
+        } else {
+            currentUsers.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.code;
+                opt.textContent = u.code;
+                if (cachedUser && u.code === cachedUser) {
+                    opt.selected = true;
+                } else if (!cachedUser && activeUserCode && u.code === activeUserCode) {
+                    opt.selected = true;
+                }
+                selectLogin.appendChild(opt);
+            });
+        }
+    }
+
+    // Zuweisungs-Dropdowns in Modals aktualisieren (falls offen)
+    if (typeof populateUserDropdown === 'function') {
+        const newNoteUser = document.getElementById('newNoteAssignedUser');
+        if (newNoteUser) populateUserDropdown(newNoteUser, newNoteUser.value || activeUserCode);
+
+        const editNoteUser = document.getElementById('editNoteAssignedUser');
+        if (editNoteUser) populateUserDropdown(editNoteUser, editNoteUser.value);
+    }
+};
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
  * Domain: Login, Logout & Session Storage
  * ERSETZEN IN: ui.js (Funktionen confirmUserLogin & handleLogout)
  * Zeitstempel: 2026-08-26 20:10:00 CEST
