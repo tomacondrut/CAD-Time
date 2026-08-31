@@ -104,18 +104,31 @@ window.handleNewFile = async function () {
     }
 };
 
-// Speichern: Backup für Supabase / In-Place für Lokale Dateien
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Lokale Dateiverwaltung (Strikte Projekt-Isolation beim Speichern)
+ * ERSETZEN IN: file_manager.js (Funktion handleSaveFile)
+ * Zeitstempel: 2026-08-31 17:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 11:15:00 CEST]: In-Place Save für lokale Dateien.
+ *   - [2026-08-31 17:50:00 CEST]: isSupabaseProject strikt an activeProjectId
+ *     gebunden. Verhindert versehentliches Überschreiben lokaler Dateien bei
+ *     aktivem Cloud-Projekt.
+ * =============================================================================
+ */
 window.handleSaveFile = async function (silent = false) {
-    const isSupabaseProject = !window.isLocalFileOpen && !window.localFileHandle;
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
 
-    if (isSupabaseProject && silent) return;
+    // Silent Auto-Save nur für lokale Offline-Dateien ausführen
+    if (!isLocalActive && silent) return;
 
     const payload = {
-        nodes: currentNodes,
-        edges: currentEdges,
-        zones: currentZones,
-        logs: currentTimeLogs,
-        arrows: window.currentFlowArrows
+        nodes: currentNodes || [],
+        edges: currentEdges || [],
+        zones: currentZones || [],
+        logs: currentTimeLogs || [],
+        arrows: window.currentFlowArrows || []
     };
 
     const jsonStr = JSON.stringify(payload);
@@ -136,9 +149,9 @@ window.handleSaveFile = async function (silent = false) {
 </html>`;
 
     try {
-        if (isSupabaseProject) {
-            // Backup-Generierung
-            const proj = currentProjects.find(p => p.id === activeProjectId) || { object_number: 'OBJ', name: 'Projekt' };
+        if (!isLocalActive) {
+            // CLOUD-PROJEKT: Immer als neues HTML-Backup herunterladen (niemals lokale Files überschreiben)
+            const proj = (typeof getCurrentProject === 'function') ? getCurrentProject() : { object_number: 'OBJ', name: 'Projekt' };
             const now = new Date();
 
             const year = now.getFullYear();
@@ -147,8 +160,8 @@ window.handleSaveFile = async function (silent = false) {
             const dateStr = `${year}-${month}-${day}`;
             const hourStr = String(now.getHours()).padStart(2, '0') + 'h';
 
-            const safeName = proj.name.replace(/[^a-zA-Z0-9\-_ÄÖÜäöü]/g, '_');
-            const suggestedName = `BACKUP_${proj.object_number}_${safeName}_${dateStr}_${hourStr}.html`;
+            const safeName = (proj.name || 'Projekt').replace(/[^a-zA-Z0-9\-_ÄÖÜäöü]/g, '_');
+            const suggestedName = `BACKUP_${proj.object_number || 'OBJ'}_${safeName}_${dateStr}_${hourStr}.html`;
 
             if (window.showSaveFilePicker) {
                 const handle = await window.showSaveFilePicker({
@@ -170,14 +183,33 @@ window.handleSaveFile = async function (silent = false) {
                 showToast(`Backup heruntergeladen: ${suggestedName}`, 'success');
             }
         } else {
-            // Lokales Projekt: In-Place überschreiben
-            if (window.localFileHandle) {
-                const writable = await window.localFileHandle.createWritable();
+            // LOKALES PROJEKT: Gezieltes In-Place Überschreiben des aktuellen Handles
+            const currentProj = (currentProjects || []).find(p => p.id === activeProjectId);
+            const handleToUse = currentProj ? currentProj.handle : window.localFileHandle;
+
+            if (handleToUse) {
+                const writable = await handleToUse.createWritable();
                 await writable.write(htmlContent);
                 await writable.close();
                 if (!silent) showToast('Lokale Datei aktualisiert', 'success');
             } else if (!silent) {
-                showToast('Kein Dateizugriff für direktes Überschreiben (Bitte neu speichern)', 'error');
+                // Falls noch kein Dateizugriff hinterlegt ist, Picker aufrufen
+                if (window.showSaveFilePicker) {
+                    const safeName = (currentProj?.name || 'Projekt').replace(/\s+/g, '_');
+                    const newHandle = await window.showSaveFilePicker({
+                        suggestedName: `${currentProj?.object_number || 'OBJ'}_${safeName}.html`,
+                        types: [{ description: 'CAD Time Manager', accept: { 'text/html': ['.html'] } }]
+                    });
+                    if (currentProj) currentProj.handle = newHandle;
+                    window.localFileHandle = newHandle;
+
+                    const writable = await newHandle.createWritable();
+                    await writable.write(htmlContent);
+                    await writable.close();
+                    showToast('Lokale Datei gespeichert', 'success');
+                } else {
+                    showToast('Kein Dateizugriff für direktes Überschreiben vorhanden.', 'error');
+                }
             }
         }
     } catch (err) {

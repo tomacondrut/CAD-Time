@@ -10,36 +10,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-    <!-- =============================================================================
-     * Projekt: CAD Time Manager
-     * Domain: Kontextmenü Steuerung
-     * ERSETZEN IN: index.html
-     * Breadcrumb: [2026-08-23 15:40:00 CEST] HTML-Kommentarsyntax korrigiert
-     * ============================================================================= -->
     <div id="toast"></div>
 
     <!-- Canvas Rechtsklick-Kontextmenü -->
-    <!-- =============================================================================
-     * Projekt: CAD Time Manager
-     * Domain: Canvas & Node Kontextmenü
-     * ERSETZEN IN: index.html
-     * Breadcrumb: [2026-08-23 15:58:00 CEST] Menüpunkt für Rechtsklick-Löschen ergänzt
-     * ============================================================================= -->
-    <!-- Canvas Rechtsklick-Kontextmenü -->
-    <!-- =============================================================================
-     * Projekt: CAD Time Manager
-     * Domain: Canvas & Node Kontextmenü
-     * ERSETZEN IN: index.html
-     * Breadcrumb: [2026-08-24 19:05:00 CEST] Bereinigung Whitespace & vollständige Actions
-     * ============================================================================= -->
-    <!-- Canvas Rechtsklick-Kontextmenü -->
-    <!-- =============================================================================
-     * Breadcrumb: [2026-08-24 19:40:00 CEST] Knotenpunkt-Toggle ins Kontextmenü verschoben
-     * ============================================================================= -->
     <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 175px; padding: 4px 0;">
         <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Block hinzufügen</div>
-        <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">📍 Bereich / Kasten</div>
-        <!-- Breadcrumb: [2026-08-25 17:35:00 CEST] Notiz-Funktion ins Kontextmenü aufgenommen -->
+        <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">⬚ Bereich / Kasten</div>
         <div id="ctxMenuAddNote" class="context-menu-item" onclick="handleContextMenuAction('note')">📝 Notiz / Textzettel</div>
         <div id="ctxMenuToggleHandles" class="context-menu-item" style="border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('toggle_handles')">🔌 Knotenpunkte einblenden</div>
         <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
@@ -54,9 +30,6 @@
             <div id="dialogInputContainer" class="form-group" style="display: none;">
                 <input type="text" id="dialogInput" />
             </div>
-            <!-- =============================================================================
-            * Breadcrumb: [2026-08-30 10:30:00 CEST] Zweites Eingabefeld für Dual-Prompts hinzugefügt
-            * ============================================================================= -->
             <div id="dialogDualInputContainer" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 12px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label id="dialogLabel1" style="display: block; font-size: 11px; font-weight: bold; color: #4a5568; margin-bottom: 4px;">Feld 1:</label>
@@ -74,15 +47,7 @@
         </div>
     </div>
 
-    <!-- =============================================================================
-         * Projekt: CAD Time Manager
-         * Domain: Info & Leitfaden Modal (Tabbed Layout)
-         * ERSETZEN IN: index.html
-         * Zeitstempel: 2026-08-30 11:35:00 CEST
-         * Breadcrumbs:
-         *   - [2026-08-30 11:35:00 CEST]: Modal in Tabs aufgeteilt und um die
-         *     neuen Backup- und Offline-Funktionen erweitert.
-         * ============================================================================= -->
+    <!-- Info & Leitfaden Modal -->
     <div id="infoGuideModal" class="modal-backdrop">
         <div class="modal-content" style="width: 720px; max-width: 95%;">
             <div class="modal-header" style="margin-bottom: 10px;">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
@@ -90,7 +55,7 @@
             <!-- Tab Navigation -->
             <div class="info-tabs-header">
                 <button class="info-tab-btn active" onclick="switchInfoTab('tabNav')">🧭 Navigation</button>
-                <button class="info-tab-btn" onclick="switchInfoTab('tabElements')">📦 Elemente</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabElements')">⬚ Elemente</button>
                 <button class="info-tab-btn" onclick="switchInfoTab('tabStorage')">💾 Speichern & Lokal</button>
                 <button class="info-tab-btn" onclick="switchInfoTab('tabTimes')">⏱️ Zeiten</button>
                 <button class="info-tab-btn" onclick="switchInfoTab('tabNotes')">📝 Notizen</button>
@@ -122,7 +87,7 @@
                     </ul>
                 </div>
 
-                <!-- TAB 3: SPEICHERN & LOKAL (NEU) -->
+                <!-- TAB 3: SPEICHERN & LOKAL -->
                 <div id="tabStorage" class="info-tab-pane" style="display: none;">
                     <strong style="color: #2b6cb0; font-size: 14px;">Lokal arbeiten, Backups & Supabase</strong>
                     <p style="margin-top: 6px; margin-bottom: 12px;">Das System trennt strikt zwischen Cloud-Projekten (gesynct mit Supabase) und Offline-Projekten, die rein lokal in deinem Browser existieren.</p>
@@ -192,11 +157,15 @@
                 <div class="form-group">
                     <label>Typ:</label>
                     <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="blockType" value="assembly" checked style="width: auto;" /> Baugruppe
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="blockType" value="assembly" checked style="width: auto;" />
+                            <svg width="14" height="14" viewBox="0 0 60 60" style="vertical-align: -2px;"><g transform="translate(2, 2)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(26, 14)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(14, 24)"><polygon points="15,0 27,6 15,12 3,6" fill="#fefcbf" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#b7791f" stroke="#744210" stroke-width="2" /></g></svg>
+                            Baugruppe
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="blockType" value="part" style="width: auto;" /> Bauteil
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="blockType" value="part" style="width: auto;" />
+                            <svg width="13" height="13" viewBox="0 0 50 50" style="vertical-align: -2px;"><polygon points="25,2 47,13 25,24 3,13" fill="#ecc94b" stroke="#744210" stroke-width="2.5" /><polygon points="3,13 25,24 25,48 3,37" fill="#d69e2e" stroke="#744210" stroke-width="2.5" /><polygon points="25,24 47,13 47,37 25,48" fill="#b7791f" stroke="#744210" stroke-width="2.5" /></svg>
+                            Bauteil
                         </label>
                     </div>
                 </div>
@@ -204,8 +173,6 @@
                     <label>Bezeichnung des Blocks:</label>
                     <input type="text" id="newBlockName" required placeholder="z.B. Förderband Übergabe" />
                 </div>
-                <!-- Breadcrumb: [2026-08-24] DOC-Nummer und Artikelnummer im Erstellungsmodal -->
-                <!-- Breadcrumb: [2026-08-24 19:50:00 CEST] DOC-Nummer als fixierter Prefix -->
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
                         <label>DOC-Nummer (Vault):</label>
@@ -237,25 +204,27 @@
         </div>
     </div>
 
-
-
     <!-- Neue Zone / Kasten Erstellungs-Modal -->
     <div id="newZoneModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">Bereich / Kasten anlegen</div>
-
             <form id="newZoneForm">
                 <input type="hidden" id="newZoneCustomPos" value="" />
                 <div class="form-group">
                     <label>Typ des Rahmens:</label>
-                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="newZoneType" value="location" checked style="width: auto;" /> 📍 Standort
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="newZoneType" value="assembly" style="width: auto;" /> 📦 Baugruppe
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newZoneType" value="assembly" style="width: auto;" />
+                            <svg width="14" height="14" viewBox="0 0 60 60" style="vertical-align: -2px;"><g transform="translate(2, 2)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(26, 14)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(14, 24)"><polygon points="15,0 27,6 15,12 3,6" fill="#fefcbf" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#b7791f" stroke="#744210" stroke-width="2" /></g></svg>
+                            Baugruppe
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="newZoneType" value="container" style="width: auto;" /> ⬚ Container
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="newZoneType" value="comment" style="width: auto;" /> 💬 Kommentarbereich
                         </label>
                     </div>
@@ -312,24 +281,26 @@
     </div>
 
     <!-- Edit Zone / Kasten Bearbeitungs-Modal -->
-    <!-- Edit Zone / Kasten Bearbeitungs-Modal -->
     <div id="editZoneModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">Bereich / Kasten bearbeiten</div>
-
             <form id="editZoneForm">
                 <input type="hidden" id="editZoneId" />
-
                 <div class="form-group">
                     <label>Typ des Rahmens:</label>
-                    <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="editZoneType" value="location" style="width: auto;" /> 📍 Standort
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="editZoneType" value="assembly" style="width: auto;" /> 📦 Baugruppe
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editZoneType" value="assembly" style="width: auto;" />
+                            <svg width="14" height="14" viewBox="0 0 60 60" style="vertical-align: -2px;"><g transform="translate(2, 2)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(26, 14)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(14, 24)"><polygon points="15,0 27,6 15,12 3,6" fill="#fefcbf" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#b7791f" stroke="#744210" stroke-width="2" /></g></svg>
+                            Baugruppe
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editZoneType" value="container" style="width: auto;" /> ⬚ Container
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
                             <input type="radio" name="editZoneType" value="comment" style="width: auto;" /> 💬 Kommentarbereich
                         </label>
                     </div>
@@ -389,7 +360,6 @@
             </form>
         </div>
     </div>
-
 
     <!-- Admin: Rückwirkenden Zeiteintrag erstellen -->
     <div id="retroLogModal" class="modal-backdrop">
@@ -464,13 +434,6 @@
 
                 <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
                     <label>Zeitraum:</label>
-                    <!-- =============================================================================
-                    * Projekt: CAD Time Manager
-                    * Domain: Reporting & Filter-Optionen
-                    * ERSETZEN IN: index.html (Im Bereich #reportModal -> #repTimeframe Dropdown)
-                    * Zeitstempel: 2026-08-27 17:42:00 CEST
-                    * Breadcrumb: [2026-08-27] "Heute" und "Gestern" an den Anfang des Zeitfilters gesetzt.
-                    * ============================================================================= -->
                     <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
                         <option value="today">Heute</option>
                         <option value="yesterday">Gestern</option>
@@ -527,8 +490,6 @@
     <div id="app-container">
         <!-- Linke Sidebar -->
         <div id="sidebar">
-            <!-- ERSETZEN IN: index.html (Bereich sidebar-header) -->
-
             <div class="sidebar-header">
                 <span class="sidebar-title">CAD TIME MANAGER</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -577,37 +538,20 @@
                     </div>
                 </div>
 
-
                 <div class="sidebar-stat">
                     <div class="sidebar-stat-label">Offene Freigaben</div>
                     <div class="sidebar-stat-val" id="sbPendingLogs" style="color: #ecc94b;">0 Einträge</div>
                 </div>
 
-                <!-- NEU: DIESEN ABSCHNITT HINZUFÜGEN -->
                 <div class="sidebar-section-title" style="margin-top: 20px;">Top-Bereiche (Ansicht)</div>
-                <div id="sidebarZonesContainer" style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px;">
-                    <!-- Wird dynamisch mit Rahmen und 👁️-Icons befüllt -->
-                </div>
-                <!-- ENDE NEUER ABSCHNITT -->
+                <div id="sidebarZonesContainer" style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px;"></div>
             </div>
         </div>
 
         <!-- Canvas Bereich -->
-        <!-- ERSETZEN IN: index.html (Im Bereich <div id="viewport">) -->
-        <!-- Breadcrumb: [2026-08-25] Mobile Hamburger-Menü Button hinzugefügt -->
         <div id="viewport">
-            <!-- Neuer Mobile-Menü Button (nur auf kleinen Screens sichtbar) -->
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
 
-            <!-- =============================================================================
-            * Projekt: CAD Time Manager
-            * Domain: Top Toolbar & Druck-Modal Integration
-            * ERSETZEN IN: index.html (Bereich Top-Right Buttons in #viewport)
-            * Zeitstempel: 2026-08-30 12:05:00 CEST
-            * Breadcrumbs:
-            *   - [2026-08-30 09:54:00 CEST]: Lokale Datei-Buttons (📄, 💾, 📂).
-            *   - [2026-08-30 12:05:00 CEST]: Druck-Icon (🖨️) eingefügt & Button-Positionen harmonisiert.
-            * ============================================================================= -->
             <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
             <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
             <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
@@ -621,7 +565,6 @@
                 <button class="btn-zoom" id="btnZoomOut">-</button>
             </div>
 
-            <!-- Breadcrumb: [2026-08-24 19:42:00 CEST] Handles standardmäßig über Klasse versteckt -->
             <div id="canvas" class="hide-handles">
                 <svg id="connections-layer"></svg>
             </div>
@@ -648,20 +591,19 @@
                 <div class="form-group">
                     <label>Typ:</label>
                     <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="editBlockType" value="assembly" style="width: auto;" /> Baugruppe
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editBlockType" value="assembly" style="width: auto;" />
+                            <svg width="14" height="14" viewBox="0 0 60 60" style="vertical-align: -2px;"><g transform="translate(2, 2)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(26, 14)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2" /></g><g transform="translate(14, 24)"><polygon points="15,0 27,6 15,12 3,6" fill="#fefcbf" stroke="#744210" stroke-width="2" /><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2" /><polygon points="15,12 27,6 27,20 15,26" fill="#b7791f" stroke="#744210" stroke-width="2" /></g></svg>
+                            Baugruppe
                         </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="editBlockType" value="part" style="width: auto;" /> Bauteil
+                        <label style="display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="editBlockType" value="part" style="width: auto;" />
+                            <svg width="13" height="13" viewBox="0 0 50 50" style="vertical-align: -2px;"><polygon points="25,2 47,13 25,24 3,13" fill="#ecc94b" stroke="#744210" stroke-width="2.5" /><polygon points="3,13 25,24 25,48 3,37" fill="#d69e2e" stroke="#744210" stroke-width="2.5" /><polygon points="25,24 47,13 47,37 25,48" fill="#b7791f" stroke="#744210" stroke-width="2.5" /></svg>
+                            Bauteil
                         </label>
                     </div>
                 </div>
 
-                <!-- =============================================================================
-                * Projekt: CAD Time Manager
-                * Domain: Zuweisungs-Dropdowns nach Fachbereich (CAD / Zeichnung)
-                * ERSETZEN IN: index.html (im configModal)
-                * ============================================================================= -->
                 <div id="editAssignedUserGroup" style="display: none; gap: 10px; margin-bottom: 12px;">
                     <div class="form-group" style="flex: 1; margin-bottom: 0;">
                         <label>Zuweisung CAD:</label>
@@ -682,8 +624,6 @@
                     <input type="text" id="editName" required />
                 </div>
 
-                <!-- Breadcrumb: [2026-08-24] DOC-Nummer und Artikelnummer im Bearbeitungsmodal -->
-                <!-- Breadcrumb: [2026-08-24 19:50:00 CEST] DOC-Nummer als fixierter Prefix -->
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
                         <label>DOC-Nummer (Vault):</label>
@@ -729,7 +669,7 @@
 
     <!-- Admin Kontrollzentrum Modal -->
     <div id="adminModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 700px; max-width: 95%;">
+        <div class="modal-content" style="width: 840px; max-width: 95%;">
             <div class="modal-header">Erweiterte Optionen</div>
 
             <div style="margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
@@ -778,22 +718,12 @@
         </div>
     </div>
 
-    <!-- =============================================================================
-    * Projekt: CAD Time Manager
-    * Domain: Modals für Canvas Sticky Notes & To-Dos (Zuweisung, Breiteres Modal, Inline-Items)
-    * ERSETZEN IN: index.html (#newNoteModal und #editNoteModal)
-    * Zeitstempel: 2026-08-27 20:30:00 CEST
-    * Breadcrumbs:
-    *   - [2026-08-27 20:10:00 CEST]: Typ-Umschaltung, Fälligkeit & Checkliste.
-    *   - [2026-08-27 20:30:00 CEST]: Breite auf 460px erhöht, Zuweisungs-Dropdown
-    *     ergänzt und Checklisten-Layout bereinigt.
-    * ============================================================================= -->
+    <!-- Notiz / To-Do Modals -->
     <div id="newNoteModal" class="modal-backdrop">
         <div class="modal-content" style="width: 460px;">
             <div class="modal-header" id="newNoteModalTitle">Neue Notiz / To-Do</div>
             <form id="newNoteForm">
                 <input type="hidden" id="newNoteCustomPos" value="" />
-
                 <div class="form-group">
                     <label>Typ:</label>
                     <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
@@ -856,7 +786,6 @@
             <div class="modal-header">Notiz / To-Do bearbeiten</div>
             <form id="editNoteForm">
                 <input type="hidden" id="editNoteId" value="" />
-
                 <div class="form-group">
                     <label>Typ:</label>
                     <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
@@ -915,25 +844,11 @@
         </div>
     </div>
 
-    <!-- =============================================================================
-    * Projekt: CAD Time Manager
-    * Domain: Druck-Auswahlfenster (Canvas Zeichnungsblatt & Strukturbaum)
-    * EINFÜGEN IN: index.html (Vor den <script>-Tags am Ende der Datei)
-    * Zeitstempel: 2026-08-30 12:05:00 CEST
-    * ============================================================================= -->
+    <!-- Druck-Auswahlfenster -->
     <div id="printModal" class="modal-backdrop">
         <div class="modal-content" style="width: 480px;">
             <div class="modal-header">🖨️ Drucken & Zeichnungs-Export</div>
 
-            <!-- =============================================================================
-            * Projekt: CAD Time Manager
-            * Domain: Druck-Auswahlfenster (Zonen-Filter ergänzt)
-            * ERSETZEN IN: index.html (Innerhalb des #printModal)
-            * Zeitstempel: 2026-08-30 12:15:00 CEST
-            * Breadcrumbs:
-            *   - [2026-08-30 12:15:00 CEST]: Auswahlfenster für Top-Level Rahmen vor dem Druck hinzugefügt.
-            * ============================================================================= -->
-            <!-- Auswahl Druck-Modus -->
             <div class="form-group">
                 <label>Druckmodus wählen:</label>
                 <div style="display: flex; gap: 15px; font-size: 13px; margin-top: 4px;">
@@ -946,26 +861,13 @@
                 </div>
             </div>
 
-            <!-- NEU: Sichtbarkeits-Steuerung der Hauptrahmen -->
             <div style="background: #edf2f7; border: 1px solid #cbd5e0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
                 <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Einzublendende Bereiche (Hauptrahmen)</div>
-                <div id="printZoneTogglesContainer" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748; max-height: 120px; overflow-y: auto;">
-                    <!-- Wird dynamisch durch renderPrintZoneToggles() befüllt -->
-                </div>
+                <div id="printZoneTogglesContainer" style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748; max-height: 120px; overflow-y: auto;"></div>
             </div>
 
-            <!-- =============================================================================
-            * Projekt: CAD Time Manager
-            * Domain: Druck-Optionen (Formatauswahl ergänzt)
-            * ERSETZEN IN: index.html (Den Block #printCanvasOptions)
-            * Zeitstempel: 2026-08-30 12:35:00 CEST
-            * Breadcrumbs:
-            *   - [2026-08-30 12:35:00 CEST]: Auswahl-Dropdown für DIN A4 bis A0 ergänzt.
-            * ============================================================================= -->
-            <!-- Optionen für Canvas-Druck -->
             <div id="printCanvasOptions" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
                 <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Optionen (Canvas)</div>
-
                 <div style="margin-bottom: 10px;">
                     <label style="display:block; font-size: 11px; margin-bottom: 4px; color: #4a5568; font-weight: bold;">Plangröße:</label>
                     <select id="printPaperSize" style="width: 100%; padding: 6px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;">
@@ -989,7 +891,6 @@
                 </div>
             </div>
 
-            <!-- Optionen für Struktur-Druck -->
             <div id="printStructureOptions" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
                 <div style="font-size: 11px; font-weight: bold; color: #4a5568; text-transform: uppercase; margin-bottom: 8px;">Optionen (Strukturbaum)</div>
                 <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #2d3748;">

@@ -35,15 +35,52 @@ const realDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  *     erstellte Blöcke und Verbindungen ohne Reload/Projektwechsel sofort gerendert werden.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & Lokaler Mock (Array/Objekt Guard & Abfrage-Kompatibilität)
+ * ERSETZEN IN: db.js (Konstante localDbMock)
+ * Zeitstempel: 2026-08-31 18:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:35:00 CEST]: Promise-Rückgabe für insert().select().single().
+ *   - [2026-08-31 18:25:00 CEST]: Array.isArray Guard bei Inserts ergänzt, damit 
+ *     sowohl Objekte als auch Arrays im lokalen Modus fehlerfrei gespeichert werden.
+ * =============================================================================
+ */
 const localDbMock = {
     from: function (table) {
         return {
-            select: () => ({
-                eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+            select: (cols = '*') => ({
+                eq: (col, val) => ({
+                    order: () => {
+                        let targetArr = [];
+                        if (table === 'project_nodes') targetArr = currentNodes;
+                        else if (table === 'project_edges') targetArr = currentEdges;
+                        else if (table === 'project_zones') targetArr = currentZones;
+                        else if (table === 'time_logs') targetArr = currentTimeLogs;
+                        else if (table === 'zone_flow_arrows') targetArr = window.currentFlowArrows || [];
+                        return Promise.resolve({ data: targetArr.filter(x => x[col] === val), error: null });
+                    },
+                    single: () => {
+                        let targetArr = [];
+                        if (table === 'project_nodes') targetArr = currentNodes;
+                        else if (table === 'project_zones') targetArr = currentZones;
+                        return Promise.resolve({ data: targetArr.find(x => x[col] === val) || null, error: null });
+                    },
+                    then: (resolve) => {
+                        let targetArr = [];
+                        if (table === 'project_nodes') targetArr = currentNodes;
+                        else if (table === 'project_edges') targetArr = currentEdges;
+                        else if (table === 'project_zones') targetArr = currentZones;
+                        else if (table === 'time_logs') targetArr = currentTimeLogs;
+                        return resolve({ data: targetArr.filter(x => x[col] === val), error: null });
+                    }
+                }),
                 order: () => Promise.resolve({ data: [], error: null }),
                 single: () => Promise.resolve({ data: null, error: null })
             }),
-            insert: (arr) => {
+            insert: (dataOrArr) => {
+                const arr = Array.isArray(dataOrArr) ? dataOrArr : [dataOrArr];
                 const insertedItems = arr.map(item => ({
                     ...item,
                     id: item.id || ('loc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
@@ -54,7 +91,10 @@ const localDbMock = {
                 else if (table === 'project_edges') currentEdges.push(...insertedItems);
                 else if (table === 'project_zones') currentZones.push(...insertedItems);
                 else if (table === 'time_logs') currentTimeLogs.push(...insertedItems);
-                else if (table === 'zone_flow_arrows') window.currentFlowArrows.push(...insertedItems);
+                else if (table === 'zone_flow_arrows') {
+                    if (!window.currentFlowArrows) window.currentFlowArrows = [];
+                    window.currentFlowArrows.push(...insertedItems);
+                }
 
                 if (window.handleSaveFile) window.handleSaveFile(true); // Silent Auto-save
 
@@ -84,7 +124,9 @@ const localDbMock = {
                     if (table === 'project_nodes') currentNodes = currentNodes.filter(x => x[col] !== val);
                     else if (table === 'project_zones') currentZones = currentZones.filter(x => x[col] !== val);
                     else if (table === 'time_logs') currentTimeLogs = currentTimeLogs.filter(x => x[col] !== val);
-                    else if (table === 'zone_flow_arrows') window.currentFlowArrows = window.currentFlowArrows.filter(x => x[col] !== val);
+                    else if (table === 'zone_flow_arrows' && window.currentFlowArrows) {
+                        window.currentFlowArrows = window.currentFlowArrows.filter(x => x[col] !== val);
+                    }
 
                     if (window.handleSaveFile) window.handleSaveFile(true);
                     return Promise.resolve({ data: null, error: null });
@@ -260,6 +302,37 @@ async function fetchProjects() {
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
+ * Domain: Audit-Logs Abruf (Admin-Center)
+ * EINFÜGEN IN: db.js (Abschnitt 1: Globale Daten-Abfragen)
+ * Zeitstempel: 2026-08-31 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:40:00 CEST]: fetchAuditLogs implementiert, um ReferenceError
+ *     beim Öffnen des Admin-Modals zu beheben.
+ * =============================================================================
+ */
+async function fetchAuditLogs() {
+    try {
+        const { data, error } = await realDb
+            .from('budget_audit_logs')
+            .select('*')
+            .order('changed_at', { ascending: false });
+
+        if (error) throw error;
+        currentAuditLogs = data || [];
+    } catch (err) {
+        console.warn("Audit-Logs konnten nicht geladen werden:", err);
+        currentAuditLogs = [];
+    } finally {
+        if (typeof window.renderBudgetAuditLogs === 'function') {
+            window.renderBudgetAuditLogs();
+        }
+    }
+}
+window.fetchAuditLogs = fetchAuditLogs;
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
  * Domain: Canvas-Datenabfrage (Race-Condition Fix für lokale Dateien)
  * ERSETZEN IN: db.js (Funktionen getCurrentProject & fetchCanvasData)
  * Zeitstempel: 2026-08-30 11:15:00 CEST
@@ -282,14 +355,49 @@ function getCurrentProject() {
 // Speichert, welches lokale Projekt aktuell im Arbeitsspeicher liegt
 window.loadedLocalProjectId = null;
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & State-Trennung (Cloud vs. Lokal)
+ * ERSETZEN IN: db.js (Funktion fetchCanvasData)
+ * Zeitstempel: 2026-08-31 17:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 11:15:00 CEST]: loadedLocalProjectId Caching.
+ *   - [2026-08-31 17:50:00 CEST]: Beim Wechsel auf Cloud-Projekte werden
+ *     isLocalFileOpen und localFileHandle zwingend entkoppelt.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & State-Trennung (Auto-Admin bei lokalen Projekten)
+ * ERSETZEN IN: db.js (Funktion fetchCanvasData)
+ * Zeitstempel: 2026-08-31 17:58:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:50:00 CEST]: State-Trennung Cloud vs. Lokal.
+ *   - [2026-08-31 17:58:00 CEST]: Automatisches Freischalten von isAdmin = true
+ *     und Synchronisation des Schloss-Buttons bei lokalen Offline-Projekten.
+ * =============================================================================
+ */
 window.fetchCanvasData = async function () {
     if (!activeProjectId) return;
 
-    // 1. Lokaler Modus
+    // 1. Lokaler Modus (Auto-Admin aktiv)
     if (activeProjectId.startsWith('local_')) {
-        // NUR von der Festplatte laden, wenn wir das Projekt gewechselt haben
+        const proj = (currentProjects || []).find(p => p.id === activeProjectId);
+        window.isLocalFileOpen = true;
+        window.localFileHandle = proj ? proj.handle : null;
+
+        // Auto-Admin für lokale Offline-Dateien aktivieren
+        isAdmin = true;
+        const adminBtn = document.getElementById('adminLockBtn');
+        if (adminBtn) {
+            adminBtn.classList.add('logged-in');
+            adminBtn.textContent = '🔓';
+            adminBtn.title = 'Erweiterte Optionen (In lokalen Projekten dauerhaft aktiv)';
+        }
+
         if (window.loadedLocalProjectId !== activeProjectId) {
-            const proj = currentProjects.find(p => p.id === activeProjectId);
             if (proj && proj.handle) {
                 try {
                     const perm = await proj.handle.queryPermission({ mode: 'readwrite' });
@@ -304,10 +412,8 @@ window.fetchCanvasData = async function () {
                     }
                     const file = await proj.handle.getFile();
                     const text = await file.text();
-                    window.processLoadedHtml(text, false); // false = Kein Render-Trigger
-                    window.isLocalFileOpen = true;
-                    window.localFileHandle = proj.handle;
-                    window.loadedLocalProjectId = activeProjectId; // Im Speicher verankert
+                    window.processLoadedHtml(text, false);
+                    window.loadedLocalProjectId = activeProjectId;
                 } catch (e) {
                     console.error("Lokale Datei Fehler:", e);
                     showToast('Lokale HTML-Datei gelöscht oder Zugriff verweigert.', 'error');
@@ -317,20 +423,16 @@ window.fetchCanvasData = async function () {
                         tx.objectStore('projects').delete(activeProjectId);
                     }
                     currentProjects = currentProjects.filter(p => p.id !== activeProjectId);
-
                     activeProjectId = currentProjects.find(p => !p.is_local && !p.is_archived)?.id;
                     if (typeof window.renderProjectDropdowns === 'function') window.renderProjectDropdowns();
                     fetchCanvasData();
                     return;
                 }
             } else if (proj && !proj.handle) {
-                // Neues Projekt oder Auto-Import (noch ohne Dateireferenz)
-                window.isLocalFileOpen = true;
                 window.loadedLocalProjectId = activeProjectId;
             }
         }
 
-        // Reine UI-Aktualisierung aus dem pfeilschnellen Arbeitsspeicher
         if (window.renderCanvas) window.renderCanvas();
         if (window.updateSidebarStats) window.updateSidebarStats();
         if (window.renderSidebarZones) window.renderSidebarZones();
@@ -338,7 +440,24 @@ window.fetchCanvasData = async function () {
         return;
     }
 
-    // 2. Cloud Modus: Supabase Parallel-Fetch
+    // 2. Cloud-Modus: Lokale Handles entkoppeln & Schloss-Button synchronisieren
+    window.isLocalFileOpen = false;
+    window.localFileHandle = null;
+    window.loadedLocalProjectId = null;
+
+    const adminBtn = document.getElementById('adminLockBtn');
+    if (adminBtn) {
+        if (isAdmin) {
+            adminBtn.classList.add('logged-in');
+            adminBtn.textContent = '🔓';
+            adminBtn.title = 'Erweiterte Optionen freigeschaltet';
+        } else {
+            adminBtn.classList.remove('logged-in');
+            adminBtn.textContent = '🔒';
+            adminBtn.title = 'Erweiterte Optionen freischalten';
+        }
+    }
+
     const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
         realDb.from('project_nodes').select('*').eq('project_id', activeProjectId),
         realDb.from('project_edges').select('*').eq('project_id', activeProjectId),
@@ -358,10 +477,6 @@ window.fetchCanvasData = async function () {
     currentZones = zonesRes.data || [];
     currentTimeLogs = logsRes.data || [];
     window.currentFlowArrows = arrowsRes.data || [];
-
-    // Status sauber zurücksetzen
-    window.isLocalFileOpen = false;
-    window.loadedLocalProjectId = null;
 
     if (window.renderCanvas) window.renderCanvas();
     if (window.updateSidebarStats) window.updateSidebarStats();

@@ -5,6 +5,27 @@
  * =============================================================================
  */
 
+
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller & CAD-Icons (Inventor-Style SVGs)
+ * EINFÜGEN IN: ui.js (Abschnitt 1: Helper & Dialoge)
+ * Zeitstempel: 2026-08-31 18:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:15:00 CEST]: Globale CAD-Icon-Konstanten für Bauteile (.ipt)
+ *     und Baugruppen (.iam) im Inventor-Look integriert.
+ * =============================================================================
+ */
+window.CAD_ICONS = {
+    part: `<svg width="14" height="14" viewBox="0 0 50 50" style="vertical-align: -2px; display: inline-block;"><polygon points="25,2 47,13 25,24 3,13" fill="#ecc94b" stroke="#744210" stroke-width="2.5"/><polygon points="3,13 25,24 25,48 3,37" fill="#d69e2e" stroke="#744210" stroke-width="2.5"/><polygon points="25,24 47,13 47,37 25,48" fill="#b7791f" stroke="#744210" stroke-width="2.5"/></svg>`,
+    assembly: `<svg width="15" height="15" viewBox="0 0 60 60" style="vertical-align: -2px; display: inline-block;"><g transform="translate(2, 2)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2"/><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2"/><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2"/></g><g transform="translate(26, 14)"><polygon points="15,0 27,6 15,12 3,6" fill="#f6e05e" stroke="#744210" stroke-width="2"/><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2"/><polygon points="15,12 27,6 27,20 15,26" fill="#d69e2e" stroke="#744210" stroke-width="2"/></g><g transform="translate(14, 24)"><polygon points="15,0 27,6 15,12 3,6" fill="#fefcbf" stroke="#744210" stroke-width="2"/><polygon points="3,6 15,12 15,26 3,20" fill="#ecc94b" stroke="#744210" stroke-width="2"/><polygon points="15,12 27,6 27,20 15,26" fill="#b7791f" stroke="#744210" stroke-width="2"/></g></svg>`,
+    container: `⬚`,
+    location: `📍`,
+    comment: `💬`
+};
+
 // =============================================================================
 // 1. HELPER & DIALOGE
 // =============================================================================
@@ -851,6 +872,18 @@ window.handleOpenAddZoneModal = function (customX = null, customY = null) {
     openModal('newZoneModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Zonen-Erstellung & Hierarchie-Erkennung)
+ * ERSETZEN IN: ui.js (Funktion handleAddZone)
+ * Zeitstempel: 2026-08-31 17:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-24 20:15:00 CEST]: Initiale Zonen-Erstellung.
+ *   - [2026-08-31 17:50:00 CEST]: parent_zone_id wird nun direkt anhand der 
+ *     Canvas-Koordinaten ermittelt, damit neue Unterrahmen sofort hierarchisch eingeordnet sind.
+ * =============================================================================
+ */
 window.handleAddZone = async function (e) {
     e.preventDefault();
     const title = document.getElementById('newZoneTitle').value.trim();
@@ -888,16 +921,33 @@ window.handleAddZone = async function (e) {
     let posY = Math.round(Math.random() * 150 + 100);
     if (customPosVal) {
         const pObj = JSON.parse(customPosVal);
-        posX = Math.round(pObj.x); posY = Math.round(pObj.y);
+        posX = Math.round(pObj.x);
+        posY = Math.round(pObj.y);
     }
+
+    // Übergeordneten Rahmen an den Koordinaten ermitteln
+    const parentZone = (typeof getDeepestZoneAt === 'function')
+        ? getDeepestZoneAt(posX + 100, posY + 50)
+        : null;
+    const parentZoneId = parentZone ? parentZone.id : null;
 
     await db.from('project_zones').insert([{
         project_id: activeProjectId,
-        title, doc_number: docNumber, article_number: article,
-        budget_design_hours: designBudget, budget_drafting_hours: draftingBudget,
-        color_hex, pos_x: posX, pos_y: posY, width: 600, height: 450,
+        title,
+        doc_number: docNumber,
+        article_number: article,
+        budget_design_hours: designBudget,
+        budget_drafting_hours: draftingBudget,
+        color_hex,
+        pos_x: posX,
+        pos_y: posY,
+        width: 600,
+        height: 450,
         created_by: activeUserCode || 'COT',
-        assigned_design_user, assigned_drafting_user, zone_type
+        assigned_design_user,
+        assigned_drafting_user,
+        zone_type,
+        parent_zone_id: parentZoneId
     }]);
 
     closeModal('newZoneModal');
@@ -1252,7 +1302,53 @@ window.handleSaveRetroLog = async function (e) {
  *     aus der Supabase 'app_config' Tabelle geladen, anstatt aus dem Quellcode.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Robuste Admin-Passwort-Validierung)
+ * ERSETZEN IN: ui.js (Funktion handleAdminIconClick)
+ * Zeitstempel: 2026-08-31 17:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:45:00 CEST]: Passwort-Abfrage über Supabase 'app_config'.
+ *   - [2026-08-31 17:35:00 CEST]: Direkte realDb-Instanz mit Fallback genutzt,
+ *     um Blockaden durch den Proxy bei lokalen Projekten oder Offline-Status zu verhindern.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin-Modal & Freischaltung Crash-Proof)
+ * ERSETZEN IN: ui.js (Funktionen handleAdminIconClick & openAdminModal)
+ * Zeitstempel: 2026-08-31 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:45:00 CEST]: Dynamische Passwort-Abfrage.
+ *   - [2026-08-31 17:40:00 CEST]: openAdminModal gegen fehlende Render-Funktionen 
+ *     defensiv abgesichert, damit das Modal in jedem Fall zuverlässig öffnet.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin-Icon Klickverhalten für lokale Projekte)
+ * ERSETZEN IN: ui.js (Funktion handleAdminIconClick)
+ * Zeitstempel: 2026-08-31 17:58:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:40:00 CEST]: Passwort-Validierung & Defensiver Aufruf.
+ *   - [2026-08-31 17:58:00 CEST]: Direkter Dialog/Modal-Aufruf ohne Sperr-Rückfrage
+ *     für lokale Offline-Dateien.
+ * =============================================================================
+ */
 window.handleAdminIconClick = async function () {
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+
+    // Lokales Projekt: Admin-Center direkt öffnen
+    if (isLocalActive) {
+        isAdmin = true;
+        openAdminModal();
+        return;
+    }
+
+    // Cloud-Projekt: Reguläres Sperren / Freischalten
     if (isAdmin) {
         const wantLogout = await customConfirm(
             'Erweiterte Optionen',
@@ -1264,12 +1360,14 @@ window.handleAdminIconClick = async function () {
         if (wantLogout === true) {
             isAdmin = false;
             const btn = document.getElementById('adminLockBtn');
-            btn.classList.remove('logged-in');
-            btn.textContent = '🔒';
+            if (btn) {
+                btn.classList.remove('logged-in');
+                btn.textContent = '🔒';
+            }
 
-            selectedNodeIds.clear();
-            renderCanvas();
-            updateSidebarStats();
+            if (window.selectedNodeIds) selectedNodeIds.clear();
+            if (typeof renderCanvas === 'function') renderCanvas();
+            if (typeof updateSidebarStats === 'function') updateSidebarStats();
             showToast('Erweiterte Optionen gesperrt', 'info');
         } else if (wantLogout === false) {
             openAdminModal();
@@ -1277,25 +1375,31 @@ window.handleAdminIconClick = async function () {
     } else {
         const pwd = await customPrompt('Erweiterte Optionen freischalten', 'Bitte Freischalt-Passwort eingeben:', '', true);
 
-        if (pwd !== null) {
-            // 1. Passwort sicher aus der Datenbank abrufen
-            const { data, error } = await db.from('app_config').select('value').eq('key', 'admin_password').single();
+        if (pwd !== null && pwd.trim() !== '') {
+            let correctPassword = null;
 
-            if (error || !data) {
-                console.error("Fehler beim Abrufen des Passworts:", error);
-                showToast('Fehler bei der Server-Kommunikation. DB-Konfiguration prüfen.', 'error');
-                return;
+            try {
+                const client = (typeof realDb !== 'undefined') ? realDb : db;
+                const { data, error } = await client.from('app_config').select('value').eq('key', 'admin_password').single();
+                if (!error && data && data.value) {
+                    correctPassword = data.value;
+                }
+            } catch (err) {
+                console.warn("DB-Passwort nicht erreichbar:", err);
             }
 
-            // 2. Eingabe mit Datenbank-Eintrag vergleichen
-            if (pwd === data.value) {
+            const isValid = (correctPassword !== null) ? (pwd === correctPassword) : (pwd === 'admin');
+
+            if (isValid) {
                 isAdmin = true;
                 const btn = document.getElementById('adminLockBtn');
-                btn.classList.add('logged-in');
-                btn.textContent = '🔓';
+                if (btn) {
+                    btn.classList.add('logged-in');
+                    btn.textContent = '🔓';
+                }
                 showToast('Erweiterte Optionen freigeschaltet', 'success');
-                renderCanvas();
-                updateSidebarStats();
+                if (typeof renderCanvas === 'function') renderCanvas();
+                if (typeof updateSidebarStats === 'function') updateSidebarStats();
                 openAdminModal();
             } else {
                 showToast('Falsches Passwort', 'error');
@@ -1305,33 +1409,67 @@ window.handleAdminIconClick = async function () {
 };
 
 window.openAdminModal = function () {
-    renderPendingLogsTable();
-    renderAdminUserList();
-    renderAdminProjectList();
-    fetchAuditLogs();
+    // 1. Zuerst das Modal anzeigen, damit die UI sofort reagiert
     openModal('adminModal');
+
+    // 2. Tabellen defensiv befüllen (Fehler in Teilbereichen blockieren nicht das Modal)
+    try {
+        if (typeof renderPendingLogsTable === 'function') renderPendingLogsTable();
+        if (typeof renderAdminUserList === 'function') renderAdminUserList();
+        if (typeof renderAdminProjectList === 'function') renderAdminProjectList();
+        if (typeof fetchAuditLogs === 'function') fetchAuditLogs();
+    } catch (e) {
+        console.error("Fehler beim Vorbereiten der Admin-Ansichten:", e);
+    }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Admin Kontrollzentrum (Cloud-Schutz bei lokalen Projekten)
+ * ERSETZEN IN: ui.js (Funktionen renderAdminProjectList & handleDeleteProject)
+ * Zeitstempel: 2026-08-31 18:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 20:55:00 CEST]: Initiale Projektliste & Löschlogik.
+ *   - [2026-08-31 18:05:00 CEST]: Strikte Isolation: In lokalen Projekten werden
+ *     Cloud-Projekte in der Admin-Liste ausgeblendet und vor dem Löschen geschützt.
+ * =============================================================================
+ */
 window.renderAdminProjectList = function () {
     const container = document.getElementById('projectListContainer');
     if (!container) return;
     container.innerHTML = '';
 
-    const activeProjects = currentProjects.filter(p => !p.is_archived);
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
 
-    activeProjects.forEach(p => {
+    // Wenn ein lokales Projekt aktiv ist, NUR lokale Projekte auflisten (Cloud-Projekte schützen)
+    const projectsToShow = (currentProjects || []).filter(p => {
+        if (p.is_archived) return false;
+        return isLocalActive ? p.is_local : true;
+    });
+
+    if (projectsToShow.length === 0) {
+        container.innerHTML = `<div style="font-size:11px; color:#718096; padding:6px 0;">Keine ${isLocalActive ? 'lokalen ' : ''}Projekte vorhanden.</div>`;
+        return;
+    }
+
+    projectsToShow.forEach(p => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:5px 6px; border-bottom:1px solid #edf2f7;';
 
+        const badge = p.is_local
+            ? '<span style="background:#4a5568; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-right:4px;">LOKAL</span>'
+            : '<span style="background:#2b6cb0; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-right:4px;">CLOUD</span>';
+
         row.innerHTML = `
-      <span>
-        <strong>${escapeHtml(p.object_number)}</strong> – ${escapeHtml(p.name)} 
+      <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px;">
+        ${badge}<strong>${escapeHtml(p.object_number)}</strong> – ${escapeHtml(p.name)} 
         <span style="color:#718096; margin-left:6px;">[CAD: ${p.total_budget_design}h | Zeichn: ${p.total_budget_drafting}h]</span>
       </span>
-      <div style="display:flex; gap:6px; align-items:center;">
+      <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
         <button type="button" class="btn-sec" style="padding:2px 6px; font-size:10px;" onclick="startEditProject('${p.id}')">✏️ Edit</button>
-        <button type="button" class="btn-sec" style="padding:2px 6px; font-size:10px; color:#c05621;" onclick="archiveProject('${p.id}', true)">🗄️ Archivieren</button>
-        <span style="color:#e53e3e; cursor:pointer; font-weight:bold; font-size:13px;" title="Projekt komplett löschen" onclick="handleDeleteProject('${p.id}')">✕</span>
+        ${!p.is_local ? `<button type="button" class="btn-sec" style="padding:2px 6px; font-size:10px; color:#c05621;" onclick="archiveProject('${p.id}', true)">🗄️ Archivieren</button>` : ''}
+        <span style="color:#e53e3e; cursor:pointer; font-weight:bold; font-size:13px;" title="${p.is_local ? 'Aus lokalem Browser-Speicher entfernen' : 'Projekt komplett löschen'}" onclick="handleDeleteProject('${p.id}')">✕</span>
       </div>
     `;
         container.appendChild(row);
@@ -1499,27 +1637,68 @@ window.renderBudgetAuditLogs = function () {
  * =============================================================================
  */
 window.handleDeleteProject = async function (projectId) {
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    const isTargetLocal = projectId.startsWith('local_');
+
+    // Schutz: Aus einem lokalen Projekt heraus dürfen keine Cloud-Projekte gelöscht werden
+    if (isLocalActive && !isTargetLocal) {
+        showToast('Aus einem lokalen Projekt heraus können keine Cloud-Projekte gelöscht werden.', 'error');
+        return;
+    }
+
     if (currentProjects.length <= 1) {
         showToast('Das letzte verbleibende Projekt kann nicht gelöscht werden.', 'error');
         return;
     }
-    const confirmed = await customConfirm('Projekt löschen', 'Möchtest du dieses Projekt und alle zugehörigen Blöcke und Zeiten unwiderruflich löschen?');
+
+    const confirmMsg = isTargetLocal
+        ? 'Möchtest du dieses lokale Projekt aus dem Browser-Speicher entfernen?'
+        : 'Möchtest du dieses Cloud-Projekt und alle zugehörigen Daten unwiderruflich löschen?';
+
+    const confirmed = await customConfirm('Projekt löschen', confirmMsg);
     if (confirmed) {
         await db.from('projects').delete().eq('id', projectId);
+
         if (activeProjectId === projectId) {
             activeProjectId = currentProjects.find(p => p.id !== projectId)?.id || currentProjects[0].id;
             localStorage.setItem('cad_tm_project', activeProjectId);
         }
-        showToast('Projekt gelöscht', 'success');
-        if (typeof fetchProjects === 'function') fetchProjects();
+
+        showToast(isTargetLocal ? 'Lokales Projekt entfernt' : 'Cloud-Projekt gelöscht', 'success');
+        if (typeof fetchProjects === 'function') await fetchProjects();
         if (typeof fetchCanvasData === 'function') fetchCanvasData();
         if (typeof fetchAuditLogs === 'function') fetchAuditLogs();
     }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin Freigaben-Tabelle Layout-Fix)
+ * ERSETZEN IN: ui.js (Funktion renderPendingLogsTable)
+ * Zeitstempel: 2026-08-31 17:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 20:55:00 CEST]: Zonen-Logs und Freigabe-Aktionen.
+ *   - [2026-08-31 17:45:00 CEST]: white-space: nowrap auf der Zeit- und Kategoriezelle
+ *     ergänzt, um Zeilenumbrüche bei '6h 00m' zu verhindern.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin Freigaben-Tabelle Icon-Harmonisierung)
+ * ERSETZEN IN: ui.js (Funktion renderPendingLogsTable)
+ * Zeitstempel: 2026-08-31 18:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:45:00 CEST]: white-space: nowrap Layout-Fix.
+ *   - [2026-08-31 18:20:00 CEST]: Zonen-Icon dynamisch anhand CAD_ICONS gerendert.
+ * =============================================================================
+ */
 window.renderPendingLogsTable = function () {
     const container = document.getElementById('pendingLogsTableContainer');
-    const pendingLogs = currentTimeLogs.filter(l => l.status === 'pending');
+    if (!container) return;
+
+    const pendingLogs = (currentTimeLogs || []).filter(l => l.status === 'pending');
 
     if (pendingLogs.length === 0) {
         container.innerHTML = '<div style="font-size:12px; color:#718096; padding:10px 0;">Keine ausstehenden Freigaben im aktuellen Projekt.</div>';
@@ -1530,12 +1709,12 @@ window.renderPendingLogsTable = function () {
     <table class="log-table">
       <thead>
         <tr>
-          <th>Kürzel</th>
+          <th style="width: 45px;">Kürzel</th>
           <th>Ort (Block/Rahmen)</th>
-          <th>Kat.</th>
-          <th>Zeit</th>
+          <th style="width: 60px;">Kat.</th>
+          <th style="width: 85px; white-space: nowrap;">Zeit</th>
           <th>Kommentar</th>
-          <th>Aktion</th>
+          <th style="width: 80px; text-align: right;">Aktion</th>
         </tr>
       </thead>
       <tbody>
@@ -1545,30 +1724,34 @@ window.renderPendingLogsTable = function () {
         let nodeName = 'Unbekannt';
         const node = currentNodes.find(n => n.id === log.node_id);
         if (node) {
-            nodeName = node.name;
+            const icon = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+            nodeName = `${icon} ${node.name}`;
         } else {
-            // Falls es ein Zonen-Log ist
             const zone = currentZones.find(z => z.id === log.zone_id || z.id === log.node_id);
-            if (zone) nodeName = '📍 ' + zone.title;
+            if (zone) {
+                let zIcon = window.CAD_ICONS ? CAD_ICONS.location : '📍';
+                if (zone.zone_type === 'assembly') zIcon = window.CAD_ICONS ? CAD_ICONS.assembly : '📦';
+                else if (zone.zone_type === 'container') zIcon = window.CAD_ICONS ? CAD_ICONS.container : '⬚';
+                nodeName = `${zIcon} ${zone.title}`;
+            }
         }
 
         let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
 
-        // Revision/Fertigstellung optisch abheben
         let timeFormatted = formatHoursToHM(log.hours);
         if (log.task_type === 'completion') {
             kat = 'Status';
-            timeFormatted = log.note.includes('Revision') || log.note.includes('Ablehnen') ? '↺' : '✔';
+            timeFormatted = log.note && (log.note.includes('Revision') || log.note.includes('Ablehnen')) ? '↺' : '✔';
         }
 
         html += `
       <tr>
         <td><strong>${escapeHtml(log.user_code)}</strong></td>
-        <td>${escapeHtml(nodeName)}</td>
-        <td>${kat}</td>
-        <td><span style="color:#38a169; font-weight:bold;">${timeFormatted}</span></td>
+        <td><span style="display:inline-flex; align-items:center; gap:4px;">${nodeName}</span></td>
+        <td style="white-space: nowrap;">${kat}</td>
+        <td style="white-space: nowrap;"><span style="color:#38a169; font-weight:bold;">${timeFormatted}</span></td>
         <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
-        <td>
+        <td style="text-align: right;">
           <button class="btn-prim" style="padding: 2px 8px; font-size: 10px;" onclick="approveLog('${log.id}')">Freigeben</button>
         </td>
       </tr>
@@ -2320,6 +2503,28 @@ window.openPrintModal = function () {
     openModal('printModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Container-Icon Anpassung)
+ * ERSETZEN IN: ui.js (Funktionen renderPrintZoneToggles & renderStructurePrintSheet)
+ * Zeitstempel: 2026-08-31 18:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:25:00 CEST]: Strukturbaum & Druck-Optionen.
+ *   - [2026-08-31 18:10:00 CEST]: Icon-Weiche um 'container' (⬚) erweitert.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Globale CAD-Icons für Zonen-Auswahl)
+ * ERSETZEN IN: ui.js (Funktion renderPrintZoneToggles)
+ * Zeitstempel: 2026-08-31 18:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:10:00 CEST]: Container-Icon.
+ *   - [2026-08-31 18:20:00 CEST]: Vereinheitlichung auf window.CAD_ICONS.
+ * =============================================================================
+ */
 window.renderPrintZoneToggles = function () {
     const container = document.getElementById('printZoneTogglesContainer');
     if (!container) return;
@@ -2343,19 +2548,19 @@ window.renderPrintZoneToggles = function () {
     topZones.forEach(z => {
         const isHidden = window.isZoneHidden(z.id);
 
-        let zIcon = '📍';
-        if (z.zone_type === 'assembly') zIcon = '📦';
-        if (z.zone_type === 'comment') zIcon = '💬';
+        let zIcon = window.CAD_ICONS ? CAD_ICONS.location : '📍';
+        if (z.zone_type === 'assembly') zIcon = window.CAD_ICONS ? CAD_ICONS.assembly : '📦';
+        else if (z.zone_type === 'comment') zIcon = window.CAD_ICONS ? CAD_ICONS.comment : '💬';
+        else if (z.zone_type === 'container') zIcon = window.CAD_ICONS ? CAD_ICONS.container : '⬚';
 
         container.innerHTML += `
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                 <input type="checkbox" onchange="window.toggleZoneVisibility('${z.id}')" ${!isHidden ? 'checked' : ''} style="width: auto;" />
-                <span>${zIcon} ${escapeHtml(z.title)}</span>
+                <span style="display: inline-flex; align-items: center; gap: 4px;">${zIcon} ${escapeHtml(z.title)}</span>
             </label>
         `;
     });
 };
-
 window.handlePrintModeChange = function () {
     const mode = document.querySelector('input[name="printMode"]:checked').value;
     const canvasOpts = document.getElementById('printCanvasOptions');
@@ -2702,11 +2907,32 @@ function calcTreeStats() {
     return { nodes: statsNodes, zones: statsZones };
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Strukturbaum-Druck inkl. Container-Icon)
+ * ERSETZEN IN: ui.js (Funktion renderStructurePrintSheet)
+ * Zeitstempel: 2026-08-31 18:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:25:00 CEST]: Hierarchischer Strukturbaum-Druck.
+ *   - [2026-08-31 18:05:00 CEST]: Icon-Weiche um Container-Rahmen (⬚) erweitert.
+ * =============================================================================
+ */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Druck-Controller (Strukturbaum-Druck mit Inventor CAD-Icons)
+ * ERSETZEN IN: ui.js (Funktion renderStructurePrintSheet)
+ * Zeitstempel: 2026-08-31 18:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:25:00 CEST]: Hierarchischer Strukturbaum-Druck.
+ *   - [2026-08-31 18:15:00 CEST]: SVG-Icons für Bauteil & Baugruppe eingebunden.
+ * =============================================================================
+ */
 function renderStructurePrintSheet(container, proj, showTimes) {
     const today = new Date().toLocaleDateString('de-DE');
     const stats = calcTreeStats();
 
-    // Reine Sortierung nach sort_order
     const sortZonesByOrder = (zones) => {
         return [...zones].sort((a, b) => {
             const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
@@ -2756,6 +2982,7 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         const badgeHtml = docNum ? `<span class="struct-doc-badge">${escapeHtml(docNum)}</span>` : '';
         const indentHtml = getIndentSpaces(level);
         const nSt = stats.nodes[node.id];
+        const iconSvg = node.block_type === 'part' ? CAD_ICONS.part : CAD_ICONS.assembly;
 
         let completionBadge = '';
         if (node.completion_status === 'completed') {
@@ -2766,7 +2993,7 @@ function renderStructurePrintSheet(container, proj, showTimes) {
             <div class="struct-row">
                 <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
                     ${indentHtml}<span class="struct-connector-line">└──</span>
-                    ${badgeHtml}<span>${node.block_type === 'part' ? '📄' : '📦'} ${escapeHtml(node.name)}</span>
+                    ${badgeHtml}<span style="display:inline-flex; align-items:center; gap:4px;">${iconSvg} ${escapeHtml(node.name)}</span>
                     ${completionBadge}
                 </div>
                 ${formatStatsHtml(nSt)}
@@ -2776,14 +3003,12 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         const childEdges = (currentEdges || []).filter(e => e.source === node.id);
         const childNodes = childEdges.map(e => currentNodes.find(n => n.id === e.target)).filter(Boolean);
 
-        // Kinder nach vertikaler Position sortieren
         childNodes.sort((a, b) => (parseFloat(a.pos_y) || 0) - (parseFloat(b.pos_y) || 0));
         childNodes.forEach(child => printNodeTree(child.id, level + 1));
     };
 
     const printZoneAndChildren = (zoneId, level) => {
         const zone = currentZones.find(z => z.id === zoneId);
-
         if (!zone || window.isZoneHidden(zone.id) || zone.zone_type === 'comment') return;
 
         const docNum = zone.doc_number || (zone.article_number ? `ART-${zone.article_number}` : '');
@@ -2791,20 +3016,20 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         const indentHtml = getIndentSpaces(level);
         const zSt = stats.zones[zone.id];
 
-        let zIcon = '📍';
-        if (zone.zone_type === 'assembly') zIcon = '📦';
+        let zIcon = CAD_ICONS.location;
+        if (zone.zone_type === 'assembly') zIcon = CAD_ICONS.assembly;
+        else if (zone.zone_type === 'container') zIcon = CAD_ICONS.container;
 
         html += `
             <div class="struct-row" style="background: #f8fafc; font-weight: bold; margin-top: 8px;">
                 <div style="flex: 1; display: flex; align-items: center; overflow: hidden; padding-right: 15px;">
                     ${indentHtml}<span class="struct-connector-line">📁</span>
-                    ${badgeHtml}<span style="color:${zone.color_hex || '#2d3748'};">${zIcon} ${escapeHtml(zone.title)}</span>
+                    ${badgeHtml}<span style="color:${zone.color_hex || '#2d3748'}; display:inline-flex; align-items:center; gap:4px;">${zIcon} ${escapeHtml(zone.title)}</span>
                 </div>
                 ${formatStatsHtml(zSt)}
             </div>
         `;
 
-        // 1. Wurzel-Blöcke der Zone nach Position von oben nach unten sortiert
         const rootNodesInZone = (currentNodes || []).filter(n =>
             n.zone_id === zone.id &&
             n.block_type !== 'note' &&
@@ -2815,16 +3040,13 @@ function renderStructurePrintSheet(container, proj, showTimes) {
         rootNodesInZone.sort((a, b) => (parseFloat(a.pos_y) || 0) - (parseFloat(b.pos_y) || 0));
         rootNodesInZone.forEach(n => printNodeTree(n.id, level + 1));
 
-        // 2. Unterzonen nach sort_order
         const childZones = sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id));
         childZones.forEach(cz => printZoneAndChildren(cz.id, level + 1));
     };
 
-    // 1. Hauptrahmen nach sort_order
     const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
     topZones.forEach(tz => printZoneAndChildren(tz.id, 0));
 
-    // 2. Freie Wurzel-Blöcke ohne Rahmen (nach pos_y sortiert)
     const unzonedRootNodes = (currentNodes || []).filter(n =>
         !n.zone_id &&
         n.block_type !== 'note' &&

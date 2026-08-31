@@ -116,6 +116,18 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
     if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar Zonen-Rendering (Flache 1-Ebenen-Hierarchie)
+ * ERSETZEN IN: app.js (Funktion renderSidebarZones)
+ * Zeitstempel: 2026-08-31 17:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:35:00 CEST]: Hierarchie-Rekursion.
+ *   - [2026-08-31 17:45:00 CEST]: Begrenzung der Sidebar-Struktur auf strikt 
+ *     eine Unterebene (Hauptrahmen -> direkte Kindrahmen).
+ * =============================================================================
+ */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
@@ -133,11 +145,9 @@ window.renderSidebarZones = function () {
 
     const fragment = document.createDocumentFragment();
 
-    // Berechtigung: Admin ODER lokales Offline-Projekt
     const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
     const canReorderZones = isAdmin || isLocalProject;
 
-    // Reine Sortierung nach sort_order
     const sortZonesByOrder = (zones) => {
         return [...zones].sort((a, b) => {
             const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
@@ -146,7 +156,7 @@ window.renderSidebarZones = function () {
         });
     };
 
-    const topZones = sortZonesByOrder(currentZones.filter(z => !z.parent_zone_id));
+    const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
 
     if (topZones.length === 0) {
         container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Bereiche definiert.</div>';
@@ -165,7 +175,7 @@ window.renderSidebarZones = function () {
         const updates = [];
         itemEls.forEach((el, index) => {
             const zId = el.dataset.zoneId;
-            const targetZone = currentZones.find(z => z.id === zId);
+            const targetZone = (currentZones || []).find(z => z.id === zId);
             if (targetZone && targetZone.sort_order !== index) {
                 targetZone.sort_order = index;
                 updates.push(db.from('project_zones').update({ sort_order: index }).eq('id', zId));
@@ -180,7 +190,8 @@ window.renderSidebarZones = function () {
 
     const renderZoneTree = (zone, isSubZone, parentContainer) => {
         const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zone.id) : false;
-        const childZones = sortZonesByOrder(currentZones.filter(z => z.parent_zone_id === zone.id));
+        // Untergeordnete Rahmen nur für die oberste Ebene (Level 0) laden
+        const childZones = !isSubZone ? sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id)) : [];
         const hasChildren = childZones.length > 0;
         const isCollapsed = window.collapsedZoneIds.has(zone.id);
 
@@ -216,11 +227,11 @@ window.renderSidebarZones = function () {
         const nodeIconHtml = `<span style="color:${zone.color_hex || '#a0aec0'}; font-size: 14px; margin-right: 6px;">■</span>`;
 
         el.innerHTML = `
-            <div style="display:flex; align-items:center; overflow:visible; flex:1; position: relative; height: 100%;">
+            <div style="display:flex; align-items:center; overflow:hidden; flex:1; position: relative; height: 100%;">
                 ${dragHandleHtml}
                 ${toggleBtnHtml}
                 ${nodeIconHtml}
-                <span style="cursor:pointer; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; ${isHidden ? 'text-decoration:line-through; opacity:0.5;' : ''}" onclick="centerViewOnVisible('${zone.id}')">${escapeHtml(zone.title)}</span>
+                <span style="cursor:pointer; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; ${isHidden ? 'text-decoration:line-through; opacity:0.5;' : ''}" onclick="centerViewOnVisible('${zone.id}')" title="${escapeHtml(zone.title)}">${escapeHtml(zone.title)}</span>
             </div>
             <div style="display:flex; gap:6px; flex-shrink:0;">
                 <button title="Sichtbarkeit umschalten" onclick="toggleZoneVisibility('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.4' : '1'};">👁️</button>
@@ -233,7 +244,7 @@ window.renderSidebarZones = function () {
                 draggedEl = !isSubZone ? el.parentElement : el;
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', zone.id);
-                setTimeout(() => draggedEl.style.opacity = '0.4', 0);
+                setTimeout(() => { if (draggedEl) draggedEl.style.opacity = '0.4'; }, 0);
             });
 
             el.addEventListener('dragend', () => {
@@ -299,6 +310,7 @@ window.renderSidebarZones = function () {
             if (hasChildren && !isCollapsed) {
                 const childrenContainer = document.createElement('div');
                 childrenContainer.className = 'sub-zones-container';
+                // Kindelemente strikt als flache Unterebene (isSubZone = true) rendern
                 childZones.forEach(child => renderZoneTree(child, true, childrenContainer));
                 wrapper.appendChild(childrenContainer);
             }

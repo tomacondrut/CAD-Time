@@ -540,6 +540,18 @@ function getCanvasCoords(clientX, clientY) {
  * Breadcrumb: [2026-08-24 20:05:00 CEST] doc_number bei Instanz-Duplizierung ergänzt
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Kontextmenü (Notiz-Titel Parsing beim Löschen)
+ * ERSETZEN IN: canvas.js (Funktion handleContextMenuAction)
+ * Zeitstempel: 2026-08-31 17:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:30:00 CEST]: 60-Minuten-Zeitfenster für Löschung.
+ *   - [2026-08-31 17:35:00 CEST]: parseNotePayload bei Notizen/To-Dos integriert,
+ *     damit im Lösch-Dialog der Text statt des JSON-Strings erscheint.
+ * =============================================================================
+ */
 window.handleContextMenuAction = async function (type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
@@ -609,6 +621,7 @@ window.handleContextMenuAction = async function (type) {
         const nodeToDelete = currentNodes.find(n => n.id === contextTargetNodeId);
         if (!nodeToDelete) return;
 
+        const isNote = (nodeToDelete.block_type === 'note' || nodeToDelete.doc_number === 'NOTE' || nodeToDelete.doc_number === 'TODO');
         const nodeLogs = currentTimeLogs.filter(l => l.node_id === nodeToDelete.id);
         const isCreator = (activeUserCode && activeUserCode === nodeToDelete.created_by);
         const createdAtTime = nodeToDelete.created_at ? new Date(nodeToDelete.created_at).getTime() : 0;
@@ -621,15 +634,22 @@ window.handleContextMenuAction = async function (type) {
             return;
         }
 
-        const confirmed = await customConfirm('Block löschen', `Möchtest du "${nodeToDelete.name}" wirklich entfernen?`);
+        let displayName = nodeToDelete.name;
+        if (isNote) {
+            const parsed = (typeof parseNotePayload === 'function')
+                ? parseNotePayload(nodeToDelete.name)
+                : { text: nodeToDelete.name };
+            displayName = parsed.text ? (parsed.text.length > 30 ? parsed.text.substring(0, 30) + '...' : parsed.text) : 'Notiz';
+        }
+
+        const confirmed = await customConfirm(isNote ? 'Notiz löschen' : 'Block löschen', `Möchtest du "${displayName}" wirklich entfernen?`);
         if (confirmed) {
             await db.from('project_nodes').delete().eq('id', nodeToDelete.id);
-            showToast('Block gelöscht', 'success');
+            showToast(isNote ? 'Notiz gelöscht' : 'Block gelöscht', 'success');
             await fetchCanvasData();
         }
     }
 };
-
 function getNodeHandleCoords(node, handleType) {
     const nodeEl = document.getElementById(node.id);
     const w = nodeEl ? nodeEl.offsetWidth : 320;
@@ -1273,6 +1293,17 @@ function renderCanvas() {
             }
         }
 
+        /**
+         * =============================================================================
+         * Projekt: CAD Time Manager
+         * Domain: Canvas Engine (Container-Kategorie mit strichliertem Icon)
+         * ERSETZEN IN: canvas.js (In renderCanvas -> Zonen-Header Icon-Zuweisung)
+         * Zeitstempel: 2026-08-31 18:10:00 CEST
+         * Breadcrumbs:
+         *   - [2026-08-29 21:10:00 CEST]: Zonen-Header Rendering.
+         *   - [2026-08-31 18:10:00 CEST]: Typ 'container' mit Strichlinien-Rahmen Icon (⬚) ergänzt.
+         * =============================================================================
+         */
         let assignedBadgesHtml = '';
         if (zone.assigned_design_user) {
             assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
@@ -1281,7 +1312,10 @@ function renderCanvas() {
             assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
         }
 
-        const zIcon = zone.zone_type === 'assembly' ? '📦' : (zone.zone_type === 'comment' ? '💬' : '📍');
+        let zIcon = CAD_ICONS ? CAD_ICONS.location : '📍';
+        if (zone.zone_type === 'assembly') zIcon = CAD_ICONS ? CAD_ICONS.assembly : '📦';
+        else if (zone.zone_type === 'comment') zIcon = CAD_ICONS ? CAD_ICONS.comment : '💬';
+        else if (zone.zone_type === 'container') zIcon = CAD_ICONS ? CAD_ICONS.container : '⬚';
 
         zoneEl.innerHTML = `
       ${badgeHtml}
@@ -1465,6 +1499,18 @@ function renderCanvas() {
                     renderConnections();
                 };
 
+                /**
+                 * =============================================================================
+                 * Projekt: CAD Time Manager
+                 * Domain: NATIVE Canvas Engine & Rendering (Zonen-Drag Sidebar Sync)
+                 * ERSETZEN IN: canvas.js (In renderCanvas -> startZoneDrag -> onMouseUp)
+                 * Zeitstempel: 2026-08-31 17:55:00 CEST
+                 * Breadcrumbs:
+                 *   - [2026-08-29 21:10:00 CEST]: Zonen-Drag & Drop Hierarchie-Zuordnung.
+                 *   - [2026-08-31 17:55:00 CEST]: renderSidebarZones() nach dem Verschieben von
+                 *     Rahmen direkt aufgerufen, damit Hierarchie-Wechsel sofort in der Sidebar sichtbar sind.
+                 * =============================================================================
+                 */
                 const onMouseUp = async () => {
                     if (!isDragging) return;
                     isDragging = false;
@@ -1517,9 +1563,11 @@ function renderCanvas() {
                     window.isDraggingAnything = false;
                     if (window.pendingCanvasUpdate) {
                         window.pendingCanvasUpdate = false;
-                        fetchCanvasData();
+                        if (typeof fetchCanvasData === 'function') fetchCanvasData();
                     } else {
-                        renderCanvas();
+                        if (typeof renderCanvas === 'function') renderCanvas();
+                        // NEU: Sidebar sofort nach dem Umhängen des Rahmens synchronisieren
+                        if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
                     }
                 };
 
@@ -2124,6 +2172,8 @@ function renderCanvas() {
             assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px; display:inline-flex; align-items:center; gap:3px;" title="Zeichnung: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
         }
 
+        const typeIconSvg = bType === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+
         el.innerHTML = `
       ${badgeHtml}
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
@@ -2135,7 +2185,9 @@ function renderCanvas() {
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
           <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex: 1;">
             ${subtreeBtnHtml}
-            <span style="overflow: hidden; text-overflow: ellipsis; font-size: 14px;" title="${escapeHtml(node.name)}"><strong>${escapeHtml(node.name)}</strong></span>
+            <span style="overflow: hidden; text-overflow: ellipsis; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" title="${escapeHtml(node.name)}">
+              ${typeIconSvg} <strong>${escapeHtml(node.name)}</strong>
+            </span>
           </div>
           <div style="flex-shrink: 0; margin-left: 6px; display: flex; align-items: center; gap: 4px;">
             ${statusIcon}${linkedIconHtml}

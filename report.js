@@ -94,6 +94,17 @@ window.openReportModal = function () {
  *     ausschließlich nach sort_order (Drag & Drop) ohne Flächenberechnung.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting Filter (Container-Kategorie)
+ * ERSETZEN IN: report.js (Funktion populateReportFilters)
+ * Zeitstempel: 2026-08-31 18:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:05:00 CEST]: Strikte sort_order Sortierung.
+ *   - [2026-08-31 18:10:00 CEST]: Icon-Auswahl um 'container' (⬚) erweitert.
+ * =============================================================================
+ */
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
@@ -113,7 +124,6 @@ window.populateReportFilters = function () {
 
     selZone.innerHTML = '<option value="all">Alle Bereiche</option>';
 
-    // Reine Sortierung nach sort_order
     const sortZonesByOrder = (zones) => {
         return [...zones].sort((a, b) => {
             const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
@@ -124,7 +134,11 @@ window.populateReportFilters = function () {
 
     const sortedZones = sortZonesByOrder(currentZones || []);
     sortedZones.forEach(z => {
-        const zIcon = z.zone_type === 'assembly' ? '📦' : (z.zone_type === 'comment' ? '💬' : '📍');
+        let zIcon = '📍';
+        if (z.zone_type === 'assembly') zIcon = '📦';
+        else if (z.zone_type === 'comment') zIcon = '💬';
+        else if (z.zone_type === 'container') zIcon = '⬚';
+
         selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
     });
 
