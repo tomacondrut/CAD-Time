@@ -581,38 +581,65 @@ html, body {
   color: #9b2c2c;
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Modal Viewport-Begrenzung & Scroll-Guard)
+ * ERSETZEN IN: style.css (Abschnitt Modals & Dialogs)
+ * Zeitstempel: 2026-08-31 18:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:50:00 CEST]: max-height: 90vh und overflow-y: auto für
+ *     .modal-content integriert.
+ *   - [2026-08-31 18:55:00 CEST]: Dedizierte 90vh-Begrenzung für #reportModal,
+ *     #adminModal und #infoGuideModal direkt unter .modal-content platziert.
+ * =============================================================================
+ */
+
 /* Modals & Dialogs */
 .modal-backdrop {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 2000;
-  justify-content: center;
-  align-items: center;
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    padding: 15px; /* Puffer auf kleinen / mobilen Screens */
 }
 
 #dialogModal {
-  z-index: 3500;
+    z-index: 3500;
 }
 
 .modal-content {
-  background: #fff;
-  border-radius: 8px;
-  width: 440px;
-  max-width: 92%;
-  padding: 22px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+    background: #fff;
+    border-radius: 8px;
+    width: 440px;
+    max-width: 95%;
+    max-height: 90vh; /* Verhindert das Hinauswachsen aus dem Viewport */
+    padding: 22px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden; /* Scrollbar wird an die inneren Container übergeben */
+}
+
+/* Scrollbarer Body-Bereich für große Modals (Auswertung, Admin & Leitfaden) */
+#reportModal .modal-content,
+#adminModal .modal-content,
+#infoGuideModal .modal-content {
+    max-height: 90vh;
 }
 
 .modal-header {
-  font-size: 15px;
-  font-weight: bold;
-  margin-bottom: 14px;
-  color: #2d3748;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 14px;
+    color: #2d3748;
 }
 
 .form-group {

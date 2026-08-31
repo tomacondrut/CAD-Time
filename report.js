@@ -320,8 +320,22 @@ window.updateReportData = function() {
     renderReportDetailsTable(filteredLogs);
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Horizontale Summenkacheln Nebeneinander)
+ * ERSETZEN IN: report.js (Funktion renderReportSummary)
+ * Zeitstempel: 2026-08-31 18:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-22 18:30:00 CEST]: Initiale Summenberechnung.
+ *   - [2026-08-31 18:55:00 CEST]: Kacheln für CAD, Zeichnung und Gesamtaufwand
+ *     strikte horizontale Anordnung (flex-row) mit flex: 1 zugewiesen.
+ * =============================================================================
+ */
 function renderReportSummary(logs, timeframe) {
     const container = document.getElementById('repSummaryContainer');
+    if (!container) return;
+
     let totalCAD = 0, totalDraft = 0;
     const weeklyData = {};
 
@@ -338,23 +352,26 @@ function renderReportSummary(logs, timeframe) {
         }
     });
 
-    let html = `
-        <div style="background:#edf2f7; padding:10px 15px; border-radius:6px; flex: 1;">
-            <div style="font-size:11px; color:#4a5568; text-transform:uppercase; font-weight:bold;">Summe CAD</div>
-            <div style="font-size:20px; font-weight:bold; color:#2b6cb0;">${formatHoursToHM(totalCAD)}</div>
-        </div>
-        <div style="background:#edf2f7; padding:10px 15px; border-radius:6px; flex: 1;">
-            <div style="font-size:11px; color:#4a5568; text-transform:uppercase; font-weight:bold;">Summe Zeichnung</div>
-            <div style="font-size:20px; font-weight:bold; color:#38a169;">${formatHoursToHM(totalDraft)}</div>
-        </div>
-        <div style="background:#2d3748; padding:10px 15px; border-radius:6px; flex: 1;">
-            <div style="font-size:11px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Gesamtaufwand</div>
-            <div style="font-size:20px; font-weight:bold; color:#fff;">${formatHoursToHM(totalCAD + totalDraft)}</div>
+    const cardsHtml = `
+        <div style="display: flex; gap: 12px; width: 100%;">
+            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0; min-width: 0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Summe CAD</div>
+                <div style="font-size: 18px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">${formatHoursToHM(totalCAD)}</div>
+            </div>
+            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0; min-width: 0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Summe Zeichnung</div>
+                <div style="font-size: 18px; font-weight: bold; color: #38a169; margin-top: 2px;">${formatHoursToHM(totalDraft)}</div>
+            </div>
+            <div style="background: #2d3748; padding: 10px 14px; border-radius: 6px; flex: 1; min-width: 0;">
+                <div style="font-size: 10px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Gesamtaufwand</div>
+                <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 2px;">${formatHoursToHM(totalCAD + totalDraft)}</div>
+            </div>
         </div>
     `;
 
+    let weekBreakdownHtml = '';
     if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
-        let weekBreakdownHtml = `<div style="width: 100%; margin-top: 10px; font-size: 12px;">`;
+        weekBreakdownHtml = `<div style="width: 100%; margin-top: 8px; font-size: 11px;">`;
         weekBreakdownHtml += `<table class="log-table"><thead><tr><th>Kalenderwoche</th><th>CAD</th><th>Zeichnung</th><th>Summe KW</th></tr></thead><tbody>`;
 
         const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
@@ -371,10 +388,14 @@ function renderReportSummary(logs, timeframe) {
             `;
         });
         weekBreakdownHtml += `</tbody></table></div>`;
-        html = `<div style="display:flex; flex-direction:column; width:100%; gap:10px;"><div style="display:flex; gap:15px;">${html}</div>${weekBreakdownHtml}</div>`;
     }
 
-    container.innerHTML = html;
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
+            ${cardsHtml}
+            ${weekBreakdownHtml}
+        </div>
+    `;
 }
 
 /**
@@ -490,6 +511,19 @@ function renderReportDetailsTable(logs) {
  *     geben analog zur HTML-Ansicht den reinen Namen ohne '📍 (Direktbuchung)' aus.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & PDF Export (KW-Aufschlüsselung & Horizontale Summen)
+ * ERSETZEN IN: report.js (Funktion generatePDF)
+ * Zeitstempel: 2026-08-31 19:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:18:00 CEST]: PDF-Tabelle bereinigt.
+ *   - [2026-08-31 19:00:00 CEST]: 1. KW-Wochenaufschlüsselung bei Monats- und 
+ *     benutzerdefinierten Zeiträumen in den PDF-Export integriert.
+ *     2. Summenkacheln im PDF einheitlich 3-spaltig (CAD, Zeichnung, Gesamt) ausgerichtet.
+ * =============================================================================
+ */
 window.generatePDF = async function () {
     const btn = document.getElementById('btnExportPDF');
     if (!btn) return;
@@ -502,6 +536,7 @@ window.generatePDF = async function () {
         const pData = reportState.projData;
         const selUser = document.getElementById('repFilterUser');
         const filterUserName = selUser.options[selUser.selectedIndex].text;
+        const timeframe = document.getElementById('repTimeframe').value;
 
         const dStart = `${reportState.startDate.getDate().toString().padStart(2, '0')}.${(reportState.startDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.startDate.getFullYear()}`;
         const dEnd = `${reportState.endDate.getDate().toString().padStart(2, '0')}.${(reportState.endDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.endDate.getFullYear()}`;
@@ -544,6 +579,7 @@ window.generatePDF = async function () {
 
         let tableRows = '';
         let filterTotalD = 0, filterTotalDr = 0;
+        const weeklyData = {};
 
         reportState.logs.forEach(log => {
             let nodeName = 'Unbekannt';
@@ -562,7 +598,7 @@ window.generatePDF = async function () {
                 const zone = currentZones.find(z => z.id === log.zone_id);
                 if (zone) {
                     zoneName = zone.title;
-                    nodeName = zone.title; // Bereinigt: Kein '📍 (Direktbuchung)' mehr
+                    nodeName = zone.title;
                 }
             }
 
@@ -571,10 +607,19 @@ window.generatePDF = async function () {
             let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichnung' : 'Status');
             let timeStr = formatHoursToHM(log.hours);
 
-            if (log.task_type === 'completion') timeStr = 'Status-Flag';
-            else {
-                if (log.task_type === 'design') filterTotalD += parseFloat(log.hours);
-                if (log.task_type === 'drafting') filterTotalDr += parseFloat(log.hours);
+            const hrs = parseFloat(log.hours) || 0;
+            if (log.task_type === 'completion') {
+                timeStr = 'Status-Flag';
+            } else {
+                if (log.task_type === 'design') filterTotalD += hrs;
+                if (log.task_type === 'drafting') filterTotalDr += hrs;
+
+                if (timeframe === 'month' || timeframe === 'custom') {
+                    const kw = getISOWeekNumber(d);
+                    if (!weeklyData[kw]) weeklyData[kw] = { cad: 0, draft: 0 };
+                    if (log.task_type === 'design') weeklyData[kw].cad += hrs;
+                    if (log.task_type === 'drafting') weeklyData[kw].draft += hrs;
+                }
             }
 
             tableRows += `
@@ -590,6 +635,40 @@ window.generatePDF = async function () {
             `;
         });
 
+        // Kalenderwochen-Tabelle für das PDF aufbereiten
+        let pdfWeeklyHtml = '';
+        if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
+            pdfWeeklyHtml = `
+                <div class="pdf-section-title" style="border-color: #3182ce; margin-top: 15px;">Wochenaufschlüsselung (Kalenderwochen)</div>
+                <table style="margin-bottom: 15px;">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Kalenderwoche</th>
+                            <th style="width: 25%;">CAD</th>
+                            <th style="width: 25%;">Zeichnung</th>
+                            <th style="width: 25%;">Summe KW</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
+            sortedKWs.forEach(kw => {
+                const wCAD = weeklyData[kw].cad;
+                const wDraft = weeklyData[kw].draft;
+                pdfWeeklyHtml += `
+                    <tr>
+                        <td><strong>KW ${kw}</strong></td>
+                        <td style="color:#2b6cb0;">${formatHoursToHM(wCAD)}</td>
+                        <td style="color:#38a169;">${formatHoursToHM(wDraft)}</td>
+                        <td><strong>${formatHoursToHM(wCAD + wDraft)}</strong></td>
+                    </tr>
+                `;
+            });
+
+            pdfWeeklyHtml += `</tbody></table>`;
+        }
+
         pdfContainer.innerHTML = pdfCss + `
             <div class="pdf-page">
                 ${pageHeader}
@@ -597,28 +676,31 @@ window.generatePDF = async function () {
                 <div class="pdf-section-title" style="border-color: #3182ce;">Gesamtprojekt-Status zum Stichtag (${dEnd})</div>
                 <div class="pdf-box" style="display: flex; gap: 40px; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="${pieDUrl}" style="width: 60px; height: 60px;">
+                        <img src="${pieDUrl}" style="width: 50px; height: 50px;">
                         <div>
                             <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total CAD</div>
-                            <div style="font-size:14px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentD)}</strong> von ${formatHoursToHM(pData.budD)}</div>
+                            <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentD)}</strong> von ${formatHoursToHM(pData.budD)}</div>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="${pieDrUrl}" style="width: 60px; height: 60px;">
+                        <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
                         <div>
                             <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total Zeichnung</div>
-                            <div style="font-size:14px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentDr)}</strong> von ${formatHoursToHM(pData.budDr)}</div>
+                            <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentDr)}</strong> von ${formatHoursToHM(pData.budDr)}</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="pdf-section-title" style="border-color: #e67e22; margin-top: 20px;">Bericht Filter-Scope: ${filterUserName}</div>
-                <div class="pdf-box" style="display: flex; gap: 20px;">
-                    <div><strong>Gefilterte CAD-Stunden:</strong> <span style="color:#2b6cb0;">${formatHoursToHM(filterTotalD)}</span></div>
-                    <div><strong>Gefilterte Zeichnungs-Stunden:</strong> <span style="color:#38a169;">${formatHoursToHM(filterTotalDr)}</span></div>
+                <div class="pdf-section-title" style="border-color: #e67e22; margin-top: 15px;">Gefilterter Aufwand: ${filterUserName}</div>
+                <div class="pdf-box" style="display: flex; gap: 20px; justify-content: space-between;">
+                    <div><strong>Summe CAD:</strong> <span style="color:#2b6cb0; font-size: 13px;">${formatHoursToHM(filterTotalD)}</span></div>
+                    <div><strong>Summe Zeichnung:</strong> <span style="color:#38a169; font-size: 13px;">${formatHoursToHM(filterTotalDr)}</span></div>
+                    <div><strong>Gesamtaufwand:</strong> <span style="color:#2d3748; font-weight: bold; font-size: 13px;">${formatHoursToHM(filterTotalD + filterTotalDr)}</span></div>
                 </div>
 
-                <div class="pdf-section-title" style="border-color: #4a5568; margin-top: 20px;">Logbuch-Auszug</div>
+                ${pdfWeeklyHtml}
+
+                <div class="pdf-section-title" style="border-color: #4a5568; margin-top: 15px;">Logbuch-Auszug</div>
                 <table>
                     <thead>
                         <tr>
