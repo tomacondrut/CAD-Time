@@ -379,6 +379,18 @@ window.loadedLocalProjectId = null;
  *     und Synchronisation des Schloss-Buttons bei lokalen Offline-Projekten.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & State-Trennung (Sicheres Admin-Reset beim Cloud-Wechsel)
+ * ERSETZEN IN: db.js (Funktion fetchCanvasData)
+ * Zeitstempel: 2026-08-31 18:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:58:00 CEST]: Auto-Admin bei lokalen Projekten.
+ *   - [2026-08-31 18:30:00 CEST]: isAdmin wird beim Wechsel zurück in ein Cloud-Projekt
+ *     zwingend auf false zurückgesetzt und das Schloss verriegelt.
+ * =============================================================================
+ */
 window.fetchCanvasData = async function () {
     if (!activeProjectId) return;
 
@@ -440,22 +452,20 @@ window.fetchCanvasData = async function () {
         return;
     }
 
-    // 2. Cloud-Modus: Lokale Handles entkoppeln & Schloss-Button synchronisieren
+    // 2. Cloud-Modus: Lokale Handles entkoppeln & Admin-Rechte strikt sperren
     window.isLocalFileOpen = false;
     window.localFileHandle = null;
     window.loadedLocalProjectId = null;
 
+    // Admin-Status beim Betreten eines Cloud-Projekts zwingend zurücksetzen
+    isAdmin = false;
+    if (window.selectedNodeIds) selectedNodeIds.clear();
+
     const adminBtn = document.getElementById('adminLockBtn');
     if (adminBtn) {
-        if (isAdmin) {
-            adminBtn.classList.add('logged-in');
-            adminBtn.textContent = '🔓';
-            adminBtn.title = 'Erweiterte Optionen freigeschaltet';
-        } else {
-            adminBtn.classList.remove('logged-in');
-            adminBtn.textContent = '🔒';
-            adminBtn.title = 'Erweiterte Optionen freischalten';
-        }
+        adminBtn.classList.remove('logged-in');
+        adminBtn.textContent = '🔒';
+        adminBtn.title = 'Erweiterte Optionen freischalten';
     }
 
     const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
