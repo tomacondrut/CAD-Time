@@ -353,6 +353,19 @@
                     <input type="hidden" id="editZoneColor" />
                 </div>
 
+                <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Modals (Retro-Log Button für Rahmen)
+    ERSETZEN IN: index.html (Im editZoneModal direkt vor .modal-actions)
+    Zeitstempel: 2026-09-01 17:55:00 CEST
+    Breadcrumb: [2026-09-01 17:55:00 CEST] Button für rückwirkende Zonen-Zeiteinträge ergänzt.
+    =============================================================================
+    -->
+                <div id="retroLogZoneAdminBtnContainer" style="margin-top: 10px;">
+                    <button type="button" class="btn-sec" style="width: 100%; border: 1px dashed #2b6cb0; color: #2b6cb0;" onclick="openZoneRetroLogModal()">+ Rückwirkenden Zeiteintrag hinzufügen</button>
+                </div>
+
                 <div class="modal-actions">
                     <button type="button" class="btn-sec" onclick="closeModal('editZoneModal')">Abbrechen</button>
                     <button type="submit" class="btn-prim">Speichern</button>
@@ -365,10 +378,20 @@
     <div id="retroLogModal" class="modal-backdrop">
         <div class="modal-content">
             <div class="modal-header">Rückwirkende Zeiterfassung (Erweiterte Optionen)</div>
+            <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Modals (Hidden-Fields für Retro-Logs)
+    ERSETZEN IN: index.html (Im retroLogModal innerhalb von <form id="retroLogForm">)
+    Zeitstempel: 2026-09-01 17:55:00 CEST
+    Breadcrumb: [2026-09-01 17:55:00 CEST] retroLogZoneId ergänzt und Label dynamisch gehalten.
+    =============================================================================
+    -->
             <form id="retroLogForm">
                 <input type="hidden" id="retroLogNodeId" />
+                <input type="hidden" id="retroLogZoneId" />
                 <div class="form-group">
-                    <label>Block:</label>
+                    <label id="retroLogTargetLabel">Ziel (Block / Rahmen):</label>
                     <input type="text" id="retroLogBlockName" disabled style="background: #edf2f7;" />
                 </div>
                 <div class="form-group">
@@ -386,12 +409,21 @@
                         <option value="design">CAD Konstruktion</option>
                     </select>
                 </div>
+                <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Modals (Retro-Log Zeitfelder mit Wheel-Handler)
+    ERSETZEN IN: index.html (Im retroLogModal -> Bereich .time-inputs-row)
+    Zeitstempel: 2026-09-01 18:05:00 CEST
+    Breadcrumb: [2026-09-01 18:05:00 CEST] input-hours/input-mins und onwheel ergänzt.
+    =============================================================================
+    -->
                 <div class="form-group">
                     <label>Dauer (Stunden & Minuten):</label>
                     <div class="time-inputs-row">
-                        <input type="number" id="retroLogHours" class="log-input" min="0" value="1" style="width: 55px;" required />
+                        <input type="number" id="retroLogHours" class="log-input input-hours" min="0" value="1" style="width: 55px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
                         <span>h</span>
-                        <input type="number" id="retroLogMins" class="log-input" min="0" max="55" step="5" value="0" style="width: 55px;" required />
+                        <input type="number" id="retroLogMins" class="log-input input-mins" min="0" step="5" value="0" style="width: 55px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
                         <span>m</span>
                     </div>
                 </div>

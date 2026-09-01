@@ -1327,7 +1327,6 @@ function renderCanvas() {
           ${assignedBadgesHtml}
         </div>
 
-
         <!-- Zeile 2: Pie Charts direkt unterhalb + Button -->
         <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">
             <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
@@ -1355,8 +1354,8 @@ function renderCanvas() {
         <div class="zone-actions" style="position: absolute; right: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 60;">
           <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
           <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
+          <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
           ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
-            <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
             <button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
           ` : ''}
         </div>
@@ -1373,9 +1372,9 @@ function renderCanvas() {
               <option value="drafting">Zeichn.</option>
               <option value="design">CAD</option>
             </select>
-            <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Mausrad: +/- 1h" onwheel="handleTimeWheel(event, 'hour')" required />
+            <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
             <span>h</span>
-            <input type="number" class="log-input input-mins" min="0" max="55" step="5" value="30" style="width: 44px;" title="Mausrad: +/- 5m" onwheel="handleTimeWheel(event, 'min')" required />
+            <input type="number" class="log-input input-mins" min="0" step="5" value="30" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
             <span>m</span>
           </div>
           <div style="display: flex; gap: 4px; margin-top: 6px;">
@@ -2231,7 +2230,7 @@ function renderCanvas() {
             </select>
             <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
             <span>h</span>
-            <input type="number" class="log-input input-mins" min="0" max="55" step="5" value="30" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
+            <input type="number" class="log-input input-mins" min="0" step="5" value="30" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
             <span>m</span>
           </div>
 

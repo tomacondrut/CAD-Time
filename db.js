@@ -403,6 +403,18 @@ window.loadedLocalProjectId = null;
  *     zwingend auf false zurückgesetzt und das Schloss verriegelt.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank & State-Synchronisation (Persistenter Admin-Status)
+ * ERSETZEN IN: db.js (Funktion fetchCanvasData)
+ * Zeitstempel: 2026-09-01 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:30:00 CEST]: Auto-Admin bei lokalen Projekten.
+ *   - [2026-09-01 17:40:00 CEST]: Ungewolltes Zurücksetzen von isAdmin = false 
+ *     bei Cloud-Syncs entfernt. Admin-Status bleibt über Aktionen hinweg aktiv.
+ * =============================================================================
+ */
 window.fetchCanvasData = async function () {
     if (!activeProjectId) return;
 
@@ -412,7 +424,6 @@ window.fetchCanvasData = async function () {
         window.isLocalFileOpen = true;
         window.localFileHandle = proj ? proj.handle : null;
 
-        // Auto-Admin für lokale Offline-Dateien aktivieren
         isAdmin = true;
         const adminBtn = document.getElementById('adminLockBtn');
         if (adminBtn) {
@@ -464,21 +475,10 @@ window.fetchCanvasData = async function () {
         return;
     }
 
-    // 2. Cloud-Modus: Lokale Handles entkoppeln & Admin-Rechte strikt sperren
+    // 2. Cloud-Modus: Lokale Handles entkoppeln
     window.isLocalFileOpen = false;
     window.localFileHandle = null;
     window.loadedLocalProjectId = null;
-
-    // Admin-Status beim Betreten eines Cloud-Projekts zwingend zurücksetzen
-    isAdmin = false;
-    if (window.selectedNodeIds) selectedNodeIds.clear();
-
-    const adminBtn = document.getElementById('adminLockBtn');
-    if (adminBtn) {
-        adminBtn.classList.remove('logged-in');
-        adminBtn.textContent = '🔒';
-        adminBtn.title = 'Erweiterte Optionen freischalten';
-    }
 
     const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
         realDb.from('project_nodes').select('*').eq('project_id', activeProjectId),

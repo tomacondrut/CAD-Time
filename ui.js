@@ -330,11 +330,22 @@ window.renderUserDropdowns = function () {
  *     falls Dropdowns im DOM beim Initialstart noch nicht fertig befüllt sind.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Login & Session-Security
+ * ERSETZEN IN: ui.js (Funktion confirmUserLogin)
+ * Zeitstempel: 2026-09-01 17:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26 20:20:00 CEST]: Robuste Overlay-Schließung.
+ *   - [2026-09-01 17:55:00 CEST]: Admin-Status beim initialen Login in Cloud-Projekte 
+ *     standardmäßig auf gesperrt (false) setzen.
+ * =============================================================================
+ */
 window.confirmUserLogin = function () {
     const selectUser = document.getElementById('userSelectDropdown');
     const selectProj = document.getElementById('projectSelectLoginDropdown');
 
-    // Priorität: Dropdown-Wert -> wenn leer, Fallback auf localStorage
     const userVal = (selectUser && selectUser.value) ? selectUser.value : localStorage.getItem('cad_tm_user');
     const projVal = (selectProj && selectProj.value) ? selectProj.value : localStorage.getItem('cad_tm_project');
 
@@ -343,7 +354,17 @@ window.confirmUserLogin = function () {
     activeUserCode = userVal;
     activeProjectId = projVal;
 
-    // Im LocalStorage sichern
+    // Cloud-Projekte starten beim Login immer im normalen Mitarbeiter-Modus
+    if (!activeProjectId.startsWith('local_')) {
+        isAdmin = false;
+        const adminBtn = document.getElementById('adminLockBtn');
+        if (adminBtn) {
+            adminBtn.classList.remove('logged-in');
+            adminBtn.textContent = '🔒';
+            adminBtn.title = 'Erweiterte Optionen freischalten';
+        }
+    }
+
     localStorage.setItem('cad_tm_user', activeUserCode);
     localStorage.setItem('cad_tm_project', activeProjectId);
 
@@ -352,15 +373,12 @@ window.confirmUserLogin = function () {
     if (sbUser) sbUser.textContent = activeUserCode;
     if (sbProj) sbProj.value = activeProjectId;
 
-    // Dropdowns synchronisieren
     if (selectUser) selectUser.value = activeUserCode;
     if (selectProj) selectProj.value = activeProjectId;
 
-    // Login-Overlay zuverlässig ausblenden
     const overlay = document.getElementById('userLoginOverlay');
     if (overlay) overlay.style.display = 'none';
 
-    // Gespeicherte Viewport-Koordinaten anwenden
     const savedPanX = localStorage.getItem('cad_tm_panX');
     const savedPanY = localStorage.getItem('cad_tm_panY');
     const savedScale = localStorage.getItem('cad_tm_scale');
@@ -389,8 +407,37 @@ window.handleLogout = function () {
     showToast('Abgemeldet', 'info');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Projektwechsel & Cloud-Sicherheits-Guard)
+ * ERSETZEN IN: ui.js (Funktion handleSidebarProjectChange)
+ * Zeitstempel: 2026-09-01 17:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-26 20:10:00 CEST]: Initiale Projektwechsel-Logik.
+ *   - [2026-09-01 17:55:00 CEST]: Cloud-Sicherheits-Guard: Beim Verlassen eines 
+ *     lokalen Projekts in ein Cloud-Projekt wird isAdmin strikt entzogen (Passwortschutz greift).
+ * =============================================================================
+ */
 window.handleSidebarProjectChange = function (newProjectId) {
+    const wasLocal = window.activeProjectId && window.activeProjectId.startsWith('local_');
+    const isNowCloud = newProjectId && !newProjectId.startsWith('local_');
+
+    // Wenn aus einem lokalen Projekt in die Cloud gewechselt wird -> Admin-Rechte strikt entziehen
+    if (wasLocal && isNowCloud) {
+        isAdmin = false;
+        const adminBtn = document.getElementById('adminLockBtn');
+        if (adminBtn) {
+            adminBtn.classList.remove('logged-in');
+            adminBtn.textContent = '🔒';
+            adminBtn.title = 'Erweiterte Optionen freischalten';
+        }
+        if (window.selectedNodeIds) selectedNodeIds.clear();
+    }
+
     activeProjectId = newProjectId;
+    localStorage.setItem('cad_tm_project', activeProjectId);
+
     fetchCanvasData();
     showToast(`Projekt gewechselt: ${getCurrentProject().object_number}`, 'info');
 };
@@ -510,6 +557,18 @@ window.selectColorSwatch = function (hex) {
  *   - [2026-08-28 21:05]: 'input'-Event nach Wertänderung gefeuert, um State-Updates sicherzustellen.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Mausrad Zeit-Steuerung mit automatischem 60-Minuten-Übertrag)
+ * ERSETZEN IN: ui.js (Funktion handleTimeWheel)
+ * Zeitstempel: 2026-09-01 18:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 21:05:00 CEST]: Basisfunktion.
+ *   - [2026-09-01 18:15:00 CEST]: Übertrag zwischen Stunden und Minuten 
+ *     für Blöcke, Rahmen und Modals vereinheitlicht.
+ * =============================================================================
+ */
 window.handleTimeWheel = function (e, type) {
     e.preventDefault();
     e.stopPropagation();
@@ -517,8 +576,8 @@ window.handleTimeWheel = function (e, type) {
     const container = e.target.closest('.time-inputs-row');
     if (!container) return;
 
-    const hourInput = container.querySelector('.input-hours');
-    const minInput = container.querySelector('.input-mins');
+    const hourInput = container.querySelector('.input-hours, #retroLogHours');
+    const minInput = container.querySelector('.input-mins, #retroLogMins');
     if (!hourInput || !minInput) return;
 
     let currentHours = parseInt(hourInput.value, 10) || 0;
@@ -533,7 +592,6 @@ window.handleTimeWheel = function (e, type) {
     hourInput.value = Math.floor(totalMinutes / 60);
     minInput.value = (totalMinutes % 60).toString().padStart(2, '0');
 
-    // Stellt sicher, dass angebundene UI-Listener aktualisiert werden
     hourInput.dispatchEvent(new Event('input', { bubbles: true }));
     minInput.dispatchEvent(new Event('input', { bubbles: true }));
 };
@@ -1252,7 +1310,63 @@ window.approveLog = async function (logId) {
  * (Admin: direkt freigegeben, User: wartet auf Freigabe & nur eigenes Kürzel).
  * =============================================================================
  */
-window.openRetroLogModal = function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Retro-Logging für Blöcke & Zonen)
+ * ERSETZEN IN: ui.js (Abschnitt 7: RETRO-LOGGING)
+ * Zeitstempel: 2026-09-01 17:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-25 17:35:00 CEST]: Status abhängig von Admin-Rechten.
+ *   - [2026-09-01 17:55:00 CEST]: Unterstützung für rückwirkende Buchungen 
+ *     auf Rahmen/Zonen (openZoneRetroLogModal & zone_id Payload).
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Retro-Logging Benutzer-Dropdown Logik)
+ * ERSETZEN IN: ui.js (Abschnitt 7: RETRO-LOGGING komplett ersetzen)
+ * Zeitstempel: 2026-09-01 17:58:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-25 17:35:00 CEST]: Status abhängig von Admin-Rechten.
+ *   - [2026-09-01 17:55:00 CEST]: Retro-Logs für Rahmen/Zonen integriert.
+ *   - [2026-09-01 17:58:00 CEST]: retroLogUserCode Dropdown-Steuerung: Admins 
+ *     können beliebige Kürzel wählen, normale Benutzer sind auf das eigene Kürzel fixiert.
+ * =============================================================================
+ */
+
+// Hilfsfunktion: Befüllt das Kürzel-Dropdown und regelt die Admin-/User-Freigabe
+function setupRetroLogUserSelect() {
+    const userSelect = document.getElementById('retroLogUserCode');
+    if (!userSelect) return;
+
+    userSelect.innerHTML = '';
+
+    if (isAdmin) {
+        // Admin: Alle Benutzer zur freien Auswahl
+        (currentUsers || []).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.code;
+            opt.textContent = u.code;
+            if (u.code === activeUserCode) opt.selected = true;
+            userSelect.appendChild(opt);
+        });
+        userSelect.disabled = false;
+    } else {
+        // Einfacher Benutzer: Nur das eigene Kürzel fest hinterlegt
+        const opt = document.createElement('option');
+        opt.value = activeUserCode || 'KÜR';
+        opt.textContent = activeUserCode || 'KÜR';
+        opt.selected = true;
+        userSelect.appendChild(opt);
+        userSelect.disabled = true;
+    }
+}
+
+// Öffnet Retro-Log für normale Baugruppen / Blöcke
+window.openRetroLogModal = function () {
     const id = document.getElementById('editNodeId').value;
     const node = currentNodes.find(n => n.id === id);
     if (!node) return;
@@ -1260,18 +1374,37 @@ window.openRetroLogModal = function() {
     closeModal('configModal');
 
     document.getElementById('retroLogNodeId').value = node.id;
+    document.getElementById('retroLogZoneId').value = '';
+    document.getElementById('retroLogTargetLabel').textContent = 'Block / Baugruppe:';
     document.getElementById('retroLogBlockName').value = node.name;
     document.getElementById('retroLogDate').valueAsDate = new Date();
 
-    // Nutzerkürzel standardmäßig auf den aktiven Nutzer setzen
-    const userSelect = document.getElementById('retroLogUserCode');
-    if (userSelect) {
-        userSelect.value = activeUserCode;
-        // Wenn kein Admin, Auswahl auf den eigenen Code sperren, um Manipulationen zu verhindern
-        userSelect.disabled = !isAdmin;
+    setupRetroLogUserSelect();
+
+    const submitBtn = document.querySelector('#retroLogForm .btn-prim');
+    if (submitBtn) {
+        submitBtn.textContent = isAdmin ? 'Eintragen & Direkt freigeben' : 'Eintragen (Wartet auf Freigabe)';
     }
 
-    // Button Text dynamisch anpassen
+    openModal('retroLogModal');
+};
+
+// Öffnet Retro-Log für Rahmen / Zonen
+window.openZoneRetroLogModal = function () {
+    const id = document.getElementById('editZoneId').value;
+    const zone = currentZones.find(z => z.id === id);
+    if (!zone) return;
+
+    closeModal('editZoneModal');
+
+    document.getElementById('retroLogNodeId').value = '';
+    document.getElementById('retroLogZoneId').value = zone.id;
+    document.getElementById('retroLogTargetLabel').textContent = 'Bereich / Rahmen:';
+    document.getElementById('retroLogBlockName').value = `📍 ${zone.title}`;
+    document.getElementById('retroLogDate').valueAsDate = new Date();
+
+    setupRetroLogUserSelect();
+
     const submitBtn = document.querySelector('#retroLogForm .btn-prim');
     if (submitBtn) {
         submitBtn.textContent = isAdmin ? 'Eintragen & Direkt freigeben' : 'Eintragen (Wartet auf Freigabe)';
@@ -1282,8 +1415,13 @@ window.openRetroLogModal = function() {
 
 window.handleSaveRetroLog = async function (e) {
     e.preventDefault();
-    const nodeId = document.getElementById('retroLogNodeId').value;
-    const userCode = document.getElementById('retroLogUserCode').value;
+    const nodeId = document.getElementById('retroLogNodeId').value || null;
+    const zoneId = document.getElementById('retroLogZoneId').value || null;
+
+    // Bei gesperrtem Dropdown greift der Fallback auf activeUserCode
+    const selectEl = document.getElementById('retroLogUserCode');
+    const userCode = (selectEl && selectEl.value) ? selectEl.value : activeUserCode;
+
     const dateVal = document.getElementById('retroLogDate').value;
     const taskType = document.getElementById('retroLogTaskType').value;
     const hours = parseInt(document.getElementById('retroLogHours').value, 10) || 0;
@@ -1297,22 +1435,21 @@ window.handleSaveRetroLog = async function (e) {
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
     const loggedAtTimestamp = new Date(dateVal + 'T12:00:00Z').toISOString();
-
-    /**
-     * Breadcrumb: [2026-08-25] Status abhängig von Admin-Rechten setzen.
-     */
     const finalStatus = isAdmin ? 'approved' : 'pending';
 
-    const { error } = await db.from('time_logs').insert([{
+    const payload = {
         project_id: activeProjectId,
         node_id: nodeId,
+        zone_id: zoneId,
         user_code: userCode,
         task_type: taskType,
         hours: decimalHours,
         note: note ? `[Rückwirkend] ${note}` : '[Rückwirkend eingetragen]',
         status: finalStatus,
         logged_at: loggedAtTimestamp
-    }]);
+    };
+
+    const { error } = await db.from('time_logs').insert([payload]);
 
     if (error) {
         showToast('Fehler: ' + error.message, 'error');
@@ -1327,10 +1464,8 @@ window.handleSaveRetroLog = async function (e) {
 
     showToast(msg, 'success');
 
-    // Canvas aktualisieren, damit ausstehende Logs direkt in der Historie angezeigt werden
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
-
 // =============================================================================
 // 8. ADMIN KONTROLLZENTRUM & AUDIT-LOGS
 // =============================================================================
@@ -1544,6 +1679,18 @@ window.cancelProjectEdit = function () {
     document.getElementById('btnCancelProjEdit').style.display = 'none';
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Projekt- und Budgetverwaltung)
+ * ERSETZEN IN: ui.js (Funktion handleSaveProject)
+ * Zeitstempel: 2026-09-01 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:05:00 CEST]: Audit-Protokollierung bei Budgetänderungen.
+ *   - [2026-09-01 17:40:00 CEST]: Sofortige Synchronisation von Sidebar-Statistiken 
+ *     und Canvas nach Projekt- und Budgetanpassungen.
+ * =============================================================================
+ */
 window.handleSaveProject = async function (e) {
     e.preventDefault();
     const editId = document.getElementById('adminProjEditId').value;
@@ -1611,8 +1758,10 @@ window.handleSaveProject = async function (e) {
     }
 
     cancelProjectEdit();
-    fetchProjects();
-    fetchAuditLogs();
+    await fetchProjects();
+    if (typeof fetchCanvasData === 'function') await fetchCanvasData();
+    if (typeof updateSidebarStats === 'function') updateSidebarStats();
+    if (typeof fetchAuditLogs === 'function') fetchAuditLogs();
 };
 
 window.toggleAuditScope = function () {

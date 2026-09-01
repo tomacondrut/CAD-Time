@@ -128,6 +128,18 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
  *     eine Unterebene (Hauptrahmen -> direkte Kindrahmen).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar Zonen-Rendering (Reihenfolge-Persistierung Fix)
+ * ERSETZEN IN: app.js (Funktion renderSidebarZones)
+ * Zeitstempel: 2026-09-01 17:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:45:00 CEST]: 1-Ebenen-Hierarchie.
+ *   - [2026-09-01 17:40:00 CEST]: saveDatabaseZoneOrder auf live DOM-Container 
+ *     umgestellt, um leere DocumentFragment-Referenzen beim Drag & Drop zu beheben.
+ * =============================================================================
+ */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
@@ -165,10 +177,10 @@ window.renderSidebarZones = function () {
 
     let draggedEl = null;
 
-    const saveDatabaseZoneOrder = async (parentContainer) => {
-        if (!canReorderZones) return;
+    const saveDatabaseZoneOrder = async (targetParentEl) => {
+        if (!canReorderZones || !targetParentEl) return;
 
-        const itemEls = Array.from(parentContainer.children)
+        const itemEls = Array.from(targetParentEl.children)
             .map(child => child.classList.contains('sidebar-zone-item') ? child : child.querySelector('.sidebar-zone-item'))
             .filter(Boolean);
 
@@ -190,7 +202,6 @@ window.renderSidebarZones = function () {
 
     const renderZoneTree = (zone, isSubZone, parentContainer) => {
         const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zone.id) : false;
-        // Untergeordnete Rahmen nur für die oberste Ebene (Level 0) laden
         const childZones = !isSubZone ? sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id)) : [];
         const hasChildren = childZones.length > 0;
         const isCollapsed = window.collapsedZoneIds.has(zone.id);
@@ -241,7 +252,7 @@ window.renderSidebarZones = function () {
 
         if (canReorderZones) {
             el.addEventListener('dragstart', (e) => {
-                draggedEl = !isSubZone ? el.parentElement : el;
+                draggedEl = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('text/plain', zone.id);
                 setTimeout(() => { if (draggedEl) draggedEl.style.opacity = '0.4'; }, 0);
@@ -250,7 +261,7 @@ window.renderSidebarZones = function () {
             el.addEventListener('dragend', () => {
                 if (draggedEl) draggedEl.style.opacity = '1';
                 draggedEl = null;
-                parentContainer.querySelectorAll('.sidebar-zone-item').forEach(item => {
+                document.querySelectorAll('.sidebar-zone-item').forEach(item => {
                     item.style.borderTop = '';
                     item.style.borderBottom = '';
                 });
@@ -258,7 +269,7 @@ window.renderSidebarZones = function () {
 
             el.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                const dropTarget = !isSubZone ? el.parentElement : el;
+                const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
                 if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
 
                 e.dataTransfer.dropEffect = 'move';
@@ -284,19 +295,20 @@ window.renderSidebarZones = function () {
                 el.style.borderTop = '';
                 el.style.borderBottom = '';
 
-                const dropTarget = !isSubZone ? el.parentElement : el;
+                const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
                 if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
 
+                const liveParent = dropTarget.parentElement;
                 const rect = dropTarget.getBoundingClientRect();
                 const relY = e.clientY - rect.top;
 
                 if (relY < rect.height / 2) {
-                    parentContainer.insertBefore(draggedEl, dropTarget);
+                    liveParent.insertBefore(draggedEl, dropTarget);
                 } else {
-                    parentContainer.insertBefore(draggedEl, dropTarget.nextSibling);
+                    liveParent.insertBefore(draggedEl, dropTarget.nextSibling);
                 }
 
-                await saveDatabaseZoneOrder(parentContainer);
+                await saveDatabaseZoneOrder(liveParent);
             });
         }
 
@@ -310,7 +322,6 @@ window.renderSidebarZones = function () {
             if (hasChildren && !isCollapsed) {
                 const childrenContainer = document.createElement('div');
                 childrenContainer.className = 'sub-zones-container';
-                // Kindelemente strikt als flache Unterebene (isSubZone = true) rendern
                 childZones.forEach(child => renderZoneTree(child, true, childrenContainer));
                 wrapper.appendChild(childrenContainer);
             }
