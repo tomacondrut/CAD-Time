@@ -2065,3 +2065,54 @@ html, body {
         margin: 4px 0 0 0;
         padding: 6px;
     }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Manager Sidebar Komponenten-Pool)
+ * HINZUFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-17 21:40:00 CEST
+ * =============================================================================
+ */
+
+.sb-pool-item:hover {
+    background: #3a475d !important;
+}
+
+.sb-pool-item.is-placed {
+    opacity: 0.85;
+}
+
+.btn-pool-action {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+    .btn-pool-action.add {
+        background: #2b6cb0;
+        color: #fff;
+    }
+
+        .btn-pool-action.add:hover {
+            background: #3182ce;
+            transform: scale(1.15);
+        }
+
+    .btn-pool-action.focus:hover {
+        transform: scale(1.2);
+    }
+
+    .btn-pool-action.remove {
+        color: #e53e3e;
+        font-weight: bold;
+    }
+
+        .btn-pool-action.remove:hover {
+            background: rgba(229, 62, 62, 0.2);
+            transform: scale(1.15);
+        }

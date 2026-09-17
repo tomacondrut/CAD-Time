@@ -140,10 +140,119 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
  *     umgestellt, um leere DocumentFragment-Referenzen beim Drag & Drop zu beheben.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar Rendering (Dual-Mode: CAD-Zonen vs. Manager-Komponenten-Pool)
+ * ERSETZEN IN: app.js (In renderSidebarZones Kopfbereich)
+ * Zeitstempel: 2026-09-17 21:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-01 17:40:00 CEST]: Zonen-Reihenfolge Persistierung.
+ *   - [2026-09-17 21:40:00 CEST]: Im Manager-Modus schaltet die Sidebar auf den
+ *     Komponenten-Pool um (Sortierung nach Farbe & Name, Klick/Drag zum Platzieren).
+ * =============================================================================
+ */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
+    // Den Titel der Sidebar-Sektion dynamisch anpassen
+    const sectionTitleEl = container.previousElementSibling;
+    const isMgr = (window.activeCanvasMode === 'manager');
+
+    if (sectionTitleEl && sectionTitleEl.classList.contains('sidebar-section-title')) {
+        sectionTitleEl.textContent = isMgr ? 'Komponenten-Pool (Auswahl)' : 'Top-Bereiche (Ansicht)';
+    }
+
+    // =========================================================================
+    // MODUS A: MANAGER-COCKPIT -> KOMPONENTEN-POOL (NACH FARBE & NAME SORTIERT)
+    // =========================================================================
+    if (isMgr) {
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { placements: {} };
+        const rawNodes = (currentNodes || []).filter(n => n.block_type !== 'note');
+
+        if (rawNodes.length === 0) {
+            container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Komponenten im CAD-Plan vorhanden.</div>';
+            return;
+        }
+
+        // Sortierung nach Farbe (gemäß COLOR_PRESETS) und sekundär nach Name
+        const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
+        const sortedNodes = [...rawNodes].sort((a, b) => {
+            const colA = (a.color_hex || '#2b6cb0').toLowerCase();
+            const colB = (b.color_hex || '#2b6cb0').toLowerCase();
+            const idxA = colorOrder.indexOf(colA);
+            const idxB = colorOrder.indexOf(colB);
+
+            if (idxA !== idxB) {
+                return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+            }
+            return (a.name || '').localeCompare(b.name || '');
+        });
+
+        const fragment = document.createDocumentFragment();
+
+        sortedNodes.forEach(node => {
+            const isPlaced = !!(mgrLayout.placements && mgrLayout.placements[node.id]);
+            const nodeColor = node.color_hex || '#2b6cb0';
+            const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+            const docText = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+
+            const item = document.createElement('div');
+            item.className = `sidebar-zone-item sb-pool-item ${isPlaced ? 'is-placed' : ''}`;
+            item.dataset.nodeId = node.id;
+            item.draggable = true;
+
+            item.style.display = 'flex';
+            item.style.justifyContent = 'space-between';
+            item.style.alignItems = 'center';
+            item.style.padding = '6px 8px';
+            item.style.background = isPlaced ? 'rgba(45, 55, 72, 0.45)' : '#2d3748';
+            item.style.borderRadius = '4px';
+            item.style.fontSize = '12px';
+            item.style.marginBottom = '4px';
+            item.style.borderLeft = `3px solid ${nodeColor}`;
+            item.style.cursor = 'grab';
+            item.style.transition = 'all 0.15s ease';
+
+            const docBadgeHtml = docText ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(docText)}</span>` : '';
+
+            item.innerHTML = `
+                <div style="display:flex; align-items:center; overflow:hidden; flex:1; gap: 5px;" title="${escapeHtml(node.name)}">
+                    <span style="font-size: 13px; line-height: 1;">${iconSvg}</span>
+                    <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
+                        <span style="overflow:hidden; text-overflow:ellipsis; color: ${isPlaced ? '#a0aec0' : '#fff'}; font-weight: 600;">${escapeHtml(node.name)}</span>
+                        <div style="display:flex; align-items:center; margin-top: 1px;">
+                            ${docBadgeHtml}
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                    ${isPlaced
+                    ? `<button type="button" class="btn-pool-action focus" onclick="window.centerOnManagerBlock('${node.id}')" title="Kamera auf Bauteil zentrieren">🎯</button>
+                           <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
+                    : `<button type="button" class="btn-pool-action add" onclick="window.addBlockToManagerCanvas('${node.id}')" title="Auf Manager-Board einfügen">➕</button>`
+                }
+                </div>
+            `;
+
+            // HTML5 Drag & Drop zum Ziehen aus der Sidebar direkt auf den Manager-Canvas
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', node.id);
+                e.dataTransfer.effectAllowed = 'copyMove';
+            });
+
+            fragment.appendChild(item);
+        });
+
+        container.innerHTML = '';
+        container.appendChild(fragment);
+        return;
+    }
+
+    // =========================================================================
+    // MODUS B: HAUPT-CANVAS (CAD) -> REGULÄRER ZONEN-BAUM
+    // =========================================================================
     if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
     if (!window.collapsedZonesInitialized && currentZones && currentZones.length > 0) {
         currentZones.forEach(z => {

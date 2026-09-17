@@ -3564,7 +3564,9 @@ window.switchCanvasMode = function (mode) {
     showToast(mode === 'manager' ? 'Manager-Cockpit aktiviert (Nur-Lese-Übersicht)' : 'CAD-Konstruktionsplan aktiv', 'info');
 
     if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones(); // <--- NEU
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+
 };
 
 // Automatisches Anordnen aller Blöcke auf dem Manager-Canvas nach Farbe & Name
@@ -3638,12 +3640,33 @@ document.addEventListener('DOMContentLoaded', () => {
 window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
 
 // Lädt den Manager-Zustand für das aktive Projekt
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager-Layout Supabase-Persistierung)
+ * ERSETZEN IN: ui.js (Funktionen getManagerLayout & saveManagerLayout)
+ * Zeitstempel: 2026-09-17 21:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:15:00 CEST]: LocalStorage-Mock.
+ *   - [2026-09-17 21:35:00 CEST]: Supabase-Cloud-Sync für manager_layout integriert.
+ *     Positionen und Rahmen bleiben teamweit und über Sitzungen hinweg fest erhalten.
+ * =============================================================================
+ */
+
 window.getManagerLayout = function () {
+    const proj = (typeof getCurrentProject === 'function') ? getCurrentProject() : null;
+
+    // 1. Priorität: Gespeicherter Stand aus der Datenbank
+    if (proj && proj.manager_layout && Array.isArray(proj.manager_layout.zones)) {
+        return proj.manager_layout;
+    }
+
+    // 2. Priorität: Lokaler Browser-Cache
     const key = `cad_tm_mgr_layout_${activeProjectId}`;
     let layout = JSON.parse(localStorage.getItem(key) || 'null');
 
-    // Initialisierung beim ersten Start: Alle existierenden Blöcke bereitstellen
-    if (!layout || !layout.zones) {
+    // 3. Fallback: Initialer Standard beim ersten Aufruf
+    if (!layout || !Array.isArray(layout.zones)) {
         layout = {
             zones: [
                 { id: 'mz_1', title: 'Förderband 01 (GB 1200)', doc_number: 'FB-01', color_hex: '#2563eb', pos_x: 60, pos_y: 80, width: 620, height: 440 },
@@ -3652,7 +3675,6 @@ window.getManagerLayout = function () {
             placements: {}
         };
 
-        // Bestehende Blöcke initial aufnehmen
         let curX = 90, curY = 140;
         (currentNodes || []).filter(n => n.block_type !== 'note').forEach((n, idx) => {
             const targetZId = idx < 2 ? 'mz_1' : (idx < 4 ? 'mz_2' : null);
@@ -3664,15 +3686,29 @@ window.getManagerLayout = function () {
             curY += (idx % 2 === 1) ? 140 : 0;
             if (curY > 380) curY = 140;
         });
-
-        localStorage.setItem(key, JSON.stringify(layout));
     }
+
     return layout;
 };
 
-window.saveManagerLayout = function (layout) {
+window.saveManagerLayout = async function (layout) {
     const key = `cad_tm_mgr_layout_${activeProjectId}`;
     localStorage.setItem(key, JSON.stringify(layout));
+
+    // Arbeitsspeicher aktualisieren
+    const proj = (currentProjects || []).find(p => p.id === activeProjectId);
+    if (proj) {
+        proj.manager_layout = layout;
+    }
+
+    // In Supabase (bzw. IndexedDB für lokale Projekte) sichern
+    if (db && activeProjectId) {
+        try {
+            await db.from('projects').update({ manager_layout: layout }).eq('id', activeProjectId);
+        } catch (err) {
+            console.error("Fehler beim Speichern des Manager-Layouts:", err);
+        }
+    }
 };
 
 window.switchCanvasMode = function (mode) {
@@ -3816,3 +3852,120 @@ window.autoArrangeManagerCanvas = function () {
     renderCanvas();
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
 };
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Manager Sidebar Interaktionen: Einfügen, Entfernen, Fokus)
+* HINZUFÜGEN IN: ui.js (Am Dateiende)
+* Zeitstempel: 2026-09-17 21:40:00 CEST
+* Breadcrumbs:
+*   - [2026-09-17 21:40:00 CEST]: addBlockToManagerCanvas, removeBlockFromManagerCanvas
+*     und centerOnManagerBlock für direkte Sidebar-Interaktionen integriert.
+* =============================================================================
+*/
+
+// Fügt einen Block aus der Sidebar direkt in die Mitte des sichtbaren Manager-Canvas ein
+window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = null) {
+    const layout = getManagerLayout();
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    let posX = targetX;
+    let posY = targetY;
+
+    // Wenn keine Koordinaten übergeben wurden (Klick auf ➕), zentriert im Viewport platzieren
+    if (posX === null || posY === null) {
+        const viewport = document.getElementById('viewport');
+        const vw = viewport ? viewport.clientWidth : 800;
+        const vh = viewport ? viewport.clientHeight : 600;
+        const center = getCanvasCoords(vw / 2, vh / 2);
+        posX = Math.round(center.x - 145);
+        posY = Math.round(center.y - 40);
+    }
+
+    // Prüfen, ob der Punkt in einen bestehenden Manager-Rahmen fällt
+    let matchedZoneId = null;
+    for (const mz of layout.zones) {
+        if (posX >= mz.pos_x && posX <= (mz.pos_x + mz.width) &&
+            posY >= mz.pos_y && posY <= (mz.pos_y + mz.height)) {
+            matchedZoneId = mz.id;
+            break;
+        }
+    }
+
+    layout.placements[nodeId] = {
+        pos_x: posX,
+        pos_y: posY,
+        zone_id: matchedZoneId
+    };
+
+    saveManagerLayout(layout);
+    showToast(`"${node.name}" auf Manager-Board platziert`, 'success');
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
+};
+
+// Entfernt einen Block vom Manager-Board (bleibt im CAD-Hauptcanvas voll erhalten)
+window.removeBlockFromManagerCanvas = function (nodeId) {
+    const layout = getManagerLayout();
+    if (layout.placements && layout.placements[nodeId]) {
+        delete layout.placements[nodeId];
+        saveManagerLayout(layout);
+        showToast('Vom Manager-Board entfernt', 'info');
+
+        if (typeof renderCanvas === 'function') renderCanvas();
+        if (typeof renderSidebarZones === 'function') renderSidebarZones();
+    }
+};
+
+// Zentriert die Kamera auf das Bauteil auf dem Manager-Board
+window.centerOnManagerBlock = function (nodeId) {
+    const layout = getManagerLayout();
+    const p = layout.placements ? layout.placements[nodeId] : null;
+    if (!p) return;
+
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return;
+
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+
+    window.currentPanX = (vw / 2) - ((p.pos_x + 145) * window.currentScale);
+    window.currentPanY = (vh / 2) - ((p.pos_y + 50) * window.currentScale);
+
+    if (typeof applyCanvasTransform === 'function') applyCanvasTransform(true);
+
+    // Block kurz hervorheben
+    const el = document.getElementById(nodeId);
+    if (el) {
+        el.style.transition = 'box-shadow 0.2s ease';
+        el.style.boxShadow = '0 0 20px 4px #3182ce';
+        setTimeout(() => { el.style.boxShadow = ''; }, 1200);
+    }
+};
+
+// Canvas Drop-Listener für direktes Hinüberziehen aus der Sidebar
+document.addEventListener('DOMContentLoaded', () => {
+    const viewport = document.getElementById('viewport');
+    if (viewport) {
+        viewport.addEventListener('dragover', (e) => {
+            if (window.activeCanvasMode === 'manager') {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        });
+
+        viewport.addEventListener('drop', (e) => {
+            if (window.activeCanvasMode === 'manager') {
+                const nodeId = e.dataTransfer.getData('text/plain');
+                if (nodeId && currentNodes.some(n => n.id === nodeId)) {
+                    e.preventDefault();
+                    const coords = getCanvasCoords(e.clientX, e.clientY);
+                    window.addBlockToManagerCanvas(nodeId, Math.round(coords.x - 145), Math.round(coords.y - 40));
+                }
+            }
+        });
+    }
+});

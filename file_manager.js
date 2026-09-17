@@ -128,7 +128,8 @@ window.handleSaveFile = async function (silent = false) {
         edges: currentEdges || [],
         zones: currentZones || [],
         logs: currentTimeLogs || [],
-        arrows: window.currentFlowArrows || []
+        arrows: window.currentFlowArrows || [],
+        manager_layout: (typeof getManagerLayout === 'function') ? getManagerLayout() : null // <--- NEU
     };
 
     const jsonStr = JSON.stringify(payload);
@@ -288,6 +289,11 @@ window.processLoadedHtml = function (htmlText, triggerRender = true) {
             currentZones = data.zones || [];
             currentTimeLogs = data.logs || [];
             window.currentFlowArrows = data.arrows || [];
+
+            // Manager-Layout aus Datei einlesen
+            if (data.manager_layout && typeof saveManagerLayout === 'function') {
+                saveManagerLayout(data.manager_layout);
+            }
 
             if (triggerRender) {
                 if (typeof renderCanvas === 'function') renderCanvas();
