@@ -606,12 +606,37 @@ window.handleTimeWheel = function (e, type) {
  *   - [2026-08-28]: sbValDrafting korrigiert (verwendet jetzt budDr statt budD).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar (Berechnung von Vergabe-Stunden, Quoten & Akkordeon-State)
+ * ERSETZEN IN: ui.js (Funktion updateSidebarStats & toggleSidebarBudgetDetails)
+ * Zeitstempel: 2026-09-17 20:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-28 20:55:00 CEST]: Korrektur sbValDrafting.
+ *   - [2026-09-17 20:55:00 CEST]: Vergabe-Budget (Master-dedupliziert) berechnet,
+ *     Dual-Bar Fortschrittsleisten gefüllt und Kompakt-/Detail-Toggle persistiert.
+ * =============================================================================
+ */
+
+window.toggleSidebarBudgetDetails = function () {
+    const detailsEl = document.getElementById('sbBudgetDetailsView');
+    const btn = document.getElementById('btnToggleBudgetDetails');
+    if (!detailsEl || !btn) return;
+
+    const isHidden = detailsEl.style.display === 'none';
+    detailsEl.style.display = isHidden ? 'block' : 'none';
+    btn.textContent = isHidden ? '▲ Kompakt' : '▼ Details';
+    localStorage.setItem('cad_tm_budget_expanded', isHidden ? 'true' : 'false');
+};
+
 window.updateSidebarStats = function () {
     const proj = getCurrentProject();
     let totalD = 0;
     let totalDr = 0;
     let pendingCount = 0;
 
+    // 1. Ist-Verbrauch über gebuchte Zeiten summieren
     currentTimeLogs.forEach(l => {
         const hrs = Math.max(0, parseFloat(l.hours) || 0);
         if (l.task_type === 'design') totalD += hrs;
@@ -619,30 +644,106 @@ window.updateSidebarStats = function () {
         if (l.status === 'pending') pendingCount++;
     });
 
-    document.getElementById('sbPendingLogs').textContent = pendingCount + ' Einträge';
+    const pendingEl = document.getElementById('sbPendingLogs');
+    if (pendingEl) pendingEl.textContent = pendingCount + ' Einträge';
 
-    const budD = parseFloat(proj.total_budget_design) || 1;
-    const budDr = parseFloat(proj.total_budget_drafting) || 1;
+    const budD = Math.max(0.1, parseFloat(proj.total_budget_design) || 1);
+    const budDr = Math.max(0.1, parseFloat(proj.total_budget_drafting) || 1);
 
+    // 2. Vergebenes Budget summieren (Master-Instanzen & Zonen, ohne Duplikate)
+    const visitedLinkedIds = new Set();
+    let allocD = 0;
+    let allocDr = 0;
+
+    (currentNodes || []).forEach(n => {
+        if (n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO') return;
+        if (n.linked_id) {
+            if (visitedLinkedIds.has(n.linked_id)) return;
+            visitedLinkedIds.add(n.linked_id);
+        }
+        allocD += Math.max(0, parseFloat(n.budget_design_hours) || 0);
+        allocDr += Math.max(0, parseFloat(n.budget_drafting_hours) || 0);
+    });
+
+    (currentZones || []).forEach(z => {
+        allocD += Math.max(0, parseFloat(z.budget_design_hours) || 0);
+        allocDr += Math.max(0, parseFloat(z.budget_drafting_hours) || 0);
+    });
+
+    // 3. Quoten & Prozentwerte
     const pctD = Math.round((totalD / budD) * 100);
     const pctDr = Math.round((totalDr / budDr) * 100);
+    const allocPctD = Math.round((allocD / budD) * 100);
+    const allocPctDr = Math.round((allocDr / budDr) * 100);
 
+    // 4. Kompakt-Ansicht befüllen
+    const txtCAD = document.getElementById('sbCompactTextCAD');
+    const txtDraft = document.getElementById('sbCompactTextDraft');
+    if (txtCAD) txtCAD.textContent = `${formatHoursToHM(totalD)} Ist / ${formatHoursToHM(allocD)} Verg. (${Math.round(budD)}h)`;
+    if (txtDraft) txtDraft.textContent = `${formatHoursToHM(totalDr)} Ist / ${formatHoursToHM(allocDr)} Verg. (${Math.round(budDr)}h)`;
+
+    const barAllocD = document.getElementById('sbBarAllocCAD');
+    const barSpentD = document.getElementById('sbBarSpentCAD');
+    const barAllocDr = document.getElementById('sbBarAllocDraft');
+    const barSpentDr = document.getElementById('sbBarSpentDraft');
+
+    if (barAllocD) barAllocD.style.width = `${Math.min(allocPctD, 100)}%`;
+    if (barSpentD) {
+        barSpentD.style.width = `${Math.min(pctD, 100)}%`;
+        barSpentD.style.background = totalD > budD ? '#e53e3e' : '#3182ce';
+    }
+
+    if (barAllocDr) barAllocDr.style.width = `${Math.min(allocPctDr, 100)}%`;
+    if (barSpentDr) {
+        barSpentDr.style.width = `${Math.min(pctDr, 100)}%`;
+        barSpentDr.style.background = totalDr > budDr ? '#e53e3e' : '#38a169';
+    }
+
+    // 5. Detail-Ansicht befüllen (Pie Charts & Aufschlüsselung)
     const pieDesignEl = document.getElementById('sbPieDesign');
     const pieDraftingEl = document.getElementById('sbPieDrafting');
+    if (pieDesignEl && pieDraftingEl) {
+        const fillD = totalD > budD ? '#e53e3e' : '#3182ce';
+        const fillDr = totalDr > budDr ? '#e53e3e' : '#38a169';
+        pieDesignEl.style.background = `conic-gradient(${fillD} 0% ${Math.min(pctD, 100)}%, #4a5568 ${Math.min(pctD, 100)}% 100%)`;
+        pieDraftingEl.style.background = `conic-gradient(${fillDr} 0% ${Math.min(pctDr, 100)}%, #4a5568 ${Math.min(pctD, 100)}% 100%)`;
 
-    const fillD = totalD > budD ? '#e53e3e' : '#3182ce';
-    const fillDr = totalDr > budDr ? '#e53e3e' : '#38a169';
+        document.getElementById('sbPctDesign').textContent = `${pctD}%`;
+        document.getElementById('sbPctDrafting').textContent = `${pctDr}%`;
+        document.getElementById('sbValDesign').textContent = `${formatHoursToHM(totalD)} / ${formatHoursToHM(budD)}`;
+        document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budDr)}`;
+    }
 
-    pieDesignEl.style.background = `conic-gradient(${fillD} 0% ${Math.min(pctD, 100)}%, #4a5568 ${Math.min(pctD, 100)}% 100%)`;
-    pieDraftingEl.style.background = `conic-gradient(${fillDr} 0% ${Math.min(pctDr, 100)}%, #4a5568 ${Math.min(pctDr, 100)}% 100%)`;
+    const freeD = budD - allocD;
+    const freeDr = budDr - allocDr;
+    const dAllocCad = document.getElementById('sbDetailAllocCAD');
+    const dFreeCad = document.getElementById('sbDetailFreeCAD');
+    const dAllocDr = document.getElementById('sbDetailAllocDraft');
+    const dFreeDr = document.getElementById('sbDetailFreeDraft');
 
-    document.getElementById('sbPctDesign').textContent = `${pctD}%`;
-    document.getElementById('sbPctDrafting').textContent = `${pctDr}%`;
+    if (dAllocCad) dAllocCad.textContent = `${formatHoursToHM(allocD)} (${allocPctD}%)`;
+    if (dFreeCad) {
+        dFreeCad.textContent = freeD < 0 ? `Überbucht: ${formatHoursToHM(Math.abs(freeD))}` : formatHoursToHM(freeD);
+        dFreeCad.style.color = freeD < 0 ? '#e53e3e' : '#cbd5e0';
+    }
 
-    document.getElementById('sbValDesign').textContent = `${formatHoursToHM(totalD)} / ${formatHoursToHM(budD)}`;
-    document.getElementById('sbValDrafting').textContent = `${formatHoursToHM(totalDr)} / ${formatHoursToHM(budDr)}`;
+    if (dAllocDr) dAllocDr.textContent = `${formatHoursToHM(allocDr)} (${allocPctDr}%)`;
+    if (dFreeDr) {
+        dFreeDr.textContent = freeDr < 0 ? `Überbucht: ${formatHoursToHM(Math.abs(freeDr))}` : formatHoursToHM(freeDr);
+        dFreeDr.style.color = freeDr < 0 ? '#e53e3e' : '#cbd5e0';
+    }
 
-    document.getElementById('btnAdminProjects').style.display = isAdmin ? 'inline' : 'none';
+    // Akkordeon-Zustand aus localStorage wiederherstellen
+    const isExpanded = localStorage.getItem('cad_tm_budget_expanded') === 'true';
+    const detailsView = document.getElementById('sbBudgetDetailsView');
+    const btnToggle = document.getElementById('btnToggleBudgetDetails');
+    if (detailsView && btnToggle) {
+        detailsView.style.display = isExpanded ? 'block' : 'none';
+        btnToggle.textContent = isExpanded ? '▲ Kompakt' : '▼ Details';
+    }
+
+    const btnAdmin = document.getElementById('btnAdminProjects');
+    if (btnAdmin) btnAdmin.style.display = isAdmin ? 'inline' : 'none';
 
     if (window.renderSidebarZones) window.renderSidebarZones();
 };

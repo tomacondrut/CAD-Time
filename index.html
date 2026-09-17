@@ -554,70 +554,111 @@
             <div class="sidebar-content">
                 <div class="sidebar-section-title">Aktives Projekt</div>
 
-                <div class="sidebar-stat">
+                <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Sidebar (Kompakter & ausklappbarer Budget-Verbrauch mit Vergabe-Quote)
+    ERSETZEN IN: index.html (Im #sidebar -> Bereich "sidebar-stat" für Budget)
+    Zeitstempel: 2026-09-17 20:55:00 CEST
+    Breadcrumb: [2026-09-17 20:55:00 CEST] Kompakte Leiste mit Vergabe-Stunden und Akkordeon-Detailansicht
+    =============================================================================
+    -->
+                <div class="sidebar-stat" id="sbBudgetStatContainer">
                     <div class="sidebar-stat-label">
-                        <span>Projekt / Objekt</span>
-                        <div style="display: flex; gap: 6px;">
-                            <span style="cursor: pointer; font-size: 11px; color: #f6ad55;" onclick="openReportModal()" title="Auswertung & Reporting öffnen">📊 Auswertung</span>
-                            <span style="cursor: pointer; font-size: 11px; color: #63b3ed;" onclick="openArchiveModal()" title="Projekt-Archiv öffnen">🗄️ Archiv</span>
-                            <span id="btnAdminProjects" style="cursor: pointer; display: none; font-size: 11px; color: #68d391;" onclick="openAdminModal()" title="Erweiterte Optionen">+ Admin</span>
+                        <span>Projekt-Budgets</span>
+                        <button type="button" id="btnToggleBudgetDetails" class="sb-details-toggle" onclick="toggleSidebarBudgetDetails()" title="Details ein-/ausklappen">▼ Details</button>
+                    </div>
+
+                    <!-- 1. KOMPAKTE STANDARD-ANSICHT -->
+                    <div id="sbBudgetCompactView" class="sb-budget-compact">
+                        <!-- CAD Kompakt -->
+                        <div class="sb-compact-row">
+                            <div class="sb-compact-meta">
+                                <span style="color: #63b3ed; font-weight: bold;">CAD</span>
+                                <span id="sbCompactTextCAD" class="sb-compact-numbers">0h Ist / 0h Verg. (100h)</span>
+                            </div>
+                            <div class="sb-dual-bar-track" title="Ist-Verbrauch vs. Vergebenes Budget">
+                                <div id="sbBarAllocCAD" class="sb-bar-alloc cad" style="width: 0%;"></div>
+                                <div id="sbBarSpentCAD" class="sb-bar-spent cad" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Zeichnung Kompakt -->
+                        <div class="sb-compact-row" style="margin-top: 6px;">
+                            <div class="sb-compact-meta">
+                                <span style="color: #68d391; font-weight: bold;">Zeichn.</span>
+                                <span id="sbCompactTextDraft" class="sb-compact-numbers">0h Ist / 0h Verg. (60h)</span>
+                            </div>
+                            <div class="sb-dual-bar-track" title="Ist-Verbrauch vs. Vergebenes Budget">
+                                <div id="sbBarAllocDraft" class="sb-bar-alloc draft" style="width: 0%;"></div>
+                                <div id="sbBarSpentDraft" class="sb-bar-spent draft" style="width: 0%;"></div>
+                            </div>
                         </div>
                     </div>
-                    <select id="sidebarProjectSelect" style="width: 100%; padding: 6px; font-size: 12px; font-weight: normal; background: #1a202c; color: #fff; border: 1px solid #4a5568; border-radius: 4px; margin-top: 4px;" onchange="handleSidebarProjectChange(this.value)"></select>
-                </div>
 
-                <div class="sidebar-stat">
-                    <div class="sidebar-stat-label">Projekt-Budget Verbrauch</div>
-                    <div class="sb-charts-grid">
-                        <div class="sb-chart-box">
-                            <div class="sb-pie-chart" id="sbPieDesign">
-                                <div class="sb-pie-inner" id="sbPctDesign">0%</div>
+                    <!-- 2. AUSKLAPPBARE DETAIL-ANSICHT -->
+                    <div id="sbBudgetDetailsView" class="sb-budget-details" style="display: none;">
+                        <div class="sb-charts-grid">
+                            <div class="sb-chart-box">
+                                <div class="sb-pie-chart" id="sbPieDesign">
+                                    <div class="sb-pie-inner" id="sbPctDesign">0%</div>
+                                </div>
+                                <div style="font-size: 10px; color: #a0aec0; margin-top: 4px;">CAD Verbrauch</div>
+                                <div style="font-size: 11px; font-weight: bold; color: #fff;" id="sbValDesign">0h / 0h</div>
                             </div>
-                            <div style="font-size: 10px; color: #a0aec0; margin-top: 4px;">CAD</div>
-                            <div style="font-size: 11px; font-weight: bold; color: #fff;" id="sbValDesign">0h / 0h</div>
+                            <div class="sb-chart-box">
+                                <div class="sb-pie-chart" id="sbPieDrafting">
+                                    <div class="sb-pie-inner" id="sbPctDrafting">0%</div>
+                                </div>
+                                <div style="font-size: 10px; color: #a0aec0; margin-top: 4px;">Zeichn. Verbrauch</div>
+                                <div style="font-size: 11px; font-weight: bold; color: #fff;" id="sbValDrafting">0h / 0h</div>
+                            </div>
                         </div>
-                        <div class="sb-chart-box">
-                            <div class="sb-pie-chart" id="sbPieDrafting">
-                                <div class="sb-pie-inner" id="sbPctDrafting">0%</div>
+
+                        <!-- Zusätzliche Detail-Zeilen für vergebene Stunden & Puffer -->
+                        <div class="sb-detail-table">
+                            <div class="sb-detail-row">
+                                <span>CAD Vergeben:</span>
+                                <strong id="sbDetailAllocCAD" style="color: #63b3ed;">0h (0%)</strong>
                             </div>
-                            <div style="font-size: 10px; color: #a0aec0; margin-top: 4px;">Zeichnung</div>
-                            <div style="font-size: 11px; font-weight: bold; color: #fff;" id="sbValDrafting">0h / 0h</div>
+                            <div class="sb-detail-row">
+                                <span>CAD Puffer (Frei):</span>
+                                <strong id="sbDetailFreeCAD" style="color: #cbd5e0;">0h</strong>
+                            </div>
+                            <div class="sb-detail-row" style="border-top: 1px dashed #4a5568; margin-top: 4px; padding-top: 4px;">
+                                <span>Zeichn. Vergeben:</span>
+                                <strong id="sbDetailAllocDraft" style="color: #68d391;">0h (0%)</strong>
+                            </div>
+                            <div class="sb-detail-row">
+                                <span>Zeichn. Puffer (Frei):</span>
+                                <strong id="sbDetailFreeDraft" style="color: #cbd5e0;">0h</strong>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="sidebar-stat">
-                    <div class="sidebar-stat-label">Offene Freigaben</div>
-                    <div class="sidebar-stat-val" id="sbPendingLogs" style="color: #ecc94b;">0 Einträge</div>
+                <!-- Canvas Bereich -->
+                <div id="viewport">
+                    <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
+
+                    <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
+                    <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
+                    <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+                    <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
+                    <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
+                    <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
+
+                    <div class="zoom-controls">
+                        <button class="btn-zoom" id="btnZoomIn">+</button>
+                        <button class="btn-zoom" id="btnZoomReset">⟲</button>
+                        <button class="btn-zoom" id="btnZoomOut">-</button>
+                    </div>
+
+                    <div id="canvas" class="hide-handles">
+                        <svg id="connections-layer"></svg>
+                    </div>
                 </div>
-
-                <div class="sidebar-section-title" style="margin-top: 20px;">Top-Bereiche (Ansicht)</div>
-                <div id="sidebarZonesContainer" style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px;"></div>
             </div>
-        </div>
-
-        <!-- Canvas Bereich -->
-        <div id="viewport">
-            <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
-
-            <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
-            <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
-            <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
-            <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
-            <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
-            <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
-
-            <div class="zoom-controls">
-                <button class="btn-zoom" id="btnZoomIn">+</button>
-                <button class="btn-zoom" id="btnZoomReset">⟲</button>
-                <button class="btn-zoom" id="btnZoomOut">-</button>
-            </div>
-
-            <div id="canvas" class="hide-handles">
-                <svg id="connections-layer"></svg>
-            </div>
-        </div>
-    </div>
 
     <!-- Konfigurations-Modal (Block) -->
     <div id="configModal" class="modal-backdrop">
