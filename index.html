@@ -34,19 +34,19 @@
         <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
         <div id="ctxMenuDeleteNode" class="context-menu-item" style="display: none; color: #e53e3e;" onclick="handleContextMenuAction('delete')">✕ Block löschen</div>
 
-        <!-- Manager-Aktionen (Nur im Manager-Canvas aktiv) -->
+        <!-- Status-Board Aktionen -->
         <div id="ctxMenuMgrAddExisting" class="context-menu-item" style="display: none; font-weight: bold; color: #2b6cb0;" onclick="handleContextMenuAction('mgr_add_existing')">📦 Vorhandenen Block platzieren</div>
-        <div id="ctxMenuMgrAddZone" class="context-menu-item" style="display: none;" onclick="handleContextMenuAction('mgr_add_zone')">⬚ Manager-Rahmen anlegen</div>
-        <div id="ctxMenuMgrRemoveNode" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_remove_node')">✕ Vom Manager-Board entfernen</div>
-        <div id="ctxMenuMgrDeleteZone" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_delete_zone')">✕ Manager-Rahmen löschen</div>
+        <div id="ctxMenuMgrAddZone" class="context-menu-item" style="display: none;" onclick="handleContextMenuAction('mgr_add_zone')">⬚ Übersichts-Rahmen anlegen</div>
+        <div id="ctxMenuMgrRemoveNode" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_remove_node')">✕ Aus Fortschritts-Board entfernen</div>
+        <div id="ctxMenuMgrDeleteZone" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_delete_zone')">✕ Übersichts-Rahmen löschen</div>
     </div>
 
-    <!-- Modal: Vorhandenen Block auf Manager-Canvas platzieren -->
+    <!-- Modal: Vorhandenen Block auf Board platzieren -->
     <div id="mgrAddBlockModal" class="modal-backdrop">
         <div class="modal-content" style="width: 440px;">
             <div class="modal-header">📦 Vorhandenen Block auf Board platzieren</div>
             <p style="font-size: 12px; color: #718096; margin-bottom: 12px;">
-                Wähle einen bestehenden Block aus der CAD-Konstruktion aus, um ihn hier für Auswertungen und Klassifizierungen anzuordnen.
+                Wähle einen bestehenden Block aus der CAD-Konstruktion aus, um ihn hier zur Fortschritts- und Status-Übersicht anzuordnen.
             </p>
             <div class="form-group">
                 <label>Bestehender Block / Baugruppe:</label>
@@ -55,7 +55,7 @@
             <div class="form-group">
                 <label>Ziel-Rahmen (optional):</label>
                 <select id="mgrSelectTargetZone" style="padding: 8px; font-size: 12px;">
-                    <option value="">-- Frei auf Canvas (Kein Rahmen) --</option>
+                    <option value="">-- Frei auf Board (Kein Rahmen) --</option>
                 </select>
             </div>
             <div class="modal-actions">
@@ -221,20 +221,6 @@
                         <label>DOC-Nummer (Vault):</label>
                         <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
                             <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
-                            <input type="text" id="editDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
-                        </div>
-                    </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label>Artikel-Nr. (APM):</label>
-                        <input type="text" id="editArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 10px;">
-                    <div class="form-group" style="flex: 1;">
-                        <label>DOC-Nummer (Vault):</label>
-                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
-                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
                             <input type="text" id="newBlockDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
                         </div>
                     </div>
@@ -252,6 +238,10 @@
                         <label>Budget Zeichnung (h):</label>
                         <input type="number" min="0" step="0.5" id="newBlockBudgetDrafting" value="0" />
                     </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-sec" onclick="closeModal('newBlockModal')">Abbrechen</button>
+                    <button type="submit" class="btn-prim">Erstellen</button>
                 </div>
             </form>
         </div>
@@ -701,8 +691,8 @@
             -->
             <div class="canvas-mode-switcher-container">
                 <div class="canvas-mode-switcher">
-                    <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 CAD-Konstruktion</button>
-                    <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Manager-Cockpit</button>
+                    <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 CAD-Konstruktionsplan</button>
+                    <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Fortschritts-Board</button>
                 </div>
                 <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="autoArrangeManagerCanvas()" title="Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen">🗂️ Nach Farbe & Name sortieren</button>
             </div>

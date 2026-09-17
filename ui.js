@@ -3542,130 +3542,28 @@ window.addEventListener('keydown', (e) => {
 * =============================================================================
 */
 
-window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
-
-window.switchCanvasMode = function (mode) {
-    window.activeCanvasMode = mode;
-    localStorage.setItem('cad_tm_canvas_mode', mode);
-
-    const btnMain = document.getElementById('btnModeMain');
-    const btnManager = document.getElementById('btnModeManager');
-    const btnSort = document.getElementById('btnAutoSortManager');
-
-    if (btnMain && btnManager) {
-        btnMain.classList.toggle('active', mode === 'main');
-        btnManager.classList.toggle('active', mode === 'manager');
-    }
-
-    if (btnSort) {
-        btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
-    }
-
-    showToast(mode === 'manager' ? 'Manager-Cockpit aktiviert (Nur-Lese-Übersicht)' : 'CAD-Konstruktionsplan aktiv', 'info');
-
-    if (typeof renderCanvas === 'function') renderCanvas();
-    if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones(); // <--- NEU
-    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
-
-};
-
-// Automatisches Anordnen aller Blöcke auf dem Manager-Canvas nach Farbe & Name
-window.autoArrangeManagerCanvas = function () {
-    const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
-    if (nodes.length === 0) return;
-
-    // Farb-Reihenfolge definieren
-    const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
-
-    // Gruppierung nach Farbe
-    const groups = {};
-    nodes.forEach(n => {
-        const c = (n.color_hex || '#2b6cb0').toLowerCase();
-        if (!groups[c]) groups[c] = [];
-        groups[c].push(n);
-    });
-
-    // Innerhalb jeder Farbgruppe alphabetisch nach Name sortieren
-    Object.keys(groups).forEach(c => {
-        groups[c].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    });
-
-    // Sortierte Farben (nach COLOR_PRESETS Reihenfolge)
-    const sortedColors = Object.keys(groups).sort((a, b) => {
-        const idxA = colorOrder.indexOf(a);
-        const idxB = colorOrder.indexOf(b);
-        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-    });
-
-    const managerCoords = JSON.parse(localStorage.getItem(`cad_tm_mgr_coords_${activeProjectId}`) || '{}');
-
-    let startX = 60;
-    sortedColors.forEach(color => {
-        let startY = 80;
-        groups[color].forEach(node => {
-            managerCoords[node.id] = { x: startX, y: startY };
-            startY += 150; // Vertikaler Abstand
-        });
-        startX += 320; // Nächste Spalte
-    });
-
-    localStorage.setItem(`cad_tm_mgr_coords_${activeProjectId}`, JSON.stringify(managerCoords));
-    showToast('Bauteile im Manager-Cockpit nach Farbe & Name ausgerichtet', 'success');
-
-    if (typeof renderCanvas === 'function') renderCanvas();
-    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
-};
-
-// Modus-Buttons beim Start initialisieren
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        if (window.activeCanvasMode === 'manager') {
-            window.switchCanvasMode('manager');
-        }
-    }, 300);
-});
-
-/**
-* =============================================================================
-* Projekt: CAD Time Manager
-* Domain: UI Controller (Manager-Canvas State & Klassifizierungs-Engine)
-* HINZUFÜGEN IN: ui.js (Am Ende der Datei)
-* Zeitstempel: 2026-09-17 21:15:00 CEST
-* Breadcrumbs:
-*   - [2026-09-17 21:15:00 CEST]: Eigenständige Manager-Datenhaltung (Zonen & Platzierungen)
-*     im LocalStorage/Projekt-Scope, Block-Auswahl-Modal und Klassifizierungs-Logik.
-* =============================================================================
-*/
-
-window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
-
-// Lädt den Manager-Zustand für das aktive Projekt
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: UI Controller (Manager-Layout Supabase-Persistierung)
- * ERSETZEN IN: ui.js (Funktionen getManagerLayout & saveManagerLayout)
- * Zeitstempel: 2026-09-17 21:35:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 21:15:00 CEST]: LocalStorage-Mock.
- *   - [2026-09-17 21:35:00 CEST]: Supabase-Cloud-Sync für manager_layout integriert.
- *     Positionen und Rahmen bleiben teamweit und über Sitzungen hinweg fest erhalten.
+ * Domain: UI Controller (Fortschritts-Board State & Interaktionen)
+ * ERSETZEN IN: ui.js (Am Ende der Datei ab window.activeCanvasMode)
+ * Zeitstempel: 2026-09-17 21:50:00 CEST
  * =============================================================================
  */
 
+window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
+
+// Lädt den Board-Zustand für das aktive Projekt
 window.getManagerLayout = function () {
     const proj = (typeof getCurrentProject === 'function') ? getCurrentProject() : null;
 
-    // 1. Priorität: Gespeicherter Stand aus der Datenbank
     if (proj && proj.manager_layout && Array.isArray(proj.manager_layout.zones)) {
         return proj.manager_layout;
     }
 
-    // 2. Priorität: Lokaler Browser-Cache
     const key = `cad_tm_mgr_layout_${activeProjectId}`;
     let layout = JSON.parse(localStorage.getItem(key) || 'null');
 
-    // 3. Fallback: Initialer Standard beim ersten Aufruf
     if (!layout || !Array.isArray(layout.zones)) {
         layout = {
             zones: [
@@ -3695,18 +3593,14 @@ window.saveManagerLayout = async function (layout) {
     const key = `cad_tm_mgr_layout_${activeProjectId}`;
     localStorage.setItem(key, JSON.stringify(layout));
 
-    // Arbeitsspeicher aktualisieren
     const proj = (currentProjects || []).find(p => p.id === activeProjectId);
-    if (proj) {
-        proj.manager_layout = layout;
-    }
+    if (proj) proj.manager_layout = layout;
 
-    // In Supabase (bzw. IndexedDB für lokale Projekte) sichern
     if (db && activeProjectId) {
         try {
             await db.from('projects').update({ manager_layout: layout }).eq('id', activeProjectId);
         } catch (err) {
-            console.error("Fehler beim Speichern des Manager-Layouts:", err);
+            console.error("Fehler beim Speichern des Layouts:", err);
         }
     }
 };
@@ -3728,92 +3622,14 @@ window.switchCanvasMode = function (mode) {
         btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
     }
 
-    showToast(mode === 'manager' ? 'Manager-Cockpit aktiv (Auswertung & Klassifizierung)' : 'CAD-Konstruktionsplan aktiv', 'info');
+    showToast(mode === 'manager' ? 'Fortschritts-Board aktiv' : 'CAD-Konstruktionsplan aktiv', 'info');
 
     if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
 };
 
-// Öffnet Modal: Vorhandenen Block platzieren
-let pendingMgrPlaceCoords = { x: 100, y: 100 };
-window.openAddExistingBlockModal = function (x, y) {
-    pendingMgrPlaceCoords = { x, y };
-    const selNode = document.getElementById('mgrSelectExistingNode');
-    const selZone = document.getElementById('mgrSelectTargetZone');
-    const layout = getManagerLayout();
-
-    if (!selNode || !selZone) return;
-    selNode.innerHTML = '';
-    selZone.innerHTML = '<option value="">-- Frei auf Canvas (Kein Rahmen) --</option>';
-
-    // Alle vorhandenen Blöcke des Projekts
-    (currentNodes || []).filter(n => n.block_type !== 'note').forEach(n => {
-        const doc = n.doc_number ? `[${n.doc_number}] ` : '';
-        const opt = new Option(`${doc}${n.name}`, n.id);
-        selNode.appendChild(opt);
-    });
-
-    // Alle aktuellen Manager-Zonen
-    layout.zones.forEach(z => {
-        const doc = z.doc_number ? `[${z.doc_number}] ` : '';
-        selZone.appendChild(new Option(`${doc}${z.title}`, z.id));
-    });
-
-    openModal('mgrAddBlockModal');
-};
-
-window.confirmAddExistingBlockToManager = function () {
-    const selNode = document.getElementById('mgrSelectExistingNode');
-    const selZone = document.getElementById('mgrSelectTargetZone');
-    if (!selNode || !selNode.value) return;
-
-    const nodeId = selNode.value;
-    const zoneId = selZone.value || null;
-    const layout = getManagerLayout();
-
-    layout.placements[nodeId] = {
-        pos_x: Math.round(pendingMgrPlaceCoords.x),
-        pos_y: Math.round(pendingMgrPlaceCoords.y),
-        zone_id: zoneId
-    };
-
-    saveManagerLayout(layout);
-    closeModal('mgrAddBlockModal');
-    showToast('Block auf Manager-Board platziert', 'success');
-    renderCanvas();
-};
-
-// Manager-Rahmen anlegen
-window.handleCreateManagerZone = async function (x, y) {
-    const res = await customPromptDual(
-        'Manager-Rahmen anlegen',
-        'Klassifizierungs-Rahmen für Manager-Auswertung erstellen:',
-        'Rahmen-Bezeichnung:',
-        'Förderband ',
-        'DOC- / System-Nr (z.B. FB-03):',
-        ''
-    );
-    if (!res || !res.val1) return;
-
-    const layout = getManagerLayout();
-    const newZone = {
-        id: 'mz_' + Date.now(),
-        title: res.val1,
-        doc_number: res.val2 || '',
-        color_hex: '#2b6cb0',
-        pos_x: Math.round(x),
-        pos_y: Math.round(y),
-        width: 620,
-        height: 440
-    };
-
-    layout.zones.push(newZone);
-    saveManagerLayout(layout);
-    showToast(`Manager-Rahmen "${res.val1}" erstellt`, 'success');
-    renderCanvas();
-};
-
-// Automatisches Anordnen im Manager-Canvas
+// Automatisches Anordnen im Board
 window.autoArrangeManagerCanvas = function () {
     const layout = getManagerLayout();
     const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
@@ -3848,24 +3664,87 @@ window.autoArrangeManagerCanvas = function () {
     });
 
     saveManagerLayout(layout);
-    showToast('Bauteile im Manager-Cockpit nach Farbe & Name ausgerichtet', 'success');
+    showToast('Bauteile nach Farbe & Name ausgerichtet', 'success');
     renderCanvas();
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
 };
 
-/**
-* =============================================================================
-* Projekt: CAD Time Manager
-* Domain: UI Controller (Manager Sidebar Interaktionen: Einfügen, Entfernen, Fokus)
-* HINZUFÜGEN IN: ui.js (Am Dateiende)
-* Zeitstempel: 2026-09-17 21:40:00 CEST
-* Breadcrumbs:
-*   - [2026-09-17 21:40:00 CEST]: addBlockToManagerCanvas, removeBlockFromManagerCanvas
-*     und centerOnManagerBlock für direkte Sidebar-Interaktionen integriert.
-* =============================================================================
-*/
+// Modal zur Block-Platzierung
+let pendingMgrPlaceCoords = { x: 100, y: 100 };
+window.openAddExistingBlockModal = function (x, y) {
+    pendingMgrPlaceCoords = { x, y };
+    const selNode = document.getElementById('mgrSelectExistingNode');
+    const selZone = document.getElementById('mgrSelectTargetZone');
+    const layout = getManagerLayout();
 
-// Fügt einen Block aus der Sidebar direkt in die Mitte des sichtbaren Manager-Canvas ein
+    if (!selNode || !selZone) return;
+    selNode.innerHTML = '';
+    selZone.innerHTML = '<option value="">-- Frei auf Board (Kein Rahmen) --</option>';
+
+    (currentNodes || []).filter(n => n.block_type !== 'note').forEach(n => {
+        const doc = n.doc_number ? `[${n.doc_number}] ` : '';
+        selNode.appendChild(new Option(`${doc}${n.name}`, n.id));
+    });
+
+    layout.zones.forEach(z => {
+        const doc = z.doc_number ? `[${z.doc_number}] ` : '';
+        selZone.appendChild(new Option(`${doc}${z.title}`, z.id));
+    });
+
+    openModal('mgrAddBlockModal');
+};
+
+window.confirmAddExistingBlockToManager = function () {
+    const selNode = document.getElementById('mgrSelectExistingNode');
+    const selZone = document.getElementById('mgrSelectTargetZone');
+    if (!selNode || !selNode.value) return;
+
+    const nodeId = selNode.value;
+    const zoneId = selZone.value || null;
+    const layout = getManagerLayout();
+
+    layout.placements[nodeId] = {
+        pos_x: Math.round(pendingMgrPlaceCoords.x),
+        pos_y: Math.round(pendingMgrPlaceCoords.y),
+        zone_id: zoneId
+    };
+
+    saveManagerLayout(layout);
+    closeModal('mgrAddBlockModal');
+    showToast('Block auf Fortschritts-Board platziert', 'success');
+    renderCanvas();
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
+};
+
+window.handleCreateManagerZone = async function (x, y) {
+    const res = await customPromptDual(
+        'Übersichts-Rahmen anlegen',
+        'Neuen Rahmen für das Fortschritts-Board erstellen:',
+        'Rahmen-Bezeichnung:',
+        'Förderband ',
+        'System- / DOC-Nr (z.B. FB-03):',
+        ''
+    );
+    if (!res || !res.val1) return;
+
+    const layout = getManagerLayout();
+    const newZone = {
+        id: 'mz_' + Date.now(),
+        title: res.val1,
+        doc_number: res.val2 || '',
+        color_hex: '#2b6cb0',
+        pos_x: Math.round(x),
+        pos_y: Math.round(y),
+        width: 620,
+        height: 440
+    };
+
+    layout.zones.push(newZone);
+    saveManagerLayout(layout);
+    showToast(`Übersichts-Rahmen "${res.val1}" erstellt`, 'success');
+    renderCanvas();
+};
+
 window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = null) {
     const layout = getManagerLayout();
     const node = currentNodes.find(n => n.id === nodeId);
@@ -3874,7 +3753,6 @@ window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = nul
     let posX = targetX;
     let posY = targetY;
 
-    // Wenn keine Koordinaten übergeben wurden (Klick auf ➕), zentriert im Viewport platzieren
     if (posX === null || posY === null) {
         const viewport = document.getElementById('viewport');
         const vw = viewport ? viewport.clientWidth : 800;
@@ -3884,7 +3762,6 @@ window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = nul
         posY = Math.round(center.y - 40);
     }
 
-    // Prüfen, ob der Punkt in einen bestehenden Manager-Rahmen fällt
     let matchedZoneId = null;
     for (const mz of layout.zones) {
         if (posX >= mz.pos_x && posX <= (mz.pos_x + mz.width) &&
@@ -3901,26 +3778,24 @@ window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = nul
     };
 
     saveManagerLayout(layout);
-    showToast(`"${node.name}" auf Manager-Board platziert`, 'success');
+    showToast(`"${node.name}" auf Board platziert`, 'success');
 
     if (typeof renderCanvas === 'function') renderCanvas();
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
 };
 
-// Entfernt einen Block vom Manager-Board (bleibt im CAD-Hauptcanvas voll erhalten)
 window.removeBlockFromManagerCanvas = function (nodeId) {
     const layout = getManagerLayout();
     if (layout.placements && layout.placements[nodeId]) {
         delete layout.placements[nodeId];
         saveManagerLayout(layout);
-        showToast('Vom Manager-Board entfernt', 'info');
+        showToast('Aus Fortschritts-Board entfernt', 'info');
 
         if (typeof renderCanvas === 'function') renderCanvas();
         if (typeof renderSidebarZones === 'function') renderSidebarZones();
     }
 };
 
-// Zentriert die Kamera auf das Bauteil auf dem Manager-Board
 window.centerOnManagerBlock = function (nodeId) {
     const layout = getManagerLayout();
     const p = layout.placements ? layout.placements[nodeId] : null;
@@ -3937,7 +3812,6 @@ window.centerOnManagerBlock = function (nodeId) {
 
     if (typeof applyCanvasTransform === 'function') applyCanvasTransform(true);
 
-    // Block kurz hervorheben
     const el = document.getElementById(nodeId);
     if (el) {
         el.style.transition = 'box-shadow 0.2s ease';
@@ -3946,7 +3820,6 @@ window.centerOnManagerBlock = function (nodeId) {
     }
 };
 
-// Canvas Drop-Listener für direktes Hinüberziehen aus der Sidebar
 document.addEventListener('DOMContentLoaded', () => {
     const viewport = document.getElementById('viewport');
     if (viewport) {
@@ -3968,4 +3841,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    setTimeout(() => {
+        if (window.activeCanvasMode === 'manager') {
+            window.switchCanvasMode('manager');
+        }
+    }, 300);
 });

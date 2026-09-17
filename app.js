@@ -161,7 +161,7 @@ window.renderSidebarZones = function () {
     const isMgr = (window.activeCanvasMode === 'manager');
 
     if (sectionTitleEl && sectionTitleEl.classList.contains('sidebar-section-title')) {
-        sectionTitleEl.textContent = isMgr ? 'Komponenten-Pool (Auswahl)' : 'Top-Bereiche (Ansicht)';
+        sectionTitleEl.textContent = isMgr ? 'Komponenten-Pool (Bauteile & Baugruppen)' : 'Top-Bereiche (Ansicht)';
     }
 
     // =========================================================================

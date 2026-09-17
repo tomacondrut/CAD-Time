@@ -155,7 +155,7 @@ window.toggleNoteCollapse = async function (e, nodeId) {
  *     sondern "Vorhandenen Block platzieren" und "Manager-Rahmen anlegen".
  * =============================================================================
  */
-window.handleCanvasContextMenu = function (e) {
+n(e) {
     e.preventDefault();
     if (e.target.closest('button, input, select, .sidebar')) return;
 
@@ -170,7 +170,7 @@ window.handleCanvasContextMenu = function (e) {
     const itemDuplicate = document.getElementById('ctxMenuDuplicateNode');
     const itemDelete = document.getElementById('ctxMenuDeleteNode');
 
-    // Manager-Canvas Items
+    // Status-Board Items
     const itemMgrAddExisting = document.getElementById('ctxMenuMgrAddExisting');
     const itemMgrAddZone = document.getElementById('ctxMenuMgrAddZone');
     const itemMgrRemoveNode = document.getElementById('ctxMenuMgrRemoveNode');
@@ -183,7 +183,6 @@ window.handleCanvasContextMenu = function (e) {
     const targetZoneId = zoneEl ? zoneEl.id : null;
 
     if (isMgr) {
-        // --- MANAGER CANVAS MODUS ---
         if (itemAddBlock) itemAddBlock.style.display = 'none';
         if (itemAddZone) itemAddZone.style.display = 'none';
         if (itemAddNote) itemAddNote.style.display = 'none';
@@ -209,7 +208,6 @@ window.handleCanvasContextMenu = function (e) {
             if (itemMgrDeleteZone) itemMgrDeleteZone.style.display = 'none';
         }
     } else {
-        // --- HAUPT CAD CANVAS MODUS ---
         if (itemMgrAddExisting) itemMgrAddExisting.style.display = 'none';
         if (itemMgrAddZone) itemMgrAddZone.style.display = 'none';
         if (itemMgrRemoveNode) itemMgrRemoveNode.style.display = 'none';
@@ -1186,206 +1184,6 @@ window.toggleZoneLock = async function (e, zoneId) {
  *     im Manager-Modus inklusive gewichteter Earned-Value-Balken für Manager-Rahmen.
  * =============================================================================
  */
-function renderCanvas() {
-    const canvas = document.getElementById('canvas');
-    const svgLayer = document.getElementById('connections-layer');
-    if (!canvas || !svgLayer) return;
-
-    const isManagerMode = (window.activeCanvasMode === 'manager');
-    const mgrLayout = isManagerMode ? getManagerLayout() : null;
-
-    if (!window.selectedNodeIds) window.selectedNodeIds = new Set();
-    if (!window.expandedNodes) window.expandedNodes = new Set();
-    if (!window.expandedZones) window.expandedZones = new Set();
-    if (!window.collapsedParents) window.collapsedParents = new Set();
-    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-
-    const existingCards = canvas.querySelectorAll('.assembly-card, .project-zone, .note-card');
-    existingCards.forEach(c => c.remove());
-    svgLayer.innerHTML = '';
-
-    // =========================================================================
-    // 1. ZONEN RENDERN (MANAGER-RAHMEN VS. HAUPT-ZONEN)
-    // =========================================================================
-    if (isManagerMode) {
-        // MANAGER-RAHMEN (Frei gruppierbar, mit 50/50 Earned-Value Ladebalken)
-        mgrLayout.zones.forEach(zone => {
-            const zoneEl = document.createElement('div');
-            zoneEl.id = zone.id;
-            zoneEl.className = 'project-zone draggable-enabled';
-            zoneEl.style.left = `${zone.pos_x}px`;
-            zoneEl.style.top = `${zone.pos_y}px`;
-            zoneEl.style.width = `${zone.width}px`;
-            zoneEl.style.height = `${zone.height}px`;
-            zoneEl.style.borderColor = zone.color_hex || '#2b6cb0';
-            zoneEl.style.zIndex = '10';
-
-            // Alle Bauteile ermitteln, die in diesen Manager-Rahmen gezogen wurden
-            const containedBlockIds = Object.keys(mgrLayout.placements).filter(nId => mgrLayout.placements[nId].zone_id === zone.id);
-            const containedBlocks = (currentNodes || []).filter(n => containedBlockIds.includes(n.id) && n.block_type !== 'note');
-
-            let totalWeightedScore = 0;
-            let totalWeights = 0;
-            let zoneBudD = 0;
-            let zoneBudDr = 0;
-            let zoneSpentD = 0;
-            let zoneSpentDr = 0;
-
-            containedBlocks.forEach(bn => {
-                const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
-                const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
-                const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
-                const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
-                const bTotalProg = (pD * 0.5) + (pDr * 0.5);
-
-                const bD = parseFloat(masterObj.budget_design_hours) || 0;
-                const bDr = parseFloat(masterObj.budget_drafting_hours) || 0;
-                const bWeight = (bD + bDr) || 1;
-
-                totalWeightedScore += (bTotalProg * bWeight);
-                totalWeights += bWeight;
-
-                zoneBudD += bD;
-                zoneBudDr += bDr;
-
-                // Ist-Zeiten summieren
-                (currentTimeLogs || []).filter(l => l.node_id === masterObj.id).forEach(l => {
-                    if (l.task_type === 'design') zoneSpentD += parseFloat(l.hours) || 0;
-                    if (l.task_type === 'drafting') zoneSpentDr += parseFloat(l.hours) || 0;
-                });
-            });
-
-            const zoneProgress = totalWeights > 0 ? Math.round(totalWeightedScore / totalWeights) : 0;
-            const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
-            const docLabel = zone.doc_number ? `<span class="badge-doc-text">${escapeHtml(zone.doc_number)}</span>` : '';
-
-            const zdPieStyle = generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0');
-            const zdrPieStyle = generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169');
-
-            zoneEl.innerHTML = `
-              <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#2b6cb0'};">
-                ${docLabel}
-                <div class="zone-progress-track" title="Fortschritt: ${zoneProgress}%">
-                    <div class="zone-progress-fill" style="width: ${zoneProgress}%; background: ${barColor};"></div>
-                    <span class="zone-progress-label">${zoneProgress}%</span>
-                </div>
-              </div>
-              <div class="project-zone-header no-pan" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: bold; font-size: 13px; color: #2d3748;">📁 ${escapeHtml(zone.title)}</span>
-                <div style="display: flex; gap: 16px; align-items: center;">
-                    <div style="display:flex; align-items: center; gap: 4px;" title="CAD Summe">
-                        <div class="pie-chart" style="${zdPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
-                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentD)} / ${formatHoursToHM(zoneBudD)}</span>
-                    </div>
-                    <div style="display:flex; align-items: center; gap: 4px;" title="Zeichnung Summe">
-                        <div class="pie-chart" style="${zdrPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
-                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentDr)} / ${formatHoursToHM(zoneBudDr)}</span>
-                    </div>
-                </div>
-              </div>
-              <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
-            `;
-
-            // Drag & Drop für Manager-Rahmen (verschiebt alle enthaltenen Blöcke mit)
-            let isDragging = false;
-            let startClientX = 0, startClientY = 0;
-            let initZLeft = 0, initZTop = 0;
-            let blockStartPositions = [];
-
-            const startMgrZoneDrag = (e) => {
-                if (e.target.closest('.zone-resize-handle, input, select, button')) return;
-                isDragging = true;
-                startClientX = e.clientX;
-                startClientY = e.clientY;
-                initZLeft = zone.pos_x;
-                initZTop = zone.pos_y;
-
-                blockStartPositions = containedBlocks.map(b => ({
-                    id: b.id,
-                    x: mgrLayout.placements[b.id]?.pos_x || 0,
-                    y: mgrLayout.placements[b.id]?.pos_y || 0
-                }));
-
-                const onMove = (me) => {
-                    if (!isDragging) return;
-                    const scale = window.currentScale || 1;
-                    const dx = (me.clientX - startClientX) / scale;
-                    const dy = (me.clientY - startClientY) / scale;
-
-                    zone.pos_x = Math.round(initZLeft + dx);
-                    zone.pos_y = Math.round(initZTop + dy);
-                    zoneEl.style.left = `${zone.pos_x}px`;
-                    zoneEl.style.top = `${zone.pos_y}px`;
-
-                    blockStartPositions.forEach(bp => {
-                        const bEl = document.getElementById(bp.id);
-                        const curX = Math.round(bp.x + dx);
-                        const curY = Math.round(bp.y + dy);
-                        if (bEl) {
-                            bEl.style.left = `${curX}px`;
-                            bEl.style.top = `${curY}px`;
-                        }
-                        if (mgrLayout.placements[bp.id]) {
-                            mgrLayout.placements[bp.id].pos_x = curX;
-                            mgrLayout.placements[bp.id].pos_y = curY;
-                        }
-                    });
-                };
-
-                const onUp = () => {
-                    isDragging = false;
-                    window.removeEventListener('mousemove', onMove);
-                    window.removeEventListener('mouseup', onUp);
-                    saveManagerLayout(mgrLayout);
-                };
-
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-            };
-
-            zoneEl.addEventListener('mousedown', startMgrZoneDrag);
-
-            // Resize Handle für Manager-Rahmen
-            const rHandle = zoneEl.querySelector('.zone-resize-handle');
-            if (rHandle) {
-                rHandle.addEventListener('mousedown', (e) => {
-                    e.stopPropagation();
-                    let isResizing = true;
-                    const scale = window.currentScale || 1;
-                    const sW = zone.width;
-                    const sH = zone.height;
-                    const sX = e.clientX;
-                    const sY = e.clientY;
-
-                    const onRMove = (me) => {
-                        if (!isResizing) return;
-                        zone.width = Math.max(300, Math.round(sW + (me.clientX - sX) / scale));
-                        zone.height = Math.max(200, Math.round(sH + (me.clientY - sY) / scale));
-                        zoneEl.style.width = `${zone.width}px`;
-                        zoneEl.style.height = `${zone.height}px`;
-                    };
-
-                    const onRUp = () => {
-                        isResizing = false;
-                        window.removeEventListener('mousemove', onRMove);
-                        window.removeEventListener('mouseup', onRUp);
-                        saveManagerLayout(mgrLayout);
-                    };
-
-                    window.addEventListener('mousemove', onRMove);
-                    window.addEventListener('mouseup', onRUp);
-                });
-            }
-
-            canvas.appendChild(zoneEl);
-        });
-    }
-
-    } else {
-        // HAUPT-CANVAS ZONEN RENDERN (Standard)
-        // ... (Bestehender Code von sortedZones.forEach bleibt hier exakt so bestehen) ...
-
-    const sortedZones = [...(currentZones || [])].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
 
 
     /**
@@ -1477,476 +1275,675 @@ function renderCanvas() {
   *     Zeile 2: Pie Charts (CAD & Zeichnung) direkt unterhalb + "⏱️ Zeiten"-Button daneben.
   *     Top-Right: Aktionen (Fluss, Sperren, Edit, Löschen) oben rechts verankert.
   * =============================================================================
+  * 
+  * 
   */
-    // 1. ZONEN RENDERN
-    sortedZones.forEach(zone => {
-        const zoneEl = document.createElement('div');
-        zoneEl.id = zone.id;
-        const canMoveZone = (isAdmin || (activeUserCode && activeUserCode === zone.created_by)) && !zone.is_locked;
-        const isZoneExpanded = window.expandedZones && window.expandedZones.has(zone.id);
 
-        zoneEl.className = `project-zone ${zone.is_locked ? 'zone-locked' : 'no-pan'} ${canMoveZone ? 'draggable-enabled' : ''}`;
-        zoneEl.style.left = `${zone.pos_x}px`;
-        zoneEl.style.top = `${zone.pos_y}px`;
-        zoneEl.style.width = `${zone.width}px`;
-        zoneEl.style.height = `${zone.height}px`;
-        zoneEl.style.borderColor = zone.color_hex || '#a0aec0';
-        zoneEl.style.zIndex = isZoneExpanded ? '2500' : 'auto';
+function renderCanvas() {
+    const canvas = document.getElementById('canvas');
+    const svgLayer = document.getElementById('connections-layer');
+    if (!canvas || !svgLayer) return;
 
-        const zStats = zoneRollups[zone.id] || { dSpent: 0, dBudg: 0, drSpent: 0, drBudg: 0, directLogs: [] };
-        const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
-        const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
+    const isManagerMode = (window.activeCanvasMode === 'manager');
+    const mgrLayout = isManagerMode ? (typeof getManagerLayout === 'function' ? getManagerLayout() : { zones: [], placements: {} }) : null;
 
-        // Aggregierter Rahmenfortschritt
-        // Aggregierter Rahmenfortschritt (Erledigte Blöcke zählen immer als 100%)
-        /**
-          * =============================================================================
-          * Projekt: CAD Time Manager
-          * Domain: Canvas Engine (Rahmenfortschritt inkl. Referenz-Instanzen)
-          * ERSETZEN IN: canvas.js (In renderCanvas -> sortedZones.forEach)
-          * Zeitstempel: 2026-09-17 20:45:00 CEST
-          * Breadcrumbs:
-          *   - [2026-09-17 19:10:00 CEST]: Initiale Rahmen-Fortschrittsberechnung.
-          *   - [2026-09-17 20:45:00 CEST]: Referenz-Instanzen fließen vollwertig 
-          *     in den Rahmenfortschritt ein (Fortschritt & Budget-Gewichtung werden 
-          *     vom Master bezogen). Unterrahmen werden rekursiv erfasst.
-          * =============================================================================
-          */
-        // 1. Alle Blöcke dieses Rahmens ermitteln (inklusive Blöcke in Unterrahmen)
-        const allZoneIds = [zone.id, ...(typeof getAllDescendantZones === 'function' ? getAllDescendantZones(zone.id) : [])];
-        const childBlocks = (currentNodes || []).filter(n => allZoneIds.includes(n.zone_id) && n.block_type !== 'note');
+    if (!window.selectedNodeIds) window.selectedNodeIds = new Set();
+    if (!window.expandedNodes) window.expandedNodes = new Set();
+    if (!window.expandedZones) window.expandedZones = new Set();
+    if (!window.collapsedParents) window.collapsedParents = new Set();
+    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
 
-        let zoneProgress = 0;
-        if (childBlocks.length > 0) {
+    const existingCards = canvas.querySelectorAll('.assembly-card, .project-zone, .note-card');
+    existingCards.forEach(c => c.remove());
+    svgLayer.innerHTML = '';
+
+    const rollups = (typeof calculateRollups === 'function') ? calculateRollups() : {};
+
+    // =========================================================================
+    // 1. ZONEN RENDERN (STATUS-BOARD VS. HAUPT-ZONEN)
+    // =========================================================================
+    if (isManagerMode && mgrLayout && Array.isArray(mgrLayout.zones)) {
+        // MANAGER-RAHMEN (Frei gruppierbar, mit 50/50 Earned-Value Ladebalken)
+        mgrLayout.zones.forEach(zone => {
+            const zoneEl = document.createElement('div');
+            zoneEl.id = zone.id;
+            zoneEl.className = 'project-zone draggable-enabled';
+            zoneEl.style.left = `${zone.pos_x}px`;
+            zoneEl.style.top = `${zone.pos_y}px`;
+            zoneEl.style.width = `${zone.width}px`;
+            zoneEl.style.height = `${zone.height}px`;
+            zoneEl.style.borderColor = zone.color_hex || '#2b6cb0';
+            zoneEl.style.zIndex = '10';
+
+            const containedBlockIds = Object.keys(mgrLayout.placements || {}).filter(nId => mgrLayout.placements[nId].zone_id === zone.id);
+            const containedBlocks = (currentNodes || []).filter(n => containedBlockIds.includes(n.id) && n.block_type !== 'note');
+
             let totalWeightedScore = 0;
             let totalWeights = 0;
+            let zoneBudD = 0;
+            let zoneBudDr = 0;
+            let zoneSpentD = 0;
+            let zoneSpentDr = 0;
 
-            childBlocks.forEach(bn => {
-                // Bei Referenzen: Master-Objekt ermitteln, um Fortschritt und Gewichtung abzugleifen
-                const masterObj = bn.linked_id
-                    ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn)
-                    : bn;
-
+            containedBlocks.forEach(bn => {
+                const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
                 const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
                 const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
                 const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
                 const bTotalProg = (pD * 0.5) + (pDr * 0.5);
 
-                // Gewichtung anhand der Master-Stunden (komplexere Baugruppen wiegen im Fortschritt mehr als Kleinteile)
-                const bWeight = (parseFloat(masterObj.budget_design_hours) || 0) + (parseFloat(masterObj.budget_drafting_hours) || 0) || 1;
+                const bD = parseFloat(masterObj.budget_design_hours) || 0;
+                const bDr = parseFloat(masterObj.budget_drafting_hours) || 0;
+                const bWeight = (bD + bDr) || 1;
 
                 totalWeightedScore += (bTotalProg * bWeight);
                 totalWeights += bWeight;
+                zoneBudD += bD;
+                zoneBudDr += bDr;
+
+                (currentTimeLogs || []).filter(l => l.node_id === masterObj.id).forEach(l => {
+                    if (l.task_type === 'design') zoneSpentD += parseFloat(l.hours) || 0;
+                    if (l.task_type === 'drafting') zoneSpentDr += parseFloat(l.hours) || 0;
+                });
             });
 
-            zoneProgress = Math.round(totalWeightedScore / totalWeights);
-        }
+            const zoneProgress = totalWeights > 0 ? Math.round(totalWeightedScore / totalWeights) : 0;
+            const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
+            const docLabel = zone.doc_number ? `<span class="badge-doc-text">${escapeHtml(zone.doc_number)}</span>` : '';
 
-        const identifier = zone.article_number || zone.doc_number || '';
-        let badgeHtml = '';
-        if (identifier || childBlocks.length > 0) {
-            const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
-            const barHtml = childBlocks.length > 0 ? `
-                <div class="zone-progress-track" title="Fortschritt Rahmen: ${zoneProgress}%">
-                    <div class="zone-progress-fill" style="width: ${zoneProgress}%; background: ${zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20')};"></div>
+            const zdPieStyle = generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0');
+            const zdrPieStyle = generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169');
+
+            zoneEl.innerHTML = `
+              <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#2b6cb0'};">
+                ${docLabel}
+                <div class="zone-progress-track" title="Fortschritt: ${zoneProgress}%">
+                    <div class="zone-progress-fill" style="width: ${zoneProgress}%; background: ${barColor};"></div>
                     <span class="zone-progress-label">${zoneProgress}%</span>
                 </div>
-            ` : '';
-
-            badgeHtml = `
-              <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#a0aec0'};">
-                ${docLabel}
-                ${barHtml}
               </div>
+              <div class="project-zone-header no-pan" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: bold; font-size: 13px; color: #2d3748;">📁 ${escapeHtml(zone.title)}</span>
+                <div style="display: flex; gap: 16px; align-items: center;">
+                    <div style="display:flex; align-items: center; gap: 4px;" title="CAD Summe">
+                        <div class="pie-chart" style="${zdPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
+                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentD)} / ${formatHoursToHM(zoneBudD)}</span>
+                    </div>
+                    <div style="display:flex; align-items: center; gap: 4px;" title="Zeichnung Summe">
+                        <div class="pie-chart" style="${zdrPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
+                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentDr)} / ${formatHoursToHM(zoneBudDr)}</span>
+                    </div>
+                </div>
+              </div>
+              <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
             `;
-        }
 
-        const zLogs = zStats.directLogs || [];
-        let inlineZoneLogsHtml = '';
-
-        if (isZoneExpanded) {
-            if (zLogs.length === 0) {
-                inlineZoneLogsHtml = `<div style="font-size:10px; color:#718096; text-align:center; padding: 6px 0;">Keine Zeiten direkt auf diesen Rahmen gebucht.</div>`;
-            } else {
-                let tableRows = '';
-                zLogs.forEach(log => {
-                    const d = new Date(log.logged_at);
-                    const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                    const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
-                    const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
-                    const canDel = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
-                    const delHtml = canDel ? `<span class="btn-delete-log" title="Löschen" onclick="handleDeleteLog('${log.id}')">✕</span>` : '';
-                    const noteHtml = log.note ? `<span class="info-tooltip-trigger" style="font-size:10px;">ℹ️<span class="tooltip-overlay">${escapeHtml(log.note)}</span></span>` : '';
-
-                    tableRows += `
-                      <tr>
-                        <td><strong>${escapeHtml(log.user_code)}</strong></td>
-                        <td>${dateStr}</td>
-                        <td>${kat}</td>
-                        <td>${formatHoursToHM(log.hours)} ${noteHtml}</td>
-                        <td>${badge} ${delHtml}</td>
-                      </tr>`;
-                });
-                inlineZoneLogsHtml = `
-                  <table class="log-table" style="background:#fff; border-radius:4px; margin-top:6px;">
-                    <thead><tr><th>Kürzel</th><th>Datum</th><th>Kat.</th><th>Zeit</th><th>Status</th></tr></thead>
-                    <tbody>${tableRows}</tbody>
-                  </table>`;
-            }
-        }
-
-        /**
-         * =============================================================================
-         * Projekt: CAD Time Manager
-         * Domain: Canvas Engine (Container-Kategorie mit strichliertem Icon)
-         * ERSETZEN IN: canvas.js (In renderCanvas -> Zonen-Header Icon-Zuweisung)
-         * Zeitstempel: 2026-08-31 18:10:00 CEST
-         * Breadcrumbs:
-         *   - [2026-08-29 21:10:00 CEST]: Zonen-Header Rendering.
-         *   - [2026-08-31 18:10:00 CEST]: Typ 'container' mit Strichlinien-Rahmen Icon (⬚) ergänzt.
-         * =============================================================================
-         */
-        let assignedBadgesHtml = '';
-        if (zone.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
-        }
-        if (zone.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
-        }
-
-        let zIcon = CAD_ICONS ? CAD_ICONS.location : '📍';
-        if (zone.zone_type === 'assembly') zIcon = CAD_ICONS ? CAD_ICONS.assembly : '📦';
-        else if (zone.zone_type === 'comment') zIcon = CAD_ICONS ? CAD_ICONS.comment : '💬';
-        else if (zone.zone_type === 'container') zIcon = CAD_ICONS ? CAD_ICONS.container : '⬚';
-
-        zoneEl.innerHTML = `
-      ${badgeHtml}
-      <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; padding-right: 140px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding: 8px 12px;">
-        
-        <!-- Zeile 1: Titel & Zuweisungen -->
-        <div style="display:flex; align-items:center; overflow: hidden; white-space: nowrap; max-width: 100%;">
-          <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">${zIcon} ${escapeHtml(zone.title)}</span>
-          ${assignedBadgesHtml}
-        </div>
-
-        <!-- Zeile 2: Pie Charts direkt unterhalb + Button -->
-        <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">
-            <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
-                <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;">
-                    <div class="pie-inner" style="width: 14px; height: 14px;"></div>
-                </div>
-                <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
-                    <span style="color: #4a5568; font-weight: 800;">CAD</span>
-                    <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
-                </div>
-            </div>
-            <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
-                <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;">
-                    <div class="pie-inner" style="width: 14px; height: 14px;"></div>
-                </div>
-                <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
-                    <span style="color: #4a5568; font-weight: 800;">Zeichnung</span>
-                    <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
-                </div>
-            </div>
-            <button type="button" class="zone-btn btn-toggle-zone-times" title="Zeiten auf Rahmen buchen & Details" style="padding: 2px 7px; font-weight: bold; border: 1px solid #cbd5e0; border-radius: 4px; background: #fff; flex-shrink: 0; font-size: 11px;">⏱️ Zeiten</button>
-        </div>
-
-        <!-- Aktionen in der rechten oberen Ecke -->
-        <div class="zone-actions" style="position: absolute; right: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 60;">
-          <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
-          <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
-          <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
-          ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
-            <button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
-          ` : ''}
-        </div>
-      </div>
-
-      ${isZoneExpanded ? `
-      <div class="zone-body no-pan" style="position: absolute; top: 56px; left: 10px; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.18); width: 420px; max-width: 420px;">
-        <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
-          <div class="time-inputs-row">
-            <select class="log-input" style="font-weight: bold; width: 60px;">
-              <option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option>
-            </select>
-            <select class="log-input" style="width: 75px;">
-              <option value="drafting">Zeichn.</option>
-              <option value="design">CAD</option>
-            </select>
-            <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
-            <span>h</span>
-            <input type="number" class="log-input input-mins" min="0" step="5" value="30" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
-            <span>m</span>
-          </div>
-          <div style="display: flex; gap: 4px; margin-top: 6px;">
-            <input type="text" class="log-input" placeholder="Kommentar (optional)..." style="flex: 1;" />
-            <button type="submit" class="btn-log" style="background: ${zone.color_hex || '#2b6cb0'};">+ Log</button>
-          </div>
-        </form>
-        ${inlineZoneLogsHtml}
-      </div>
-      ` : ''}
-
-      <div class="zone-resize-handle no-pan" style="position: absolute; z-index: 50;" title="Größe anpassen"></div>
-    `;
-
-        // Direkte Event-Bindung für '⏱️ Zeiten'
-        const btnTimes = zoneEl.querySelector('.btn-toggle-zone-times');
-        if (btnTimes) {
-            btnTimes.addEventListener('mousedown', (e) => e.stopPropagation());
-            btnTimes.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (typeof window.toggleZoneLogs === 'function') {
-                    window.toggleZoneLogs(e, zone.id);
-                }
-            });
-        }
-
-        // Klicks innerhalb der offenen Log-Maske isolieren
-        const zoneBody = zoneEl.querySelector('.zone-body');
-        if (zoneBody) {
-            zoneBody.addEventListener('mousedown', (e) => e.stopPropagation());
-            zoneBody.addEventListener('click', (e) => e.stopPropagation());
-        }
-
-        if (canMoveZone) {
             let isDragging = false;
-            let startX = 0, startY = 0;
-            let initLeft = 0, initTop = 0;
-            let childStartPos = [];
-            let childZonesStartPos = [];
-            let descendantZoneIds = [];
-            let allMovedZoneIds = [];
-            let descendantZones = [];
-            let childNodes = [];
+            let startClientX = 0, startClientY = 0;
+            let initZLeft = 0, initZTop = 0;
+            let blockStartPositions = [];
 
-            const startZoneDrag = (e) => {
-                if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
-                if (e.type === 'touchstart' && e.touches.length > 1) return;
-
-                window.isDraggingAnything = true;
+            const startMgrZoneDrag = (e) => {
+                if (e.target.closest('.zone-resize-handle, input, select, button')) return;
                 isDragging = true;
-                const scale = window.currentScale || 1;
+                startClientX = e.clientX;
+                startClientY = e.clientY;
+                initZLeft = zone.pos_x;
+                initZTop = zone.pos_y;
 
-                startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                blockStartPositions = containedBlocks.map(b => ({
+                    id: b.id,
+                    x: mgrLayout.placements[b.id]?.pos_x || 0,
+                    y: mgrLayout.placements[b.id]?.pos_y || 0
+                }));
 
-                initLeft = zone.pos_x;
-                initTop = zone.pos_y;
-
-                descendantZoneIds = getAllDescendantZones(zone.id);
-                allMovedZoneIds = [zone.id, ...descendantZoneIds];
-                descendantZones = currentZones.filter(z => descendantZoneIds.includes(z.id));
-                childNodes = currentNodes.filter(n => allMovedZoneIds.includes(n.zone_id));
-
-                childStartPos = childNodes.map(n => ({ id: n.id, x: n.pos_x, y: n.pos_y }));
-                childZonesStartPos = descendantZones.map(z => ({ id: z.id, x: z.pos_x, y: z.pos_y }));
-
-                if (e.cancelable) e.stopPropagation();
-
-                const onMouseMove = (moveEvent) => {
+                const onMove = (me) => {
                     if (!isDragging) return;
-                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+                    const scale = window.currentScale || 1;
+                    const dx = (me.clientX - startClientX) / scale;
+                    const dy = (me.clientY - startClientY) / scale;
 
-                    const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
-                    const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
-
-                    const dx = (clientX - startX) / scale;
-                    const dy = (clientY - startY) / scale;
-
-                    const newParentX = Math.max(10, Math.round(initLeft + dx));
-                    const newParentY = Math.max(10, Math.round(initTop + dy));
-                    const actualDx = newParentX - initLeft;
-                    const actualDy = newParentY - initTop;
-
-                    zone.pos_x = newParentX;
-                    zone.pos_y = newParentY;
+                    zone.pos_x = Math.round(initZLeft + dx);
+                    zone.pos_y = Math.round(initZTop + dy);
                     zoneEl.style.left = `${zone.pos_x}px`;
                     zoneEl.style.top = `${zone.pos_y}px`;
 
-                    descendantZones.forEach((z, idx) => {
-                        z.pos_x = childZonesStartPos[idx].x + actualDx;
-                        z.pos_y = childZonesStartPos[idx].y + actualDy;
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) {
-                            zEl.style.left = `${z.pos_x}px`;
-                            zEl.style.top = `${z.pos_y}px`;
+                    blockStartPositions.forEach(bp => {
+                        const bEl = document.getElementById(bp.id);
+                        const curX = Math.round(bp.x + dx);
+                        const curY = Math.round(bp.y + dy);
+                        if (bEl) {
+                            bEl.style.left = `${curX}px`;
+                            bEl.style.top = `${curY}px`;
+                        }
+                        if (mgrLayout.placements[bp.id]) {
+                            mgrLayout.placements[bp.id].pos_x = curX;
+                            mgrLayout.placements[bp.id].pos_y = curY;
                         }
                     });
-
-                    childNodes.forEach((n, idx) => {
-                        n.pos_x = childStartPos[idx].x + actualDx;
-                        n.pos_y = childStartPos[idx].y + actualDy;
-                        const nEl = document.getElementById(n.id);
-                        if (nEl) {
-                            nEl.style.left = `${n.pos_x}px`;
-                            nEl.style.top = `${n.pos_y}px`;
-                        }
-                    });
-
-                    const headerCenterX = zone.pos_x + (zone.width / 2);
-                    const headerCenterY = zone.pos_y + 20;
-                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
-
-                    currentZones.forEach(z => {
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) {
-                            if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
-                            else zEl.classList.remove('zone-hover-highlight');
-                        }
-                    });
-
-                    renderConnections();
                 };
 
-                /**
-                 * =============================================================================
-                 * Projekt: CAD Time Manager
-                 * Domain: NATIVE Canvas Engine & Rendering (Zonen-Drag Sidebar Sync)
-                 * ERSETZEN IN: canvas.js (In renderCanvas -> startZoneDrag -> onMouseUp)
-                 * Zeitstempel: 2026-08-31 17:55:00 CEST
-                 * Breadcrumbs:
-                 *   - [2026-08-29 21:10:00 CEST]: Zonen-Drag & Drop Hierarchie-Zuordnung.
-                 *   - [2026-08-31 17:55:00 CEST]: renderSidebarZones() nach dem Verschieben von
-                 *     Rahmen direkt aufgerufen, damit Hierarchie-Wechsel sofort in der Sidebar sichtbar sind.
-                 * =============================================================================
-                 */
-                const onMouseUp = async () => {
-                    if (!isDragging) return;
+                const onUp = () => {
                     isDragging = false;
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                    if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
+                };
 
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
-                    window.removeEventListener('touchmove', onMouseMove);
-                    window.removeEventListener('touchend', onMouseUp);
-                    window.removeEventListener('touchcancel', onMouseUp);
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+            };
 
-                    const headerCenterX = zone.pos_x + (zone.width / 2);
-                    const headerCenterY = zone.pos_y + 20;
-                    const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
-                    const newParentId = targetZone ? targetZone.id : null;
+            zoneEl.addEventListener('mousedown', startMgrZoneDrag);
 
-                    if (newParentId) {
-                        const parentDepth = getZoneDepth(newParentId);
-                        let maxChildRelativeDepth = 0;
-                        descendantZoneIds.forEach(id => {
-                            let d = getZoneDepth(id) - getZoneDepth(zone.id);
-                            if (d > maxChildRelativeDepth) maxChildRelativeDepth = d;
+            const rHandle = zoneEl.querySelector('.zone-resize-handle');
+            if (rHandle) {
+                rHandle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    let isResizing = true;
+                    const scale = window.currentScale || 1;
+                    const sW = zone.width;
+                    const sH = zone.height;
+                    const sX = e.clientX;
+                    const sY = e.clientY;
+
+                    const onRMove = (me) => {
+                        if (!isResizing) return;
+                        zone.width = Math.max(300, Math.round(sW + (me.clientX - sX) / scale));
+                        zone.height = Math.max(200, Math.round(sH + (me.clientY - sY) / scale));
+                        zoneEl.style.width = `${zone.width}px`;
+                        zoneEl.style.height = `${zone.height}px`;
+                    };
+
+                    const onRUp = () => {
+                        isResizing = false;
+                        window.removeEventListener('mousemove', onRMove);
+                        window.removeEventListener('mouseup', onRUp);
+                        if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
+                    };
+
+                    window.addEventListener('mousemove', onRMove);
+                    window.addEventListener('mouseup', onRUp);
+                });
+            }
+
+            canvas.appendChild(zoneEl);
+        });
+    } else {
+        // HAUPT-CANVAS: REGULÄRE ZONEN RENDERN
+        const nodeDirectStats = {};
+        (currentNodes || []).forEach(n => {
+            const logs = (currentTimeLogs || []).filter(l => l.node_id === n.id);
+            let dSpent = 0, drSpent = 0;
+            logs.forEach(l => {
+                if (l.task_type === 'design') dSpent += parseFloat(l.hours) || 0;
+                if (l.task_type === 'drafting') drSpent += parseFloat(l.hours) || 0;
+            });
+            nodeDirectStats[n.id] = {
+                dBudg: parseFloat(n.budget_design_hours) || 0,
+                drBudg: parseFloat(n.budget_drafting_hours) || 0,
+                dSpent,
+                drSpent
+            };
+        });
+
+        const zoneRollups = {};
+        (currentZones || []).forEach(z => {
+            const zLogs = (currentTimeLogs || []).filter(l => l.zone_id === z.id || l.node_id === z.id);
+            let dSpentDirect = 0, drSpentDirect = 0;
+            zLogs.forEach(l => {
+                if (l.task_type === 'design') dSpentDirect += parseFloat(l.hours) || 0;
+                if (l.task_type === 'drafting') drSpentDirect += parseFloat(l.hours) || 0;
+            });
+
+            zoneRollups[z.id] = {
+                dBudg: parseFloat(z.budget_design_hours) || 0,
+                drBudg: parseFloat(z.budget_drafting_hours) || 0,
+                dSpent: dSpentDirect,
+                drSpent: drSpentDirect,
+                directLogs: zLogs
+            };
+        });
+
+        (currentNodes || []).forEach(n => {
+            if (n.block_type === 'note' || n.doc_number === 'NOTE') return;
+
+            const relatedIds = n.linked_id ? currentNodes.filter(x => x.linked_id === n.linked_id).map(x => x.id) : [n.id];
+            const isEffectivelyLinked = relatedIds.length > 1;
+            const masterObj = isEffectivelyLinked ? currentNodes.find(x => x.linked_id === n.linked_id) : n;
+            const isMaster = !isEffectivelyLinked || (masterObj && masterObj.id === n.id);
+
+            if (isMaster && n.zone_id && zoneRollups[n.zone_id] && nodeDirectStats[n.id]) {
+                zoneRollups[n.zone_id].dBudg += nodeDirectStats[n.id].dBudg;
+                zoneRollups[n.zone_id].drBudg += nodeDirectStats[n.id].drBudg;
+
+                relatedIds.forEach(relId => {
+                    if (nodeDirectStats[relId]) {
+                        zoneRollups[n.zone_id].dSpent += nodeDirectStats[relId].dSpent;
+                        zoneRollups[n.zone_id].drSpent += nodeDirectStats[relId].drSpent;
+                    }
+                });
+            }
+        });
+
+        const zonesByDepthDesc = [...(currentZones || [])].sort((a, b) => getZoneDepth(b.id) - getZoneDepth(a.id));
+        zonesByDepthDesc.forEach(z => {
+            if (z.parent_zone_id && zoneRollups[z.parent_zone_id] && zoneRollups[z.id]) {
+                zoneRollups[z.parent_zone_id].dBudg += zoneRollups[z.id].dBudg;
+                zoneRollups[z.parent_zone_id].drBudg += zoneRollups[z.id].drBudg;
+                zoneRollups[z.parent_zone_id].dSpent += zoneRollups[z.id].dSpent;
+                zoneRollups[z.parent_zone_id].drSpent += zoneRollups[z.id].drSpent;
+            }
+        });
+
+        const sortedZones = [...(currentZones || [])].sort((a, b) => getZoneDepth(a.id) - getZoneDepth(b.id));
+
+        sortedZones.forEach(zone => {
+            const zoneEl = document.createElement('div');
+            zoneEl.id = zone.id;
+            const canMoveZone = (isAdmin || (activeUserCode && activeUserCode === zone.created_by)) && !zone.is_locked;
+            const isZoneExpanded = window.expandedZones && window.expandedZones.has(zone.id);
+
+            zoneEl.className = `project-zone ${zone.is_locked ? 'zone-locked' : 'no-pan'} ${canMoveZone ? 'draggable-enabled' : ''}`;
+            zoneEl.style.left = `${zone.pos_x}px`;
+            zoneEl.style.top = `${zone.pos_y}px`;
+            zoneEl.style.width = `${zone.width}px`;
+            zoneEl.style.height = `${zone.height}px`;
+            zoneEl.style.borderColor = zone.color_hex || '#a0aec0';
+            zoneEl.style.zIndex = isZoneExpanded ? '2500' : 'auto';
+
+            const zStats = zoneRollups[zone.id] || { dSpent: 0, dBudg: 0, drSpent: 0, drBudg: 0, directLogs: [] };
+            const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
+            const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
+
+            // Rahmenfortschritt
+            const allZoneIds = [zone.id, ...(typeof getAllDescendantZones === 'function' ? getAllDescendantZones(zone.id) : [])];
+            const childBlocks = (currentNodes || []).filter(n => allZoneIds.includes(n.zone_id) && n.block_type !== 'note');
+
+            let zoneProgress = 0;
+            if (childBlocks.length > 0) {
+                let totalWeightedScore = 0;
+                let totalWeights = 0;
+
+                childBlocks.forEach(bn => {
+                    const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
+                    const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
+                    const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
+                    const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
+                    const bTotalProg = (pD * 0.5) + (pDr * 0.5);
+
+                    const bWeight = (parseFloat(masterObj.budget_design_hours) || 0) + (parseFloat(masterObj.budget_drafting_hours) || 0) || 1;
+                    totalWeightedScore += (bTotalProg * bWeight);
+                    totalWeights += bWeight;
+                });
+
+                zoneProgress = Math.round(totalWeightedScore / totalWeights);
+            }
+
+            const identifier = zone.article_number || zone.doc_number || '';
+            let badgeHtml = '';
+            if (identifier || childBlocks.length > 0) {
+                const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
+                const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
+                const barHtml = childBlocks.length > 0 ? `
+                    <div class="zone-progress-track" title="Fortschritt Rahmen: ${zoneProgress}%">
+                        <div class="zone-progress-fill" style="width: ${zoneProgress}%; background: ${barColor};"></div>
+                        <span class="zone-progress-label">${zoneProgress}%</span>
+                    </div>
+                ` : '';
+
+                badgeHtml = `
+                  <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#a0aec0'};">
+                    ${docLabel}
+                    ${barHtml}
+                  </div>
+                `;
+            }
+
+            const zLogs = zStats.directLogs || [];
+            let inlineZoneLogsHtml = '';
+
+            if (isZoneExpanded) {
+                if (zLogs.length === 0) {
+                    inlineZoneLogsHtml = `<div style="font-size:10px; color:#718096; text-align:center; padding: 6px 0;">Keine Zeiten direkt auf diesen Rahmen gebucht.</div>`;
+                } else {
+                    let tableRows = '';
+                    zLogs.forEach(log => {
+                        const d = new Date(log.logged_at);
+                        const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                        const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
+                        const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
+                        const canDel = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
+                        const delHtml = canDel ? `<span class="btn-delete-log" title="Löschen" onclick="handleDeleteLog('${log.id}')">✕</span>` : '';
+                        const noteHtml = log.note ? `<span class="info-tooltip-trigger" style="font-size:10px;">ℹ️<span class="tooltip-overlay">${escapeHtml(log.note)}</span></span>` : '';
+
+                        tableRows += `
+                          <tr>
+                            <td><strong>${escapeHtml(log.user_code)}</strong></td>
+                            <td>${dateStr}</td>
+                            <td>${kat}</td>
+                            <td>${formatHoursToHM(log.hours)} ${noteHtml}</td>
+                            <td>${badge} ${delHtml}</td>
+                          </tr>`;
+                    });
+                    inlineZoneLogsHtml = `
+                      <table class="log-table" style="background:#fff; border-radius:4px; margin-top:6px;">
+                        <thead><tr><th>Kürzel</th><th>Datum</th><th>Kat.</th><th>Zeit</th><th>Status</th></tr></thead>
+                        <tbody>${tableRows}</tbody>
+                      </table>`;
+                }
+            }
+
+            let assignedBadgesHtml = '';
+            if (zone.assigned_design_user) {
+                assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="CAD / 3D: ${escapeHtml(zone.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
+            }
+            if (zone.assigned_drafting_user) {
+                assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px; display:inline-flex; align-items:center; gap:3px; font-size:10px; padding:1px 5px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
+            }
+
+            let zIcon = CAD_ICONS ? CAD_ICONS.location : '📍';
+            if (zone.zone_type === 'assembly') zIcon = CAD_ICONS ? CAD_ICONS.assembly : '📦';
+            else if (zone.zone_type === 'comment') zIcon = CAD_ICONS ? CAD_ICONS.comment : '💬';
+            else if (zone.zone_type === 'container') zIcon = CAD_ICONS ? CAD_ICONS.container : '⬚';
+
+            zoneEl.innerHTML = `
+          ${badgeHtml}
+          <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; padding-right: 140px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding: 8px 12px;">
+            <div style="display:flex; align-items:center; overflow: hidden; white-space: nowrap; max-width: 100%;">
+              <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">${zIcon} ${escapeHtml(zone.title)}</span>
+              ${assignedBadgesHtml}
+            </div>
+            <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">
+                <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
+                    <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;"><div class="pie-inner" style="width: 14px; height: 14px;"></div></div>
+                    <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
+                        <span style="color: #4a5568; font-weight: 800;">CAD</span>
+                        <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
+                    <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;"><div class="pie-inner" style="width: 14px; height: 14px;"></div></div>
+                    <div style="display:flex; flex-direction:column; font-size: 10px; line-height: 1.15;">
+                        <span style="color: #4a5568; font-weight: 800;">Zeichnung</span>
+                        <span style="color: #718096; font-family: monospace;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
+                    </div>
+                </div>
+                <button type="button" class="zone-btn btn-toggle-zone-times" title="Zeiten auf Rahmen buchen & Details" style="padding: 2px 7px; font-weight: bold; border: 1px solid #cbd5e0; border-radius: 4px; background: #fff; flex-shrink: 0; font-size: 11px;">⏱️ Zeiten</button>
+            </div>
+            <div class="zone-actions" style="position: absolute; right: 10px; top: 8px; display: flex; gap: 6px; align-items: center; z-index: 60;">
+              <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
+              <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
+              <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
+              ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `
+                <button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>
+              ` : ''}
+            </div>
+          </div>
+
+          ${isZoneExpanded ? `
+          <div class="zone-body no-pan" style="position: absolute; top: 56px; left: 10px; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.18); width: 420px; max-width: 420px;">
+            <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
+              <div class="time-inputs-row">
+                <select class="log-input" style="font-weight: bold; width: 60px;"><option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option></select>
+                <select class="log-input" style="width: 75px;"><option value="drafting">Zeichn.</option><option value="design">CAD</option></select>
+                <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
+                <span>h</span>
+                <input type="number" class="log-input input-mins" min="0" step="5" value="30" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" required />
+                <span>m</span>
+              </div>
+              <div style="display: flex; gap: 4px; margin-top: 6px;">
+                <input type="text" class="log-input" placeholder="Kommentar (optional)..." style="flex: 1;" />
+                <button type="submit" class="btn-log" style="background: ${zone.color_hex || '#2b6cb0'};">+ Log</button>
+              </div>
+            </form>
+            ${inlineZoneLogsHtml}
+          </div>
+          ` : ''}
+
+          <div class="zone-resize-handle no-pan" style="position: absolute; z-index: 50;" title="Größe anpassen"></div>
+        `;
+
+            const btnTimes = zoneEl.querySelector('.btn-toggle-zone-times');
+            if (btnTimes) {
+                btnTimes.addEventListener('mousedown', (e) => e.stopPropagation());
+                btnTimes.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (typeof window.toggleZoneLogs === 'function') window.toggleZoneLogs(e, zone.id);
+                });
+            }
+
+            const zoneBody = zoneEl.querySelector('.zone-body');
+            if (zoneBody) {
+                zoneBody.addEventListener('mousedown', (e) => e.stopPropagation());
+                zoneBody.addEventListener('click', (e) => e.stopPropagation());
+            }
+
+            if (canMoveZone) {
+                let isDragging = false;
+                let startX = 0, startY = 0;
+                let initLeft = 0, initTop = 0;
+                let childStartPos = [];
+                let childZonesStartPos = [];
+                let descendantZoneIds = [];
+                let allMovedZoneIds = [];
+                let descendantZones = [];
+                let childNodes = [];
+
+                const startZoneDrag = (e) => {
+                    if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
+                    if (e.type === 'touchstart' && e.touches.length > 1) return;
+
+                    window.isDraggingAnything = true;
+                    isDragging = true;
+                    const scale = window.currentScale || 1;
+
+                    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                    initLeft = zone.pos_x;
+                    initTop = zone.pos_y;
+
+                    descendantZoneIds = getAllDescendantZones(zone.id);
+                    allMovedZoneIds = [zone.id, ...descendantZoneIds];
+                    descendantZones = currentZones.filter(z => descendantZoneIds.includes(z.id));
+                    childNodes = currentNodes.filter(n => allMovedZoneIds.includes(n.zone_id));
+
+                    childStartPos = childNodes.map(n => ({ id: n.id, x: n.pos_x, y: n.pos_y }));
+                    childZonesStartPos = descendantZones.map(z => ({ id: z.id, x: z.pos_x, y: z.pos_y }));
+
+                    if (e.cancelable) e.stopPropagation();
+
+                    const onMouseMove = (moveEvent) => {
+                        if (!isDragging) return;
+                        if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+
+                        const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                        const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+                        const dx = (clientX - startX) / scale;
+                        const dy = (clientY - startY) / scale;
+
+                        const newParentX = Math.max(10, Math.round(initLeft + dx));
+                        const newParentY = Math.max(10, Math.round(initTop + dy));
+                        const actualDx = newParentX - initLeft;
+                        const actualDy = newParentY - initTop;
+
+                        zone.pos_x = newParentX;
+                        zone.pos_y = newParentY;
+                        zoneEl.style.left = `${zone.pos_x}px`;
+                        zoneEl.style.top = `${zone.pos_y}px`;
+
+                        descendantZones.forEach((z, idx) => {
+                            z.pos_x = childZonesStartPos[idx].x + actualDx;
+                            z.pos_y = childZonesStartPos[idx].y + actualDy;
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) {
+                                zEl.style.left = `${z.pos_x}px`;
+                                zEl.style.top = `${z.pos_y}px`;
+                            }
                         });
 
-                        if (parentDepth + 1 + maxChildRelativeDepth >= 5) {
-                            showToast('Maximale Verschachtelung von 5 Ebenen erreicht!', 'error');
+                        childNodes.forEach((n, idx) => {
+                            n.pos_x = childStartPos[idx].x + actualDx;
+                            n.pos_y = childStartPos[idx].y + actualDy;
+                            const nEl = document.getElementById(n.id);
+                            if (nEl) {
+                                nEl.style.left = `${n.pos_x}px`;
+                                nEl.style.top = `${n.pos_y}px`;
+                            }
+                        });
+
+                        const headerCenterX = zone.pos_x + (zone.width / 2);
+                        const headerCenterY = zone.pos_y + 20;
+                        const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+
+                        currentZones.forEach(z => {
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) {
+                                if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
+                                else zEl.classList.remove('zone-hover-highlight');
+                            }
+                        });
+
+                        renderConnections();
+                    };
+
+                    const onMouseUp = async () => {
+                        if (!isDragging) return;
+                        isDragging = false;
+
+                        window.removeEventListener('mousemove', onMouseMove);
+                        window.removeEventListener('mouseup', onMouseUp);
+                        window.removeEventListener('touchmove', onMouseMove);
+                        window.removeEventListener('touchend', onMouseUp);
+                        window.removeEventListener('touchcancel', onMouseUp);
+
+                        const headerCenterX = zone.pos_x + (zone.width / 2);
+                        const headerCenterY = zone.pos_y + 20;
+                        const targetZone = getDeepestZoneAt(headerCenterX, headerCenterY, allMovedZoneIds);
+                        const newParentId = targetZone ? targetZone.id : null;
+
+                        if (newParentId) {
+                            const parentDepth = getZoneDepth(newParentId);
+                            let maxChildRelativeDepth = 0;
+                            descendantZoneIds.forEach(id => {
+                                let d = getZoneDepth(id) - getZoneDepth(zone.id);
+                                if (d > maxChildRelativeDepth) maxChildRelativeDepth = d;
+                            });
+
+                            if (parentDepth + 1 + maxChildRelativeDepth >= 5) {
+                                showToast('Maximale Verschachtelung von 5 Ebenen erreicht!', 'error');
+                            } else {
+                                zone.parent_zone_id = newParentId;
+                            }
                         } else {
-                            zone.parent_zone_id = newParentId;
+                            zone.parent_zone_id = null;
                         }
-                    } else {
-                        zone.parent_zone_id = null;
-                    }
 
-                    currentZones.forEach(z => {
-                        const zEl = document.getElementById(z.id);
-                        if (zEl) zEl.classList.remove('zone-hover-highlight');
-                    });
+                        currentZones.forEach(z => {
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) zEl.classList.remove('zone-hover-highlight');
+                        });
 
-                    const updates = childNodes.map(n => db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id));
-                    descendantZones.forEach(z => {
-                        updates.push(db.from('project_zones').update({ pos_x: z.pos_x, pos_y: z.pos_y }).eq('id', z.id));
-                    });
-                    updates.push(db.from('project_zones').update({
-                        pos_x: zone.pos_x,
-                        pos_y: zone.pos_y,
-                        parent_zone_id: zone.parent_zone_id
-                    }).eq('id', zone.id));
+                        const updates = childNodes.map(n => db.from('project_nodes').update({ pos_x: n.pos_x, pos_y: n.pos_y }).eq('id', n.id));
+                        descendantZones.forEach(z => {
+                            updates.push(db.from('project_zones').update({ pos_x: z.pos_x, pos_y: z.pos_y }).eq('id', z.id));
+                        });
+                        updates.push(db.from('project_zones').update({
+                            pos_x: zone.pos_x,
+                            pos_y: zone.pos_y,
+                            parent_zone_id: zone.parent_zone_id
+                        }).eq('id', zone.id));
 
-                    await Promise.all(updates);
+                        await Promise.all(updates);
 
-                    window.isDraggingAnything = false;
-                    if (window.pendingCanvasUpdate) {
-                        window.pendingCanvasUpdate = false;
-                        if (typeof fetchCanvasData === 'function') fetchCanvasData();
-                    } else {
-                        if (typeof renderCanvas === 'function') renderCanvas();
-                        // NEU: Sidebar sofort nach dem Umhängen des Rahmens synchronisieren
-                        if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
-                    }
+                        window.isDraggingAnything = false;
+                        if (window.pendingCanvasUpdate) {
+                            window.pendingCanvasUpdate = false;
+                            if (typeof fetchCanvasData === 'function') fetchCanvasData();
+                        } else {
+                            if (typeof renderCanvas === 'function') renderCanvas();
+                            if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
+                        }
+                    };
+
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
+                    window.addEventListener('touchmove', onMouseMove, { passive: false });
+                    window.addEventListener('touchend', onMouseUp);
+                    window.addEventListener('touchcancel', onMouseUp);
                 };
 
-                window.addEventListener('mousemove', onMouseMove);
-                window.addEventListener('mouseup', onMouseUp);
-                window.addEventListener('touchmove', onMouseMove, { passive: false });
-                window.addEventListener('touchend', onMouseUp);
-                window.addEventListener('touchcancel', onMouseUp);
-            };
+                zoneEl.addEventListener('mousedown', startZoneDrag);
+                zoneEl.addEventListener('touchstart', startZoneDrag, { passive: false });
+            }
 
-            zoneEl.addEventListener('mousedown', startZoneDrag);
-            zoneEl.addEventListener('touchstart', startZoneDrag, { passive: false });
-        }
+            const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
+            if (resizeHandle && (isAdmin || (activeUserCode && activeUserCode === zone.created_by))) {
+                const startZoneResize = (e) => {
+                    if (e.type === 'touchstart' && e.touches.length > 1) return;
+                    if (e.cancelable) e.stopPropagation();
 
-        const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
-        if (resizeHandle && (isAdmin || (activeUserCode && activeUserCode === zone.created_by))) {
-            const startZoneResize = (e) => {
-                if (e.type === 'touchstart' && e.touches.length > 1) return;
-                if (e.cancelable) e.stopPropagation();
+                    window.isDraggingAnything = true;
+                    let isResizing = true;
+                    const scale = window.currentScale || 1;
+                    const startW = zone.width;
+                    const startH = zone.height;
 
-                window.isDraggingAnything = true;
-                let isResizing = true;
-                const scale = window.currentScale || 1;
-                const startW = zone.width;
-                const startH = zone.height;
+                    const startMouseX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    const startMouseY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
 
-                const startMouseX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                const startMouseY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    const onResizeMove = (moveEvent) => {
+                        if (!isResizing) return;
+                        if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
 
-                const onResizeMove = (moveEvent) => {
-                    if (!isResizing) return;
-                    if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
+                        const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+                        const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
 
-                    const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
-                    const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+                        const dw = (clientX - startMouseX) / scale;
+                        const dh = (clientY - startMouseY) / scale;
+                        const newW = Math.max(200, Math.round(startW + dw));
+                        const newH = Math.max(150, Math.round(startH + dh));
+                        zoneEl.style.width = `${newW}px`;
+                        zoneEl.style.height = `${newH}px`;
+                        zone.width = newW;
+                        zone.height = newH;
+                    };
 
-                    const dw = (clientX - startMouseX) / scale;
-                    const dh = (clientY - startMouseY) / scale;
-                    const newW = Math.max(200, Math.round(startW + dw));
-                    const newH = Math.max(150, Math.round(startH + dh));
-                    zoneEl.style.width = `${newW}px`;
-                    zoneEl.style.height = `${newH}px`;
-                    zone.width = newW;
-                    zone.height = newH;
+                    const onResizeUp = async () => {
+                        if (!isResizing) return;
+                        isResizing = false;
+
+                        window.removeEventListener('mousemove', onResizeMove);
+                        window.removeEventListener('mouseup', onResizeUp);
+                        window.removeEventListener('touchmove', onResizeMove);
+                        window.removeEventListener('touchend', onResizeUp);
+                        window.removeEventListener('touchcancel', onResizeUp);
+
+                        await db.from('project_zones').update({ width: zone.width, height: zone.height }).eq('id', zone.id);
+
+                        window.isDraggingAnything = false;
+                        if (window.pendingCanvasUpdate) {
+                            window.pendingCanvasUpdate = false;
+                            fetchCanvasData();
+                        }
+                    };
+
+                    window.addEventListener('mousemove', onResizeMove);
+                    window.addEventListener('mouseup', onResizeUp);
+                    window.addEventListener('touchmove', onResizeMove, { passive: false });
+                    window.addEventListener('touchend', onResizeUp);
+                    window.addEventListener('touchcancel', onResizeUp);
                 };
 
-                const onResizeUp = async () => {
-                    if (!isResizing) return;
-                    isResizing = false;
+                resizeHandle.addEventListener('mousedown', startZoneResize);
+                resizeHandle.addEventListener('touchstart', startZoneResize, { passive: false });
+            }
 
-                    window.removeEventListener('mousemove', onResizeMove);
-                    window.removeEventListener('mouseup', onResizeUp);
-                    window.removeEventListener('touchmove', onResizeMove);
-                    window.removeEventListener('touchend', onResizeUp);
-                    window.removeEventListener('touchcancel', onResizeUp);
-
-                    await db.from('project_zones').update({ width: zone.width, height: zone.height }).eq('id', zone.id);
-
-                    window.isDraggingAnything = false;
-                    if (window.pendingCanvasUpdate) {
-                        window.pendingCanvasUpdate = false;
-                        fetchCanvasData();
-                    }
-                };
-
-                window.addEventListener('mousemove', onResizeMove);
-                window.addEventListener('mouseup', onResizeUp);
-                window.addEventListener('touchmove', onResizeMove, { passive: false });
-                window.addEventListener('touchend', onResizeUp);
-                window.addEventListener('touchcancel', onResizeUp);
-            };
-
-            resizeHandle.addEventListener('mousedown', startZoneResize);
-            resizeHandle.addEventListener('touchstart', startZoneResize, { passive: false });
-        }
-
-        canvas.appendChild(zoneEl);
-    });
+            canvas.appendChild(zoneEl);
+        });
+    }
 
     // 2. KNOTEN / BLÖCKE / NOTIZEN RENDERN
     const originalNodes = currentNodes || [];
