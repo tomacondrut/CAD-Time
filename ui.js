@@ -784,7 +784,41 @@ window.handleAddBlock = async function (e) {
  *     nach Erstellung begrenzt. Ältere Blöcke können nur noch durch Admins gelöscht werden.
  * =============================================================================
  */
-window.openConfigModal = function(nodeId) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Fertigstellungsgrad Sliders mit 50/50 Formel & Rechten)
+ * ERSETZEN IN: ui.js (Funktionen openConfigModal, updateConfigProgressDisplay & handleSaveConfig)
+ * Zeitstempel: 2026-09-17 19:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 18:30:00 CEST]: Löschschutz 60 Min.
+ *   - [2026-09-17 19:00:00 CEST]: 50/50 Slider-Steuerung mit rollenbasierter 
+ *     Rechteprüfung (Admin / CAD-Bearbeiter / Zeichner) und Instanz-Synchronisation.
+ * =============================================================================
+ */
+
+window.updateConfigProgressDisplay = function () {
+    const sD = document.getElementById('editProgressDesign');
+    const sDr = document.getElementById('editProgressDrafting');
+    const valD = parseInt(sD ? sD.value : 0, 10) || 0;
+    const valDr = parseInt(sDr ? sDr.value : 0, 10) || 0;
+
+    const lblD = document.getElementById('editProgressDesignVal');
+    const lblDr = document.getElementById('editProgressDraftingVal');
+    const badgeTot = document.getElementById('editProgressTotalBadge');
+
+    if (lblD) lblD.textContent = `${valD}%`;
+    if (lblDr) lblDr.textContent = `${valDr}%`;
+
+    const totalPct = Math.round((valD * 0.5) + (valDr * 0.5));
+    if (badgeTot) {
+        badgeTot.textContent = `${totalPct}% Gesamt`;
+        badgeTot.style.background = totalPct === 100 ? '#c6f6d5' : (totalPct > 0 ? '#bee3f8' : '#edf2f7');
+        badgeTot.style.color = totalPct === 100 ? '#22543d' : (totalPct > 0 ? '#2b6cb0' : '#4a5568');
+    }
+};
+
+window.openConfigModal = function (nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
 
@@ -797,12 +831,8 @@ window.openConfigModal = function(nodeId) {
     const isCreator = (activeUserCode && activeUserCode === creator);
     const isCreatorOrAdmin = isAdmin || isCreator;
 
-    // Zeitprüfung: Liegt die Erstellung weniger als 60 Minuten zurück?
     const createdAtTime = node.created_at ? new Date(node.created_at).getTime() : 0;
-    const nowTime = Date.now();
-    const isWithinOneHour = (nowTime - createdAtTime) <= (60 * 60 * 1000);
-
-    // Löschen nur für Admin ODER für Ersteller innerhalb 1h ohne gebuchte Zeiten
+    const isWithinOneHour = (Date.now() - createdAtTime) <= (60 * 60 * 1000);
     const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
     document.getElementById('editNodeId').value = node.id;
@@ -842,6 +872,30 @@ window.openConfigModal = function(nodeId) {
         if (assignGroup) assignGroup.style.display = 'none';
     }
 
+    // =========================================================================
+    // SLIDER-INITIALISIERUNG & ROLLENBASIERTE BERECHTIGUNGSPRÜFUNG
+    // =========================================================================
+    const sD = document.getElementById('editProgressDesign');
+    const sDr = document.getElementById('editProgressDrafting');
+    const hintD = document.getElementById('editProgressDesignHint');
+    const hintDr = document.getElementById('editProgressDraftingHint');
+
+    const curD = (node.progress_design !== null && node.progress_design !== undefined) ? node.progress_design : (node.completion_status === 'completed' ? 100 : 0);
+    const curDr = (node.progress_drafting !== null && node.progress_drafting !== undefined) ? node.progress_drafting : (node.completion_status === 'completed' ? 100 : 0);
+
+    if (sD) sD.value = curD;
+    if (sDr) sDr.value = curDr;
+    updateConfigProgressDisplay();
+
+    // Berechtigung: Admin ODER zugewiesene Person der jeweiligen Disziplin
+    const canEditCAD = isAdmin || (activeUserCode && activeUserCode === node.assigned_design_user) || (!node.assigned_design_user && isCreator);
+    const canEditDrafting = isAdmin || (activeUserCode && activeUserCode === node.assigned_drafting_user) || (!node.assigned_drafting_user && isCreator);
+
+    if (sD) sD.disabled = !canEditCAD;
+    if (sDr) sDr.disabled = !canEditDrafting;
+    if (hintD) hintD.style.display = canEditCAD ? 'none' : 'block';
+    if (hintDr) hintDr.style.display = canEditDrafting ? 'none' : 'block';
+
     const btnDel = document.getElementById('btnDeleteBlock');
     const retroBtn = document.getElementById('retroLogAdminBtnContainer');
     const statusGroup = document.getElementById('editStatusGroup');
@@ -860,8 +914,6 @@ window.openConfigModal = function(nodeId) {
     openModal('configModal');
 };
 
-
-
 window.handleSaveConfig = async function (e) {
     e.preventDefault();
     const id = document.getElementById('editNodeId').value;
@@ -879,7 +931,7 @@ window.handleSaveConfig = async function (e) {
     const block_type = document.querySelector('input[name="editBlockType"]:checked').value;
 
     if (doc_number && !/^DOC\d{7}$/.test(doc_number)) {
-        showToast('DOC-Nummer muss das Format DOC + 7 Ziffern haben (z.B. DOC1234567).', 'error');
+        showToast('DOC-Nummer muss das Format DOC + 7 Ziffern haben.', 'error');
         return;
     }
 
@@ -888,7 +940,20 @@ window.handleSaveConfig = async function (e) {
         return;
     }
 
-    const updateData = { name, doc_number, article_number, color_hex, block_type };
+    const sD = document.getElementById('editProgressDesign');
+    const sDr = document.getElementById('editProgressDrafting');
+    const progress_design = sD ? Math.min(100, Math.max(0, parseInt(sD.value, 10) || 0)) : 0;
+    const progress_drafting = sDr ? Math.min(100, Math.max(0, parseInt(sDr.value, 10) || 0)) : 0;
+
+    const updateData = {
+        name,
+        doc_number,
+        article_number,
+        color_hex,
+        block_type,
+        progress_design,
+        progress_drafting
+    };
 
     if (isCreatorOrAdmin) {
         const selDesign = document.getElementById('editAssignedDesignUser');
@@ -907,9 +972,21 @@ window.handleSaveConfig = async function (e) {
         if (statusSelect) updateData.completion_status = statusSelect.value;
     }
 
-    await db.from('project_nodes').update(updateData).eq('id', id);
+    // Wenn der Block verknüpft ist (wiederverwendetes Modul), Fortschritt für alle Instanzen synchronisieren
+    if (node.linked_id) {
+        const relatedNodes = currentNodes.filter(n => n.linked_id === node.linked_id);
+        const updates = relatedNodes.map(rn => {
+            Object.assign(rn, updateData);
+            return db.from('project_nodes').update(updateData).eq('id', rn.id);
+        });
+        await Promise.all(updates);
+    } else {
+        Object.assign(node, updateData);
+        await db.from('project_nodes').update(updateData).eq('id', id);
+    }
+
     closeModal('configModal');
-    showToast('Block aktualisiert', 'success');
+    showToast('Block & Fertigstellungsgrad aktualisiert', 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 

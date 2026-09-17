@@ -1253,10 +1253,43 @@ function renderCanvas() {
         const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
         const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
+        // Aggregierter Rahmenfortschritt
+        const childBlocks = (currentNodes || []).filter(n => n.zone_id === zone.id && n.block_type !== 'note');
+        let zoneProgress = 0;
+        if (childBlocks.length > 0) {
+            let totalWeightedScore = 0;
+            let totalWeights = 0;
+
+            childBlocks.forEach(bn => {
+                const pD = (bn.progress_design !== null && bn.progress_design !== undefined) ? bn.progress_design : (bn.completion_status === 'completed' ? 100 : 0);
+                const pDr = (bn.progress_drafting !== null && bn.progress_drafting !== undefined) ? bn.progress_drafting : (bn.completion_status === 'completed' ? 100 : 0);
+                const bTotalProg = (pD * 0.5) + (pDr * 0.5);
+
+                const bWeight = (parseFloat(bn.budget_design_hours) || 0) + (parseFloat(bn.budget_drafting_hours) || 0) || 1;
+                totalWeightedScore += (bTotalProg * bWeight);
+                totalWeights += bWeight;
+            });
+
+            zoneProgress = Math.round(totalWeightedScore / totalWeights);
+        }
+
         const identifier = zone.article_number || zone.doc_number || '';
         let badgeHtml = '';
-        if (identifier) {
-            badgeHtml = `<div class="assembly-id-badge" style="border-color: ${zone.color_hex || '#a0aec0'};" title="${zone.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
+        if (identifier || childBlocks.length > 0) {
+            const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
+            const barHtml = childBlocks.length > 0 ? `
+                <div class="zone-progress-track" title="Fortschritt Rahmen: ${zoneProgress}%">
+                    <div class="zone-progress-fill" style="width: ${zoneProgress}%; background: ${zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20')};"></div>
+                    <span class="zone-progress-label">${zoneProgress}%</span>
+                </div>
+            ` : '';
+
+            badgeHtml = `
+              <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#a0aec0'};">
+                ${docLabel}
+                ${barHtml}
+              </div>
+            `;
         }
 
         const zLogs = zStats.directLogs || [];
@@ -2173,6 +2206,30 @@ function renderCanvas() {
 
         const typeIconSvg = bType === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
+        // 50/50 Ladebalken-Werte
+        const pDesign = (masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : (masterNode.completion_status === 'completed' ? 100 : 0);
+        const pDrafting = (masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : (masterNode.completion_status === 'completed' ? 100 : 0);
+        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
+        const cadSegmentWidth = Math.round(pDesign * 0.5);
+        const drSegmentWidth = Math.round(pDrafting * 0.5);
+
+        const progressBarHtml = `
+            <div class="block-progress-wrapper" title="CAD: ${pDesign}% (50% Gewicht) | Zeichn: ${pDrafting}% (50% Gewicht)">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 3px; font-size: 10px; font-weight: bold;">
+                    <span style="color:#4a5568;">Fortschritt</span>
+                    <span style="color: ${pTotal === 100 ? '#22543d' : '#2b6cb0'};">${pTotal}%</span>
+                </div>
+                <div class="block-progress-track">
+                    <div class="block-progress-segment cad" style="width: ${cadSegmentWidth}%;"></div>
+                    <div class="block-progress-segment dr" style="width: ${drSegmentWidth}%;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size: 8px; color: #718096; margin-top: 2px;">
+                    <span>3D: ${pDesign}%</span>
+                    <span>2D: ${pDrafting}%</span>
+                </div>
+            </div>
+        `;
+
         el.innerHTML = `
       ${badgeHtml}
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
@@ -2201,6 +2258,7 @@ function renderCanvas() {
       </div>
 
       <div class="assembly-body">
+        ${progressBarHtml}
         <div class="charts-grid">
           <div class="chart-box">
             <div class="pie-chart" style="${dPieStyle}">
