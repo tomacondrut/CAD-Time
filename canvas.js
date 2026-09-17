@@ -99,6 +99,18 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     funktioniert jetzt auch auf den leeren Flächen der Manager-Rahmen.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, Zoom & Events)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-17 23:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 23:05:00 CEST]: Multiplikativer Zoom & Pan-Filter.
+ *   - [2026-09-17 23:15:00 CEST]: BUGFIX: "Event-Swallowing" beim Zoomen behoben. 
+ *     Scroll-Filter auf echte Tabellen (.inline-logs-container, .log-table, .zone-body) reduziert.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -122,18 +134,13 @@ function initNativeCanvasEngine() {
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
 
-        // Blockiert Linksklick-Pan NUR auf Elementen, die selbst greifbar/bedienbar sein müssen.
-        // Der Hintergrund von Rahmen (.project-zone) ist absichtlich NICHT mehr hier gelistet!
         const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
-        // Wenn wir auf ein interaktives Element klicken, Pannen NUR mit Mittelklick(1), Rechtsklick(2) oder Alt+Linksklick erlauben
         if (isInteractive) {
             if (e.button === 0 && !e.altKey) return;
         }
 
-        // Pannen mit Links (0), Mitte (1) oder Rechts (2) zulassen
         if (e.button === 0 || e.button === 1 || e.button === 2) {
-            // e.preventDefault() hier weglassen, sonst brechen z.B. Range-Slider, falls sie doch mal durchrutschen
             startPan(e.clientX, e.clientY);
         }
     });
@@ -189,13 +196,13 @@ function initNativeCanvasEngine() {
     // ZOOMING (Multiplikativ & Maus-zentriert)
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        // Normales Scrollen in aufklappbaren Containern zulassen
-        if (e.target.closest('.zone-body, .assembly-body, .note-card, .struct-tree-body, .log-table') && !e.ctrlKey && !e.metaKey) {
+        // BUGFIX: Normales Scrollen NUR noch in echten Scroll-Containern zulassen!
+        // .assembly-body und .note-card entfernt, damit der Zoom greift.
+        if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
             return;
         }
         e.preventDefault();
 
-        // Multiplikativer Faktor: Fühlt sich geschmeidiger an als lineares Addieren (+/- 0.1)
         const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
         const newScale = Math.min(Math.max(0.05, window.currentScale * zoomFactor), 3.0);
 
@@ -203,11 +210,9 @@ function initNativeCanvasEngine() {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        // Welt-Koordinaten der Maus VOR dem Zoom berechnen
         const worldX = (mouseX - window.currentPanX) / window.currentScale;
         const worldY = (mouseY - window.currentPanY) / window.currentScale;
 
-        // Pan so anpassen, dass die Welt-Koordinate exakt unter dem Cursor bleibt
         window.currentPanX = mouseX - (worldX * newScale);
         window.currentPanY = mouseY - (worldY * newScale);
         window.currentScale = newScale;
