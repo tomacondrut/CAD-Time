@@ -86,6 +86,19 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     Touch-Events für Wisch-Panning auf mobilen Geräten hinzugefügt.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, Zoom & Events)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-17 23:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:50:00 CEST]: Sichere Initialisierung.
+ *   - [2026-09-17 23:05:00 CEST]: 1. Multiplikativer Zoom für weichere & natürlichere 
+ *     Skalierung mit präzisem Maus-Fokus. 2. Panning-Filter verfeinert: Linksklick-Pan
+ *     funktioniert jetzt auch auf den leeren Flächen der Manager-Rahmen.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -103,29 +116,43 @@ function initNativeCanvasEngine() {
         viewport.style.cursor = 'grabbing';
     };
 
-    // Desktop: Mousedown
+    // ---------------------------------------------------------
+    // PANNING (Desktop)
+    // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, .ep-handle, .mgr-prog-slider')) return;
         if (window.isDraggingAnything) return;
+
+        // Blockiert Linksklick-Pan NUR auf Elementen, die selbst greifbar/bedienbar sein müssen.
+        // Der Hintergrund von Rahmen (.project-zone) ist absichtlich NICHT mehr hier gelistet!
+        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+
+        // Wenn wir auf ein interaktives Element klicken, Pannen NUR mit Mittelklick(1), Rechtsklick(2) oder Alt+Linksklick erlauben
+        if (isInteractive) {
+            if (e.button === 0 && !e.altKey) return;
+        }
 
         // Pannen mit Links (0), Mitte (1) oder Rechts (2) zulassen
         if (e.button === 0 || e.button === 1 || e.button === 2) {
-            e.preventDefault();
+            // e.preventDefault() hier weglassen, sonst brechen z.B. Range-Slider, falls sie doch mal durchrutschen
             startPan(e.clientX, e.clientY);
         }
     });
 
-    // Mobile: Touchstart (1 Finger = Pannen)
+    // ---------------------------------------------------------
+    // PANNING (Mobile Touch)
+    // ---------------------------------------------------------
     viewport.addEventListener('touchstart', (e) => {
-        if (e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, .ep-handle, .mgr-prog-slider')) return;
         if (window.isDraggingAnything) return;
+
+        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+        if (isInteractive) return;
 
         if (e.touches.length === 1) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
         }
     }, { passive: false });
 
-    // Move Panning (Maus)
+    // Move
     window.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
         const dx = e.clientX - startX;
@@ -135,11 +162,10 @@ function initNativeCanvasEngine() {
         applyCanvasTransform(false);
     });
 
-    // Move Panning (Touch)
     window.addEventListener('touchmove', (e) => {
         if (!isPanning) return;
         if (e.touches.length === 1) {
-            if (e.cancelable) e.preventDefault(); // Verhindert Browser-Scrollen
+            if (e.cancelable) e.preventDefault();
             const dx = e.touches[0].clientX - startX;
             const dy = e.touches[0].clientY - startY;
             window.currentPanX = startPanX + dx;
@@ -148,42 +174,50 @@ function initNativeCanvasEngine() {
         }
     }, { passive: false });
 
-    // End Panning
+    // Stop
     const stopPan = () => {
         if (isPanning) {
             isPanning = false;
             viewport.style.cursor = 'default';
         }
     };
-
     window.addEventListener('mouseup', stopPan);
     window.addEventListener('touchend', stopPan);
     window.addEventListener('touchcancel', stopPan);
 
-    // Zoom per Mausrad
+    // ---------------------------------------------------------
+    // ZOOMING (Multiplikativ & Maus-zentriert)
+    // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        if (e.target.closest('.zone-body, .assembly-body, .note-card') && !e.ctrlKey && !e.metaKey) {
-            return; // Normales Scrollen in Containern zulassen
+        // Normales Scrollen in aufklappbaren Containern zulassen
+        if (e.target.closest('.zone-body, .assembly-body, .note-card, .struct-tree-body, .log-table') && !e.ctrlKey && !e.metaKey) {
+            return;
         }
         e.preventDefault();
 
-        const zoomIntensity = 0.1;
-        const delta = e.deltaY > 0 ? -zoomIntensity : zoomIntensity;
-        const newScale = Math.min(Math.max(0.05, window.currentScale + delta), 3.0);
+        // Multiplikativer Faktor: Fühlt sich geschmeidiger an als lineares Addieren (+/- 0.1)
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.min(Math.max(0.05, window.currentScale * zoomFactor), 3.0);
 
         const rect = viewport.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        const ratio = newScale / window.currentScale;
-        window.currentPanX = mouseX - (mouseX - window.currentPanX) * ratio;
-        window.currentPanY = mouseY - (mouseY - window.currentPanY) * ratio;
+        // Welt-Koordinaten der Maus VOR dem Zoom berechnen
+        const worldX = (mouseX - window.currentPanX) / window.currentScale;
+        const worldY = (mouseY - window.currentPanY) / window.currentScale;
+
+        // Pan so anpassen, dass die Welt-Koordinate exakt unter dem Cursor bleibt
+        window.currentPanX = mouseX - (worldX * newScale);
+        window.currentPanY = mouseY - (worldY * newScale);
         window.currentScale = newScale;
 
         applyCanvasTransform(false);
     }, { passive: false });
 
-    // Kontextmenü-Trigger
+    // ---------------------------------------------------------
+    // KONTEXTMENÜ
+    // ---------------------------------------------------------
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         if (window.isDraggingAnything || isPanning) return;
