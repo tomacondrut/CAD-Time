@@ -2253,7 +2253,7 @@ function renderCanvas() {
       </div>
 
       <div class="assembly-body">
-        <div class="charts-grid"><div class="charts-grid">
+        <div class="charts-grid">
           <div class="chart-box">
             <div class="pie-chart" style="${dPieStyle}">
               <div class="pie-inner">${dPct}%</div>
