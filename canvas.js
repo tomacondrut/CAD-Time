@@ -75,6 +75,17 @@ window.getCanvasCoords = function (clientX, clientY) {
     };
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, Zoom & Events)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-17 22:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:50:00 CEST]: BUGFIX: Linksklick-Panning auf Hintergrund aktiviert, 
+ *     Touch-Events für Wisch-Panning auf mobilen Geräten hinzugefügt.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -83,22 +94,38 @@ function initNativeCanvasEngine() {
     let startX = 0, startY = 0;
     let startPanX = 0, startPanY = 0;
 
-    // Panning (Mittlere Maustaste, Rechte Maustaste oder Alt+Links)
+    const startPan = (clientX, clientY) => {
+        isPanning = true;
+        startX = clientX;
+        startY = clientY;
+        startPanX = window.currentPanX;
+        startPanY = window.currentPanY;
+        viewport.style.cursor = 'grabbing';
+    };
+
+    // Desktop: Mousedown
     viewport.addEventListener('mousedown', (e) => {
         if (e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, .ep-handle, .mgr-prog-slider')) return;
         if (window.isDraggingAnything) return;
 
-        if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
+        // Pannen mit Links (0), Mitte (1) oder Rechts (2) zulassen
+        if (e.button === 0 || e.button === 1 || e.button === 2) {
             e.preventDefault();
-            isPanning = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startPanX = window.currentPanX;
-            startPanY = window.currentPanY;
-            viewport.style.cursor = 'grabbing';
+            startPan(e.clientX, e.clientY);
         }
     });
 
+    // Mobile: Touchstart (1 Finger = Pannen)
+    viewport.addEventListener('touchstart', (e) => {
+        if (e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, .ep-handle, .mgr-prog-slider')) return;
+        if (window.isDraggingAnything) return;
+
+        if (e.touches.length === 1) {
+            startPan(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }, { passive: false });
+
+    // Move Panning (Maus)
     window.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
         const dx = e.clientX - startX;
@@ -108,12 +135,30 @@ function initNativeCanvasEngine() {
         applyCanvasTransform(false);
     });
 
-    window.addEventListener('mouseup', () => {
+    // Move Panning (Touch)
+    window.addEventListener('touchmove', (e) => {
+        if (!isPanning) return;
+        if (e.touches.length === 1) {
+            if (e.cancelable) e.preventDefault(); // Verhindert Browser-Scrollen
+            const dx = e.touches[0].clientX - startX;
+            const dy = e.touches[0].clientY - startY;
+            window.currentPanX = startPanX + dx;
+            window.currentPanY = startPanY + dy;
+            applyCanvasTransform(false);
+        }
+    }, { passive: false });
+
+    // End Panning
+    const stopPan = () => {
         if (isPanning) {
             isPanning = false;
             viewport.style.cursor = 'default';
         }
-    });
+    };
+
+    window.addEventListener('mouseup', stopPan);
+    window.addEventListener('touchend', stopPan);
+    window.addEventListener('touchcancel', stopPan);
 
     // Zoom per Mausrad
     viewport.addEventListener('wheel', (e) => {
@@ -145,7 +190,7 @@ function initNativeCanvasEngine() {
 
         const menu = document.getElementById('canvasContextMenu');
         if (menu) {
-            contextMenuCoords = getCanvasCoords(e.clientX, e.clientY);
+            contextMenuCoords = window.getCanvasCoords(e.clientX, e.clientY);
 
             const nodeCard = e.target.closest('.assembly-card, .note-card');
             const zoneCard = e.target.closest('.project-zone');
@@ -157,7 +202,6 @@ function initNativeCanvasEngine() {
             menu.style.top = `${e.clientY}px`;
             menu.style.display = 'block';
 
-            // Menüeinträge je nach Modus anpassen
             if (typeof window.updateContextMenuVisibility === 'function') {
                 window.updateContextMenuVisibility(contextTargetNodeId, window.contextTargetZoneId);
             }
@@ -203,10 +247,24 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Initialization Call (stellt sicher, dass Engine lädt)
-document.addEventListener('DOMContentLoaded', () => {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sichere Initialisierung
+ * ERSETZEN IN: canvas.js (Aufruf am Dateiende komplett ersetzen)
+ * Zeitstempel: 2026-09-17 22:50:00 CEST
+ * =============================================================================
+ */
+const initCanvasEngineSafely = () => {
     initNativeCanvasEngine();
     applyCanvasTransform(true);
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCanvasEngineSafely);
+} else {
+    initCanvasEngineSafely();
+}
 
 // =============================================================================
 // VERBINDUNGS-HANDLING & BREADCRUMBS
