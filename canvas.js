@@ -3,16 +3,14 @@
  * Projekt: CAD Time Manager
  * Domain: NATIVE Canvas Engine, Dual-Mode (CAD & Manager) & Hierarchie-Engine
  * ERSETZEN IN: canvas.js (Gesamte Datei)
- * Zeitstempel: 2026-09-17 22:45:00 CEST
+ * Zeitstempel: 2026-09-17 22:50:00 CEST
  * Breadcrumbs:
  *   - [2026-08-23 bis 2026-08-31]: Nativer Canvas, Splines, Materialfluss,
  *     Sticky Notes mit Checklisten, Zonen-Hierarchien & Multi-Selektions-Drag.
- *   - [2026-09-17 22:45:00 CEST]: Vollständige Konsolidierung:
- *     1. CAD-Konstruktionsplan: 100% aller Vor-Sitzungs-Features erhalten
- *        (Multi-Block Drag, Sticky-Notes Checklisten/Resize/Puls, 4 Handles, Splines).
- *     2. Manager-Board: Mehrfach verschachtelte Rahmen (parent_zone_id, synchroner Drag),
- *        dedupliziertes Zeitbudget (Soll/Ist zählt Referenzen nur 1x), voll gewichteter
- *        Fortschritt aller Instanzen, Admin-Slider (50/50) und saubere Artefakt-Isolierung.
+ *   - [2026-09-17 22:45:00 CEST]: Vollständige Konsolidierung: CAD-Konstruktionsplan 
+ *     & Manager-Board mit verschachtelten Rahmen und dedupliziertem Budget.
+ *   - [2026-09-17 22:50:00 CEST]: Wiederherstellung der ursprünglichen Native Pan/Zoom-Engine 
+ *     (Mousewheel, Middle-Click, ContextMenu, Canvas-Coords) unter vollständigem Erhalt aller Erweiterungen.
  * =============================================================================
  */
 
@@ -22,6 +20,7 @@ window.currentPanX = parseFloat(localStorage.getItem('cad_tm_panX')) || 100;
 window.currentPanY = parseFloat(localStorage.getItem('cad_tm_panY')) || 100;
 window.hoveredNodeId = null;
 window.copiedNodeIds = [];
+window.isDraggingAnything = false;
 
 // Dummy-Proxy für Abwärtskompatibilität
 window.panzoomInstance = { getScale: () => window.currentScale };
@@ -31,6 +30,11 @@ let connectingFirstPoint = null;
 let connectingFlowZoneId = null;
 let contextMenuCoords = { x: 100, y: 100 };
 let contextTargetNodeId = null;
+window.contextTargetZoneId = null;
+
+// =============================================================================
+// NATIVE ENGINE: PAN, ZOOM & EVENTS (Wiederhergestellt)
+// =============================================================================
 
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
@@ -61,11 +65,219 @@ function applyCanvasTransform(animate = false) {
     localStorage.setItem('cad_tm_scale', window.currentScale);
 }
 
+window.getCanvasCoords = function (clientX, clientY) {
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return { x: 0, y: 0 };
+    const rect = viewport.getBoundingClientRect();
+    return {
+        x: (clientX - rect.left - window.currentPanX) / window.currentScale,
+        y: (clientY - rect.top - window.currentPanY) / window.currentScale
+    };
+};
+
+function initNativeCanvasEngine() {
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return;
+
+    let isPanning = false;
+    let startX = 0, startY = 0;
+    let startPanX = 0, startPanY = 0;
+
+    // Panning (Mittlere Maustaste, Rechte Maustaste oder Alt+Links)
+    viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, .ep-handle, .mgr-prog-slider')) return;
+        if (window.isDraggingAnything) return;
+
+        if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
+            e.preventDefault();
+            isPanning = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startPanX = window.currentPanX;
+            startPanY = window.currentPanY;
+            viewport.style.cursor = 'grabbing';
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        window.currentPanX = startPanX + dx;
+        window.currentPanY = startPanY + dy;
+        applyCanvasTransform(false);
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isPanning) {
+            isPanning = false;
+            viewport.style.cursor = 'default';
+        }
+    });
+
+    // Zoom per Mausrad
+    viewport.addEventListener('wheel', (e) => {
+        if (e.target.closest('.zone-body, .assembly-body, .note-card') && !e.ctrlKey && !e.metaKey) {
+            return; // Normales Scrollen in Containern zulassen
+        }
+        e.preventDefault();
+
+        const zoomIntensity = 0.1;
+        const delta = e.deltaY > 0 ? -zoomIntensity : zoomIntensity;
+        const newScale = Math.min(Math.max(0.05, window.currentScale + delta), 3.0);
+
+        const rect = viewport.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const ratio = newScale / window.currentScale;
+        window.currentPanX = mouseX - (mouseX - window.currentPanX) * ratio;
+        window.currentPanY = mouseY - (mouseY - window.currentPanY) * ratio;
+        window.currentScale = newScale;
+
+        applyCanvasTransform(false);
+    }, { passive: false });
+
+    // Kontextmenü-Trigger
+    viewport.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (window.isDraggingAnything || isPanning) return;
+
+        const menu = document.getElementById('canvasContextMenu');
+        if (menu) {
+            contextMenuCoords = getCanvasCoords(e.clientX, e.clientY);
+
+            const nodeCard = e.target.closest('.assembly-card, .note-card');
+            const zoneCard = e.target.closest('.project-zone');
+
+            contextTargetNodeId = nodeCard ? nodeCard.id : null;
+            window.contextTargetZoneId = zoneCard ? zoneCard.id : null;
+
+            menu.style.left = `${e.clientX}px`;
+            menu.style.top = `${e.clientY}px`;
+            menu.style.display = 'block';
+
+            // Menüeinträge je nach Modus anpassen
+            if (typeof window.updateContextMenuVisibility === 'function') {
+                window.updateContextMenuVisibility(contextTargetNodeId, window.contextTargetZoneId);
+            }
+        }
+    });
+}
+
+// Global Click um Kontextmenü zu schließen
+window.addEventListener('click', (e) => {
+    const menu = document.getElementById('canvasContextMenu');
+    if (menu && !e.target.closest('#canvasContextMenu')) {
+        menu.style.display = 'none';
+    }
+});
+
+// Tastatur-Shortcuts (Copy/Paste, Escape)
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'Escape') {
+        connectingFirstNodeId = null;
+        connectingFirstPoint = null;
+        window.connectingFirstHandle = null;
+        window.removeEventListener('mousemove', handleLiveSplineMove);
+        renderConnections();
+
+        const menu = document.getElementById('canvasContextMenu');
+        if (menu) menu.style.display = 'none';
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        if (window.selectedNodeIds && window.selectedNodeIds.size > 0) {
+            window.copiedNodeIds = Array.from(window.selectedNodeIds);
+            showToast(`${window.copiedNodeIds.length} Instanz(en) kopiert`, 'info');
+        }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        if (window.copiedNodeIds && window.copiedNodeIds.length > 0) {
+            window.handlePasteNodes();
+        }
+    }
+});
+
+// Initialization Call (stellt sicher, dass Engine lädt)
+document.addEventListener('DOMContentLoaded', () => {
+    initNativeCanvasEngine();
+    applyCanvasTransform(true);
+});
+
+// =============================================================================
+// VERBINDUNGS-HANDLING & BREADCRUMBS
+// =============================================================================
+
 window.handleLiveSplineMove = function (e) {
     if (connectingFirstNodeId) {
         const coords = getCanvasCoords(e.clientX, e.clientY);
         renderConnections(coords);
     }
+};
+
+window.handleEndpointClick = function (e, nodeId, handle) {
+    e.stopPropagation();
+    if (!connectingFirstNodeId) {
+        connectingFirstNodeId = nodeId;
+        window.connectingFirstHandle = handle;
+        connectingFirstPoint = getCanvasCoords(e.clientX, e.clientY);
+        window.addEventListener('mousemove', handleLiveSplineMove);
+        showToast('Ziel-Knoten für Verbindung wählen', 'info');
+    } else {
+        if (connectingFirstNodeId !== nodeId) {
+            if (typeof window.saveConnection === 'function') {
+                window.saveConnection(connectingFirstNodeId, nodeId, window.connectingFirstHandle, handle);
+            }
+        }
+        connectingFirstNodeId = null;
+        connectingFirstPoint = null;
+        window.connectingFirstHandle = null;
+        window.removeEventListener('mousemove', handleLiveSplineMove);
+        renderConnections();
+    }
+};
+
+window.handleDisconnectClick = async function (source, target) {
+    if (await customConfirm("Verbindung löschen", "Möchtest du diese Verbindung wirklich löschen?")) {
+        if (typeof window.deleteConnection === 'function') window.deleteConnection(source, target);
+    }
+};
+
+window.toggleSubtreeCollapse = function (e, nodeId) {
+    if (e) e.stopPropagation();
+    if (!window.collapsedParents) window.collapsedParents = new Set();
+
+    if (window.collapsedParents.has(nodeId)) {
+        window.collapsedParents.delete(nodeId);
+    } else {
+        window.collapsedParents.add(nodeId);
+    }
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+};
+
+window.toggleInlineLogs = function (nodeId) {
+    if (!window.expandedNodes) window.expandedNodes = new Set();
+    if (window.expandedNodes.has(nodeId)) window.expandedNodes.delete(nodeId);
+    else window.expandedNodes.add(nodeId);
+    renderCanvas();
+};
+
+window.isNodeHiddenByAncestor = function (nodeId) {
+    if (!window.collapsedParents || window.collapsedParents.size === 0) return false;
+    let edge = (typeof currentEdges !== 'undefined' ? currentEdges : []).find(e => e.target === nodeId);
+    let currentParentId = edge ? edge.source : null;
+
+    while (currentParentId) {
+        if (window.collapsedParents.has(currentParentId)) return true;
+        let nextEdge = (typeof currentEdges !== 'undefined' ? currentEdges : []).find(e => e.target === currentParentId);
+        currentParentId = nextEdge ? nextEdge.source : null;
+    }
+    return false;
 };
 
 window.toggleNoteCollapse = async function (e, nodeId) {
@@ -347,15 +559,15 @@ function renderCanvas() {
                         ? currentNodes.filter(x => x.linked_id === masterObj.linked_id).map(x => x.id)
                         : [masterObj.id];
 
-                    (currentTimeLogs || []).filter(l => relatedIds.includes(l.node_id)).forEach(l => {
+                    (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => relatedIds.includes(l.node_id)).forEach(l => {
                         if (l.task_type === 'design') zoneSpentD += parseFloat(l.hours) || 0;
                         if (l.task_type === 'drafting') zoneSpentDr += parseFloat(l.hours) || 0;
                     });
                 }
             });
 
-            const zdPieStyle = generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0');
-            const zdrPieStyle = generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169');
+            const zdPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0') : '';
+            const zdrPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169') : '';
             const docLabel = zone.doc_number ? `<span class="badge-doc-text">${escapeHtml(zone.doc_number)}</span>` : '';
 
             zoneEl.innerHTML = `
@@ -371,11 +583,11 @@ function renderCanvas() {
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <div style="display:flex; align-items: center; gap: 4px;" title="CAD Summe (Dedupliziert)">
                         <div class="pie-chart" style="${zdPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
-                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentD)} / ${formatHoursToHM(zoneBudD)}</span>
+                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${typeof formatHoursToHM === 'function' ? formatHoursToHM(zoneSpentD) : zoneSpentD} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(zoneBudD) : zoneBudD}</span>
                     </div>
                     <div style="display:flex; align-items: center; gap: 4px;" title="Zeichnung Summe (Dedupliziert)">
                         <div class="pie-chart" style="${zdrPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
-                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentDr)} / ${formatHoursToHM(zoneBudDr)}</span>
+                        <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${typeof formatHoursToHM === 'function' ? formatHoursToHM(zoneSpentDr) : zoneSpentDr} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(zoneBudDr) : zoneBudDr}</span>
                     </div>
                     <div class="zone-actions" style="display:flex; gap:4px; margin-left:6px;">
                         <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="window.toggleManagerZoneLock(event, '${zone.id}')">${isLocked ? '🔒' : '🔓'}</button>
@@ -492,7 +704,7 @@ function renderCanvas() {
                         const targetDropZone = getDeepestMgrZoneAt(headerCenterX, headerCenterY, allMovedZoneIds, mgrLayout.zones);
 
                         zone.parent_zone_id = targetDropZone ? targetDropZone.id : null;
-                        saveManagerLayout(mgrLayout);
+                        if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
                         renderCanvas();
                     };
 
@@ -535,7 +747,7 @@ function renderCanvas() {
                         window.isDraggingAnything = false;
                         window.removeEventListener('mousemove', onRMove);
                         window.removeEventListener('mouseup', onRUp);
-                        saveManagerLayout(mgrLayout);
+                        if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
                         renderCanvas();
                     };
 
@@ -550,7 +762,7 @@ function renderCanvas() {
         // HAUPT-CANVAS (CAD ZONEN)
         const nodeDirectStats = {};
         (currentNodes || []).forEach(n => {
-            const logs = (currentTimeLogs || []).filter(l => l.node_id === n.id);
+            const logs = (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => l.node_id === n.id);
             let dSpent = 0, drSpent = 0;
             logs.forEach(l => {
                 if (l.task_type === 'design') dSpent += parseFloat(l.hours) || 0;
@@ -566,7 +778,7 @@ function renderCanvas() {
 
         const zoneRollups = {};
         (currentZones || []).forEach(z => {
-            const zLogs = (currentTimeLogs || []).filter(l => l.zone_id === z.id || l.node_id === z.id);
+            const zLogs = (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => l.zone_id === z.id || l.node_id === z.id);
             let dSpentDirect = 0, drSpentDirect = 0;
             zLogs.forEach(l => {
                 if (l.task_type === 'design') dSpentDirect += parseFloat(l.hours) || 0;
@@ -616,7 +828,12 @@ function renderCanvas() {
         sortedZones.forEach(zone => {
             const zoneEl = document.createElement('div');
             zoneEl.id = zone.id;
-            const canMoveZone = (isAdmin || (activeUserCode && activeUserCode === zone.created_by)) && !zone.is_locked;
+
+            // Check Admin / User
+            const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : '';
+            const isAdminUser = typeof isAdmin !== 'undefined' ? isAdmin : false;
+
+            const canMoveZone = (isAdminUser || (uCode && uCode === zone.created_by)) && !zone.is_locked;
             const isZoneExpanded = window.expandedZones && window.expandedZones.has(zone.id);
 
             zoneEl.className = `project-zone ${zone.is_locked ? 'zone-locked' : 'no-pan'} ${canMoveZone ? 'draggable-enabled' : ''}`;
@@ -628,8 +845,8 @@ function renderCanvas() {
             zoneEl.style.zIndex = isZoneExpanded ? '2500' : 'auto';
 
             const zStats = zoneRollups[zone.id] || { dSpent: 0, dBudg: 0, drSpent: 0, drBudg: 0, directLogs: [] };
-            const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
-            const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
+            const zdPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0') : '';
+            const zdrPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169') : '';
 
             const allZoneIds = [zone.id, ...(typeof getAllDescendantZones === 'function' ? getAllDescendantZones(zone.id) : [])];
             const childBlocks = (currentNodes || []).filter(n => allZoneIds.includes(n.zone_id) && n.block_type !== 'note');
@@ -654,7 +871,7 @@ function renderCanvas() {
             const identifier = zone.article_number || zone.doc_number || '';
             let badgeHtml = '';
             if (identifier || childBlocks.length > 0) {
-                const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
+                const docLabel = identifier ? `<span class="badge-doc-text">${typeof escapeHtml === 'function' ? escapeHtml(identifier) : identifier}</span>` : '';
                 const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
                 badgeHtml = `
                     <div class="assembly-id-badge zone-badge-container" style="border-color: ${zone.color_hex || '#a0aec0'};">
@@ -680,16 +897,17 @@ function renderCanvas() {
                         const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
                         const kat = log.task_type === 'design' ? 'CAD' : 'Zeichn.';
                         const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
-                        const canDel = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
+                        const canDel = isAdminUser || (log.status === 'pending' && log.user_code === uCode);
                         const delHtml = canDel ? `<span class="btn-delete-log" title="Löschen" onclick="handleDeleteLog('${log.id}')">✕</span>` : '';
-                        const noteHtml = log.note ? `<span class="info-tooltip-trigger" style="font-size:10px;">ℹ️<span class="tooltip-overlay">${escapeHtml(log.note)}</span></span>` : '';
+                        const escNote = typeof escapeHtml === 'function' ? escapeHtml(log.note) : log.note;
+                        const noteHtml = log.note ? `<span class="info-tooltip-trigger" style="font-size:10px;">ℹ️<span class="tooltip-overlay">${escNote}</span></span>` : '';
 
                         tableRows += `
                           <tr>
-                            <td><strong>${escapeHtml(log.user_code)}</strong></td>
+                            <td><strong>${typeof escapeHtml === 'function' ? escapeHtml(log.user_code) : log.user_code}</strong></td>
                             <td>${dateStr}</td>
                             <td>${kat}</td>
-                            <td>${formatHoursToHM(log.hours)} ${noteHtml}</td>
+                            <td>${typeof formatHoursToHM === 'function' ? formatHoursToHM(log.hours) : log.hours} ${noteHtml}</td>
                             <td>${badge} ${delHtml}</td>
                           </tr>`;
                     });
@@ -703,32 +921,34 @@ function renderCanvas() {
 
             let assignedBadgesHtml = '';
             if (zone.assigned_design_user) {
-                assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px;" title="CAD: ${escapeHtml(zone.assigned_design_user)}">3D <strong>${escapeHtml(zone.assigned_design_user)}</strong></span>`;
+                assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:6px;" title="CAD: ${typeof escapeHtml === 'function' ? escapeHtml(zone.assigned_design_user) : zone.assigned_design_user}">3D <strong>${typeof escapeHtml === 'function' ? escapeHtml(zone.assigned_design_user) : zone.assigned_design_user}</strong></span>`;
             }
             if (zone.assigned_drafting_user) {
-                assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px;" title="Zeichnung: ${escapeHtml(zone.assigned_drafting_user)}">📄 <strong>${escapeHtml(zone.assigned_drafting_user)}</strong></span>`;
+                assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:4px;" title="Zeichnung: ${typeof escapeHtml === 'function' ? escapeHtml(zone.assigned_drafting_user) : zone.assigned_drafting_user}">📄 <strong>${typeof escapeHtml === 'function' ? escapeHtml(zone.assigned_drafting_user) : zone.assigned_drafting_user}</strong></span>`;
             }
 
-            let zIcon = CAD_ICONS ? CAD_ICONS.location : '📍';
-            if (zone.zone_type === 'assembly') zIcon = CAD_ICONS ? CAD_ICONS.assembly : '📦';
-            else if (zone.zone_type === 'comment') zIcon = CAD_ICONS ? CAD_ICONS.comment : '💬';
-            else if (zone.zone_type === 'container') zIcon = CAD_ICONS ? CAD_ICONS.container : '⬚';
+            let zIcon = typeof CAD_ICONS !== 'undefined' ? CAD_ICONS.location : '📍';
+            if (zone.zone_type === 'assembly') zIcon = typeof CAD_ICONS !== 'undefined' ? CAD_ICONS.assembly : '📦';
+            else if (zone.zone_type === 'comment') zIcon = typeof CAD_ICONS !== 'undefined' ? CAD_ICONS.comment : '💬';
+            else if (zone.zone_type === 'container') zIcon = typeof CAD_ICONS !== 'undefined' ? CAD_ICONS.container : '⬚';
+
+            const escTitle = typeof escapeHtml === 'function' ? escapeHtml(zone.title) : zone.title;
 
             zoneEl.innerHTML = `
               ${badgeHtml}
               <div class="project-zone-header no-pan" style="position: relative; z-index: 50; border-bottom-color: ${zone.color_hex || '#a0aec0'}; padding-right: 140px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; padding: 8px 12px;">
                 <div style="display:flex; align-items:center; overflow: hidden; white-space: nowrap; max-width: 100%;">
-                  <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(zone.title)}">${zIcon} ${escapeHtml(zone.title)}</span>
+                  <span style="font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escTitle}">${zIcon} ${escTitle}</span>
                   ${assignedBadgesHtml}
                 </div>
                 <div style="display:flex; gap: 24px; align-items: center; margin-top: 1px;">
                     <div style="display:flex; align-items: center; gap: 6px;" title="CAD Budget">
                         <div class="pie-chart" style="${zdPieStyle}; width: 22px; height: 22px;"><div class="pie-inner" style="width: 14px; height: 14px;"></div></div>
-                        <span style="color: #718096; font-family: monospace; font-size: 10px;">${formatHoursToHM(zStats.dSpent)} / ${formatHoursToHM(zStats.dBudg)}</span>
+                        <span style="color: #718096; font-family: monospace; font-size: 10px;">${typeof formatHoursToHM === 'function' ? formatHoursToHM(zStats.dSpent) : zStats.dSpent} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(zStats.dBudg) : zStats.dBudg}</span>
                     </div>
                     <div style="display:flex; align-items: center; gap: 6px;" title="Zeichnung Budget">
                         <div class="pie-chart" style="${zdrPieStyle}; width: 22px; height: 22px;"><div class="pie-inner" style="width: 14px; height: 14px;"></div></div>
-                        <span style="color: #718096; font-family: monospace; font-size: 10px;">${formatHoursToHM(zStats.drSpent)} / ${formatHoursToHM(zStats.drBudg)}</span>
+                        <span style="color: #718096; font-family: monospace; font-size: 10px;">${typeof formatHoursToHM === 'function' ? formatHoursToHM(zStats.drSpent) : zStats.drSpent} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(zStats.drBudg) : zStats.drBudg}</span>
                     </div>
                     <button type="button" class="zone-btn btn-toggle-zone-times" title="Zeiten auf Rahmen buchen & Details" style="padding: 2px 7px; font-weight: bold; border: 1px solid #cbd5e0; border-radius: 4px; background: #fff; flex-shrink: 0; font-size: 11px;">⏱️ Zeiten</button>
                 </div>
@@ -736,14 +956,14 @@ function renderCanvas() {
                   <button type="button" class="zone-flow-btn" title="Materialfluss-Pfeil ziehen" onclick="handleStartZoneFlow(event, '${zone.id}')">➔ Fluss</button>
                   <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="toggleZoneLock(event, '${zone.id}')">${zone.is_locked ? '🔒' : '🔓'}</button>
                   <button type="button" class="zone-btn" title="Bearbeiten" onclick="openEditZoneModal('${zone.id}')">✏️</button>
-                  ${isAdmin || (activeUserCode && activeUserCode === zone.created_by) ? `<button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>` : ''}
+                  ${isAdminUser || (uCode && uCode === zone.created_by) ? `<button type="button" class="zone-btn" style="color:#e53e3e;" title="Löschen" onclick="handleDeleteZone('${zone.id}')">✕</button>` : ''}
                 </div>
               </div>
               ${isZoneExpanded ? `
               <div class="zone-body no-pan" style="position: absolute; top: 56px; left: 10px; z-index: 2500; background: rgba(255, 255, 255, 0.98); padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; pointer-events: auto; box-shadow: 0 6px 16px rgba(0,0,0,0.18); width: 420px; max-width: 420px;">
                 <form class="log-form" onsubmit="handleZoneLog(event, '${zone.id}')">
                   <div class="time-inputs-row">
-                    <select class="log-input" style="font-weight: bold; width: 60px;"><option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option></select>
+                    <select class="log-input" style="font-weight: bold; width: 60px;"><option value="${uCode}">${uCode || 'KÜR'}</option></select>
                     <select class="log-input" style="width: 75px;"><option value="drafting">Zeichn.</option><option value="design">CAD</option></select>
                     <input type="number" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" required />
                     <span>h</span>
@@ -929,7 +1149,7 @@ function renderCanvas() {
             }
 
             const resizeHandle = zoneEl.querySelector('.zone-resize-handle');
-            if (resizeHandle && (isAdmin || (activeUserCode && activeUserCode === zone.created_by))) {
+            if (resizeHandle && (isAdminUser || (uCode && uCode === zone.created_by))) {
                 const startZoneResize = (e) => {
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
                     if (e.cancelable) e.stopPropagation();
@@ -1006,6 +1226,9 @@ function renderCanvas() {
         return a.originalIdx - b.originalIdx;
     }).map(wrapper => wrapper.node);
 
+    const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : '';
+    const isAdminUser = typeof isAdmin !== 'undefined' ? isAdmin : false;
+
     sortedNodes.forEach(node => {
         const isNote = (node.block_type === 'note' || node.doc_number === 'NOTE' || node.doc_number === 'TODO');
 
@@ -1018,10 +1241,10 @@ function renderCanvas() {
         if (isNote) {
             const isPrivate = node.article_number === 'private';
             const isTodo = node.doc_number === 'TODO';
-            const userCode = (activeUserCode || '').toUpperCase();
+            const userCode = (uCode || '').toUpperCase();
             const noteCreator = (node.created_by || '').toUpperCase();
 
-            if (isPrivate && noteCreator !== userCode && !isAdmin) return;
+            if (isPrivate && noteCreator !== userCode && !isAdminUser) return;
 
             const isCollapsed = node.completion_status === 'collapsed';
             let noteW = parseFloat(node.budget_design_hours) || 220;
@@ -1052,7 +1275,7 @@ function renderCanvas() {
 
             const el = document.createElement('div');
             el.id = node.id;
-            const canDrag = isAdmin || (userCode === noteCreator);
+            const canDrag = isAdminUser || (userCode === noteCreator);
 
             el.className = `note-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isDimmed ? 'node-dimmed' : ''} ${isOverdue ? 'note-overdue' : ''}`;
             el.style.left = `${node.pos_x}px`;
@@ -1080,7 +1303,7 @@ function renderCanvas() {
 
             let assignedHtml = '';
             if (node.assigned_design_user) {
-                assignedHtml = `<span class="author-badge" style="background:#2b6cb0; font-size:8px; padding:0 3px;" title="Zugewiesen an: ${escapeHtml(node.assigned_design_user)}">👤 <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
+                assignedHtml = `<span class="author-badge" style="background:#2b6cb0; font-size:8px; padding:0 3px;" title="Zugewiesen an: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}">👤 <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}</strong></span>`;
             }
 
             let dueBadgeHtml = '';
@@ -1094,7 +1317,7 @@ function renderCanvas() {
             }
 
             if (isCollapsed) {
-                el.innerHTML = `<div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${escapeHtml(noteData.text || 'Notiz')}">${typeIcon}</div>`;
+                el.innerHTML = `<div style="font-size:18px; line-height:1; pointer-events:none; user-select:none;" title="${typeof escapeHtml === 'function' ? escapeHtml(noteData.text || 'Notiz') : 'Notiz'}">${typeIcon}</div>`;
             } else {
                 let checklistHtml = '';
                 if (isTodo && noteData.items && noteData.items.length > 0) {
@@ -1103,18 +1326,20 @@ function renderCanvas() {
                         checklistHtml += `
                             <div class="note-todo-item ${item.done ? 'done' : ''}">
                                 <input type="checkbox" ${item.done ? 'checked' : ''} onchange="handleToggleTodoItem(event, '${node.id}', ${idx})" />
-                                <span style="word-break: break-word;">${escapeHtml(item.text)}</span>
+                                <span style="word-break: break-word;">${typeof escapeHtml === 'function' ? escapeHtml(item.text) : item.text}</span>
                             </div>
                         `;
                     });
                     checklistHtml += `</div>`;
                 }
 
+                const escCreator = typeof escapeHtml === 'function' ? escapeHtml(node.created_by || 'COT') : (node.created_by || 'COT');
+                const escText = typeof escapeHtml === 'function' ? escapeHtml(noteData.text) : noteData.text;
                 el.innerHTML = `
                     <div style="pointer-events: none; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:10px; font-weight:bold; color:#4a5568; border-bottom:1px solid rgba(0,0,0,0.08); padding-bottom:3px;">
                         <div style="display:flex; align-items:center; gap:4px; overflow:hidden;">
                             <span title="${isTodo ? 'To-Do Liste' : 'Reine Notiz'}">${typeIcon}</span>
-                            <span>${escapeHtml(node.created_by || 'COT')}</span>
+                            <span>${escCreator}</span>
                             ${assignedHtml}
                             ${progressBadge}
                             ${dueBadgeHtml}
@@ -1124,7 +1349,7 @@ function renderCanvas() {
                             <span onclick="toggleNoteCollapse(event, '${node.id}')" style="cursor:pointer; opacity:0.6; font-size:10px; border:1px solid rgba(0,0,0,0.1); border-radius:3px; padding:0 3px;" title="Zuklappen">−</span>
                         </div>
                     </div>
-                    <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:11px; color:#2d3748; flex-shrink: 0;">${escapeHtml(noteData.text)}</div>
+                    <div style="pointer-events: none; white-space: pre-wrap; word-break: break-word; font-size:11px; color:#2d3748; flex-shrink: 0;">${escText}</div>
                     ${checklistHtml}
                     ${canDrag ? '<div class="note-resize-handle no-pan" title="Größe anpassen"></div>' : ''}
                 `;
@@ -1329,8 +1554,8 @@ function renderCanvas() {
         const dPct = dBudg > 0 ? Math.round((dSpentAgg / dBudg) * 100) : 0;
         const drPct = drBudg > 0 ? Math.round((drSpentAgg / drBudg) * 100) : 0;
 
-        const dPieStyle = generatePieStyle(dSpentAgg, dBudg, nodeColor);
-        const drPieStyle = generatePieStyle(drSpentAgg, drBudg, '#38a169');
+        const dPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(dSpentAgg, dBudg, nodeColor) : '';
+        const drPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(drSpentAgg, drBudg, '#38a169') : '';
 
         const isBlockDone = masterNode.completion_status === 'completed';
         const pDesign = isBlockDone ? 100 : ((masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : 0);
@@ -1340,7 +1565,7 @@ function renderCanvas() {
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
         if (identifier || pTotal > 0 || isBlockDone) {
-            const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
+            const docLabel = identifier ? `<span class="badge-doc-text">${typeof escapeHtml === 'function' ? escapeHtml(identifier) : identifier}</span>` : '';
             const barColor = pTotal === 100 ? '#38a169' : (pTotal > 50 ? '#3182ce' : '#dd6b20');
             badgeHtml = `
               <div class="assembly-id-badge zone-badge-container" style="border-color: ${nodeColor};">
@@ -1358,10 +1583,10 @@ function renderCanvas() {
         const isSelected = window.selectedNodeIds.has(node.id);
 
         const creator = node.created_by || 'COT';
-        const canDrag = isAdmin || (activeUserCode && activeUserCode === creator);
+        const canDrag = isAdminUser || (uCode && uCode === creator);
         const isExpanded = window.expandedNodes && window.expandedNodes.has(node.id);
 
-        const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
+        const isUserAssigned = (node.assigned_design_user === uCode) || (node.assigned_drafting_user === uCode);
         const isDimmed = !isManagerMode && window.personalFilterActive && !isUserAssigned;
 
         const el = document.createElement('div');
@@ -1380,28 +1605,27 @@ function renderCanvas() {
 
         let assignedBadgesHtml = '';
         if (node.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px;" title="CAD: ${escapeHtml(node.assigned_design_user)}">3D <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px;" title="CAD: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}">3D <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}</strong></span>`;
         }
         if (node.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px;" title="Zeichnung: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px;" title="Zeichnung: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}">📄 <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}</strong></span>`;
         }
 
-        const dStr = isMaster ? `${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)}` : `(${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)})`;
-        const drStr = isMaster ? `${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)}` : `(${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)})`;
+        const dStr = isMaster ? `${typeof formatHoursToHM === 'function' ? formatHoursToHM(dSpentAgg) : dSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(dBudg) : dBudg}` : `(${typeof formatHoursToHM === 'function' ? formatHoursToHM(dSpentAgg) : dSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(dBudg) : dBudg})`;
+        const drStr = isMaster ? `${typeof formatHoursToHM === 'function' ? formatHoursToHM(drSpentAgg) : drSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(drBudg) : drBudg}` : `(${typeof formatHoursToHM === 'function' ? formatHoursToHM(drSpentAgg) : drSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(drBudg) : drBudg})`;
 
         // =====================================================================
         // HTML-INHALT FÜR MANAGER-BOARD VS. HAUPT-CANVAS
         // =====================================================================
         if (isManagerMode) {
             let progressControlsHtml = '';
-            if (isAdmin) {
+            if (isAdminUser) {
                 progressControlsHtml = `
                   <div class="mgr-progress-box" style="margin-top: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px;" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                       <span style="font-size:9px; font-weight:bold; text-transform:uppercase; color:#4a5568;">Fertigstellungsgrad (50/50)</span>
                       <span id="mgr-tot-badge-${node.id}" style="font-size:10px; font-weight:bold; padding:1px 6px; border-radius:10px; background:${pTotal === 100 ? '#c6f6d5' : (pTotal > 50 ? '#bee3f8' : '#edf2f7')}; color:${pTotal === 100 ? '#22543d' : (pTotal > 50 ? '#2b6cb0' : '#4a5568')};">${pTotal}% Gesamt</span>
                     </div>
-
                     <div style="margin-bottom: 4px;">
                       <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:#2b6cb0; margin-bottom:1px;">
                         <span>📐 CAD (3D)</span>
@@ -1412,7 +1636,6 @@ function renderCanvas() {
                         oninput="window.handleManagerProgressInput('${node.id}', 'design', this.value)"
                         onchange="window.handleManagerProgressChange('${node.id}', 'design', this.value)" />
                     </div>
-
                     <div>
                       <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:#38a169; margin-bottom:1px;">
                         <span>📄 Zeichnung (2D)</span>
@@ -1440,11 +1663,13 @@ function renderCanvas() {
                 `;
             }
 
+            const escNodeName = typeof escapeHtml === 'function' ? escapeHtml(node.name) : node.name;
+
             el.innerHTML = `
               ${badgeHtml}
               <div class="assembly-header" style="background: ${nodeColor}; display: flex; justify-content: space-between; align-items: center; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 6px 10px;">
-                <span style="overflow: hidden; text-overflow: ellipsis; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-weight: bold;" title="${escapeHtml(node.name)}">
-                  ${typeIconSvg} ${escapeHtml(node.name)}
+                <span style="overflow: hidden; text-overflow: ellipsis; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-weight: bold;" title="${escNodeName}">
+                  ${typeIconSvg} ${escNodeName}
                 </span>
                 <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
                   ${linkedIconHtml}
@@ -1455,12 +1680,12 @@ function renderCanvas() {
                   <div class="chart-box">
                     <div class="pie-chart" style="${dPieStyle}"><div class="pie-inner">${dPct}%</div></div>
                     <div class="chart-label">CAD</div>
-                    <div class="chart-sub">${formatHoursToHM(dSpentAgg)} / ${formatHoursToHM(dBudg)}</div>
+                    <div class="chart-sub">${typeof formatHoursToHM === 'function' ? formatHoursToHM(dSpentAgg) : dSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(dBudg) : dBudg}</div>
                   </div>
                   <div class="chart-box">
                     <div class="pie-chart" style="${drPieStyle}"><div class="pie-inner">${drPct}%</div></div>
                     <div class="chart-label">Zeichnung</div>
-                    <div class="chart-sub">${formatHoursToHM(drSpentAgg)} / ${formatHoursToHM(drBudg)}</div>
+                    <div class="chart-sub">${typeof formatHoursToHM === 'function' ? formatHoursToHM(drSpentAgg) : drSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(drBudg) : drBudg}</div>
                   </div>
                 </div>
                 ${progressControlsHtml}
@@ -1469,13 +1694,13 @@ function renderCanvas() {
         } else {
             // Reguläre CAD-Karte mit Handles, Subtree-Toggle, Quick-Logging & Inline-Logs
             const typeLabel = node.block_type === 'part' ? 'Bauteil' : 'Baugruppe';
-            const hasChildren = (currentEdges || []).some(e => e.source === node.id);
+            const hasChildren = (typeof currentEdges !== 'undefined' ? currentEdges : []).some(e => e.source === node.id);
             const isSubtreeCollapsed = window.collapsedParents.has(node.id);
 
             let subtreeBtnHtml = '';
             if (hasChildren) {
                 subtreeBtnHtml = `
-                    <button type="button" class="btn-tree-toggle" title="${isSubtreeCollapsed ? 'Untergeordnete Blöcke einblenden' : 'Untergeordnete Blöcke ausblenden'}" onclick="toggleSubtreeCollapse(event, '${node.id}')">
+                    <button type="button" class="btn-tree-toggle" title="${isSubtreeCollapsed ? 'Untergeordnete Blöcke einblenden' : 'Untergeordnete Blöcke ausblenden'}" onclick="window.toggleSubtreeCollapse(event, '${node.id}')">
                       ${isSubtreeCollapsed ? '＋' : '－'}
                     </button>
                 `;
@@ -1486,20 +1711,20 @@ function renderCanvas() {
             if (masterNode.completion_status === 'completed') {
                 statusIcon = ' <span title="Erledigt">✅</span>';
                 completionBtnHtml = `<span style="font-size: 10px; color: #38a169; font-weight: bold;">✅ Erledigt</span>`;
-                if (isAdmin) {
+                if (isAdminUser) {
                     completionBtnHtml += ` <button type="button" style="margin-left:6px; background:none; border:1px solid #e53e3e; color:#e53e3e; border-radius:3px; font-size:9px; cursor:pointer; padding:1px 4px;" onclick="handleRevokeCompletion('${node.id}')">↺ Revision</button>`;
                 }
             } else if (masterNode.completion_status === 'pending_approval') {
                 statusIcon = ' <span title="Wartet auf Freigabe">⏳</span>';
                 completionBtnHtml = `<span style="font-size: 10px; color: #d69e2e; font-weight: bold;">⏳ Freigabe...</span>`;
-                if (isAdmin) {
+                if (isAdminUser) {
                     completionBtnHtml += ` <button type="button" style="margin-left:6px; background:none; border:1px solid #e53e3e; color:#e53e3e; border-radius:3px; font-size:9px; cursor:pointer; padding:1px 4px;" onclick="handleRevokeCompletion('${node.id}')">✖ Ablehnen</button>`;
                 }
             } else {
                 completionBtnHtml = `<button type="button" style="background:none; border:none; color:#38a169; cursor:pointer; font-size:11px; font-weight:bold;" onclick="handleRequestCompletion('${node.id}')">✔ Fertigmelden</button>`;
             }
 
-            const nodeLogs = (currentTimeLogs || []).filter(l => relatedNodeIds.includes(l.node_id));
+            const nodeLogs = (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => relatedNodeIds.includes(l.node_id));
             let inlineLogsHtml = '';
 
             if (isExpanded) {
@@ -1517,29 +1742,30 @@ function renderCanvas() {
                         const kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
                         const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
 
-                        let timeFormatted = formatHoursToHM(log.hours);
+                        let timeFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(log.hours) : log.hours;
                         if (log.task_type === 'completion') {
                             timeFormatted = log.note && (log.note.includes('Revision') || log.note.includes('Ablehnen')) ? '↺' : '✔';
                         }
 
                         let noteIconHtml = '';
                         if (log.note && log.note.trim() !== '') {
+                            const escLogNote = typeof escapeHtml === 'function' ? escapeHtml(log.note) : log.note;
                             noteIconHtml = `
                                 <span class="info-tooltip-trigger">ℹ️
-                                    <span class="tooltip-overlay">${escapeHtml(log.note)}</span>
+                                    <span class="tooltip-overlay">${escLogNote}</span>
                                 </span>
                             `;
                         }
 
                         let deleteActionHtml = '';
-                        const canDeleteLog = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
+                        const canDeleteLog = isAdminUser || (log.status === 'pending' && log.user_code === uCode);
                         if (canDeleteLog) {
                             deleteActionHtml = `<span class="btn-delete-log" title="Eintrag löschen" onclick="handleDeleteLog('${log.id}')">✕</span>`;
                         }
 
                         tableRows += `
                             <tr>
-                                <td><strong>${escapeHtml(log.user_code)}</strong></td>
+                                <td><strong>${typeof escapeHtml === 'function' ? escapeHtml(log.user_code) : log.user_code}</strong></td>
                                 <td>${dateStr}</td>
                                 <td>${kat}</td>
                                 <td>${timeFormatted} ${noteIconHtml}</td>
@@ -1567,19 +1793,23 @@ function renderCanvas() {
                 }
             }
 
+            const escNodeName = typeof escapeHtml === 'function' ? escapeHtml(node.name) : node.name;
+            const escCreator = typeof escapeHtml === 'function' ? escapeHtml(creator) : creator;
+            const escTypeLabel = typeof escapeHtml === 'function' ? escapeHtml(typeLabel) : typeLabel;
+
             el.innerHTML = `
               ${badgeHtml}
-              <div id="ep-top-${node.id}" class="ep-handle ep-top" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
-              <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
-              <div id="ep-left-${node.id}" class="ep-handle ep-left" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
-              <div id="ep-right-${node.id}" class="ep-handle ep-right" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
+              <div id="ep-top-${node.id}" class="ep-handle ep-top" title="Knotenpunkt oben" onclick="window.handleEndpointClick(event, '${node.id}', 'top')"></div>
+              <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom" title="Knotenpunkt unten" onclick="window.handleEndpointClick(event, '${node.id}', 'bottom')"></div>
+              <div id="ep-left-${node.id}" class="ep-handle ep-left" title="Knotenpunkt links" onclick="window.handleEndpointClick(event, '${node.id}', 'left')"></div>
+              <div id="ep-right-${node.id}" class="ep-handle ep-right" title="Knotenpunkt rechts" onclick="window.handleEndpointClick(event, '${node.id}', 'right')"></div>
 
               <div class="assembly-header" style="background: ${nodeColor}; flex-direction: column; align-items: stretch; gap: 6px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                   <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex: 1;">
                     ${subtreeBtnHtml}
-                    <span style="overflow: hidden; text-overflow: ellipsis; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" title="${escapeHtml(node.name)}">
-                      ${typeIconSvg} <strong>${escapeHtml(node.name)}</strong>
+                    <span style="overflow: hidden; text-overflow: ellipsis; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" title="${escNodeName}">
+                      ${typeIconSvg} <strong>${escNodeName}</strong>
                     </span>
                   </div>
                   <div style="flex-shrink: 0; margin-left: 6px; display: flex; align-items: center; gap: 4px;">
@@ -1590,7 +1820,7 @@ function renderCanvas() {
                   <div style="display: flex; gap: 4px; overflow: hidden;">
                     ${assignedBadgesHtml}
                   </div>
-                  <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${typeLabel} | Ersteller: ${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
+                  <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${escTypeLabel} | Ersteller: ${escCreator}">${escTypeLabel} [${escCreator}]</span>
                 </div>
               </div>
 
@@ -1616,7 +1846,7 @@ function renderCanvas() {
                 <form class="log-form" onsubmit="handleLog(event, '${masterNode.id}')">
                   <div class="time-inputs-row">
                     <select class="log-input" style="font-weight: bold; width: 60px;">
-                      <option value="${activeUserCode}">${activeUserCode || 'KÜR'}</option>
+                      <option value="${uCode}">${uCode || 'KÜR'}</option>
                     </select>
                     <select class="log-input" style="width: 75px;">
                       <option value="drafting">Zeichn.</option>
@@ -1635,7 +1865,7 @@ function renderCanvas() {
                 </form>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-                    <button class="btn-expand-toggle" onclick="toggleInlineLogs('${node.id}')">
+                    <button class="btn-expand-toggle" onclick="window.toggleInlineLogs('${node.id}')">
                     ${isExpanded ? '▲ Logs ausblenden' : '▼ Details & Logs (' + nodeLogs.length + ')'}
                     </button>
                     ${completionBtnHtml}
@@ -1676,7 +1906,7 @@ function renderCanvas() {
 
         el.addEventListener('dblclick', (e) => {
             if (!e.target.closest('.ep-handle') && !e.target.closest('.btn-delete-log') && !e.target.closest('.btn-tree-toggle') && !e.target.closest('button')) {
-                openConfigModal(node.id);
+                if (typeof openConfigModal === 'function') openConfigModal(node.id);
             }
         });
 
@@ -1781,7 +2011,7 @@ function renderCanvas() {
                             pos_y: finalY,
                             zone_id: targetZone ? targetZone.id : null
                         };
-                        saveManagerLayout(mgrLayout);
+                        if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
                         renderCanvas();
                     } else {
                         (currentZones || []).forEach(z => {
@@ -1810,7 +2040,7 @@ function renderCanvas() {
 
                         if (window.pendingCanvasUpdate) {
                             window.pendingCanvasUpdate = false;
-                            fetchCanvasData();
+                            if (typeof fetchCanvasData === 'function') fetchCanvasData();
                         }
                     }
                 };
@@ -1855,7 +2085,7 @@ function renderConnections(mouseCoords = null) {
     `;
 
     const nodeRects = {};
-    (currentEdges || []).forEach(edge => {
+    (typeof currentEdges !== 'undefined' ? currentEdges : []).forEach(edge => {
         if (!nodeRects[edge.source]) {
             const el = document.getElementById(edge.source);
             nodeRects[edge.source] = { w: el ? el.offsetWidth : 320, h: el ? el.offsetHeight : 200 };
@@ -1881,14 +2111,14 @@ function renderConnections(mouseCoords = null) {
 
     const fragment = document.createDocumentFragment();
 
-    (currentEdges || []).forEach(edge => {
+    (typeof currentEdges !== 'undefined' ? currentEdges : []).forEach(edge => {
         const srcNode = currentNodes.find(n => n.id === edge.source);
         const tgtNode = currentNodes.find(n => n.id === edge.target);
 
-        const srcHidden = isNodeHiddenByAncestor(edge.source) || (srcNode && srcNode.zone_id && window.isZoneHidden(srcNode.zone_id));
-        const tgtHidden = isNodeHiddenByAncestor(edge.target) || (tgtNode && tgtNode.zone_id && window.isZoneHidden(tgtNode.zone_id));
+        const srcHidden = window.isNodeHiddenByAncestor(edge.source) || (srcNode && srcNode.zone_id && window.isZoneHidden(srcNode.zone_id));
+        const tgtHidden = window.isNodeHiddenByAncestor(edge.target) || (tgtNode && tgtNode.zone_id && window.isZoneHidden(tgtNode.zone_id));
 
-        if (srcHidden || tgtHidden || collapsedParents.has(edge.source)) return;
+        if (srcHidden || tgtHidden || (window.collapsedParents && window.collapsedParents.has(edge.source))) return;
 
         if (srcNode && tgtNode) {
             const p1 = getFastCoords(srcNode, edge.source_handle || 'bottom');
@@ -1909,7 +2139,7 @@ function renderConnections(mouseCoords = null) {
             path.setAttribute('d', pathD);
             path.setAttribute('class', 'connection-line');
             path.setAttribute('title', `Verbindung (${srcNode.name} ➔ ${tgtNode.name})`);
-            path.addEventListener('click', () => handleDisconnectClick(edge.source, edge.target));
+            path.addEventListener('click', () => window.handleDisconnectClick(edge.source, edge.target));
             fragment.appendChild(path);
         }
     });
@@ -1971,7 +2201,9 @@ function renderConnections(mouseCoords = null) {
         flowPath.setAttribute('class', 'flow-arrow-line');
         flowPath.setAttribute('marker-end', 'url(#arrowhead)');
         flowPath.setAttribute('title', `Materialfluss: ${srcZone.title} ➔ ${tgtZone.title}`);
-        flowPath.addEventListener('click', () => handleDeleteFlowArrow(arrow.id));
+        if (typeof handleDeleteFlowArrow === 'function') {
+            flowPath.addEventListener('click', () => handleDeleteFlowArrow(arrow.id));
+        }
         fragment.appendChild(flowPath);
     });
 
@@ -2025,7 +2257,7 @@ window.centerViewOnVisible = function (targetZoneId = null) {
                 updateBounds(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 400, parseFloat(z.height) || 300);
             });
 
-            const visibleNodes = (currentNodes || []).filter(n => !isNodeHiddenByAncestor(n.id) && !(n.zone_id && window.isZoneHidden(n.zone_id)));
+            const visibleNodes = (currentNodes || []).filter(n => !window.isNodeHiddenByAncestor(n.id) && !(n.zone_id && window.isZoneHidden(n.zone_id)));
             visibleNodes.forEach(n => {
                 const isNote = (n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO');
                 const w = isNote ? (parseFloat(n.budget_design_hours) || 220) : 320;
@@ -2044,6 +2276,8 @@ window.centerViewOnVisible = function (targetZoneId = null) {
     }
 
     const viewportEl = document.getElementById('viewport');
+    if (!viewportEl) return;
+
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
     const padding = 100;
@@ -2118,6 +2352,7 @@ window.handleContextMenuAction = async function (type) {
     }
 
     if (type === 'mgr_remove_node' && contextTargetNodeId) {
+        if (typeof getManagerLayout !== 'function' || typeof saveManagerLayout !== 'function') return;
         const layout = getManagerLayout();
         delete layout.placements[contextTargetNodeId];
         saveManagerLayout(layout);
@@ -2137,12 +2372,12 @@ window.handleContextMenuAction = async function (type) {
     }
 
     if (type === 'block') {
-        handleOpenAddBlockModal(contextMenuCoords.x - 160, contextMenuCoords.y - 50);
+        if (typeof handleOpenAddBlockModal === 'function') handleOpenAddBlockModal(contextMenuCoords.x - 160, contextMenuCoords.y - 50);
         return;
     }
 
     if (type === 'zone') {
-        handleOpenAddZoneModal(contextMenuCoords.x, contextMenuCoords.y);
+        if (typeof handleOpenAddZoneModal === 'function') handleOpenAddZoneModal(contextMenuCoords.x, contextMenuCoords.y);
         return;
     }
 
@@ -2170,8 +2405,11 @@ window.handleContextMenuAction = async function (type) {
             ? getDeepestZoneAt(newPosX + 160, newPosY + 100)
             : null;
 
+        const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : 'COT';
+        const projId = typeof activeProjectId !== 'undefined' ? activeProjectId : null;
+
         const { data, error } = await db.from('project_nodes').insert([{
-            project_id: activeProjectId,
+            project_id: projId,
             name: originalNode.name,
             doc_number: originalNode.doc_number || null,
             article_number: originalNode.article_number || null,
@@ -2179,7 +2417,7 @@ window.handleContextMenuAction = async function (type) {
             budget_design_hours: originalNode.budget_design_hours || 0,
             budget_drafting_hours: originalNode.budget_drafting_hours || 0,
             color_hex: originalNode.color_hex || '#2b6cb0',
-            created_by: activeUserCode || 'COT',
+            created_by: uCode,
             assigned_design_user: originalNode.assigned_design_user || null,
             assigned_drafting_user: originalNode.assigned_drafting_user || null,
             progress_design: originalNode.progress_design || 0,
@@ -2210,11 +2448,11 @@ window.handleContextMenuAction = async function (type) {
                 pos_y: pY,
                 zone_id: tZone ? tZone.id : (origPlacement ? origPlacement.zone_id : null)
             };
-            await saveManagerLayout(layout);
+            if (typeof saveManagerLayout === 'function') await saveManagerLayout(layout);
         }
 
         showToast(`Verknüpfte Instanz von "${originalNode.name}" erstellt`, 'success');
-        await fetchCanvasData();
+        if (typeof fetchCanvasData === 'function') await fetchCanvasData();
         return;
     }
 
@@ -2223,12 +2461,16 @@ window.handleContextMenuAction = async function (type) {
         if (!nodeToDelete) return;
 
         const isNote = (nodeToDelete.block_type === 'note' || nodeToDelete.doc_number === 'NOTE' || nodeToDelete.doc_number === 'TODO');
-        const nodeLogs = currentTimeLogs.filter(l => l.node_id === nodeToDelete.id);
-        const isCreator = (activeUserCode && activeUserCode === nodeToDelete.created_by);
+        const nodeLogs = (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => l.node_id === nodeToDelete.id);
+
+        const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : '';
+        const isAdminUser = typeof isAdmin !== 'undefined' ? isAdmin : false;
+
+        const isCreator = (uCode && uCode === nodeToDelete.created_by);
         const createdAtTime = nodeToDelete.created_at ? new Date(nodeToDelete.created_at).getTime() : 0;
         const isWithinOneHour = (Date.now() - createdAtTime) <= (60 * 60 * 1000);
 
-        const canDelete = isAdmin || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
+        const canDelete = isAdminUser || (isCreator && nodeLogs.length === 0 && isWithinOneHour);
 
         if (!canDelete) {
             showToast('Löschen nur innerhalb 60 Min. nach Erstellung oder durch Admin.', 'error');
@@ -2243,11 +2485,11 @@ window.handleContextMenuAction = async function (type) {
             displayName = parsed.text ? (parsed.text.length > 30 ? parsed.text.substring(0, 30) + '...' : parsed.text) : 'Notiz';
         }
 
-        const confirmed = await customConfirm(isNote ? 'Notiz löschen' : 'Block löschen', `Möchtest du "${displayName}" wirklich entfernen?`);
+        const confirmed = typeof customConfirm === 'function' ? await customConfirm(isNote ? 'Notiz löschen' : 'Block löschen', `Möchtest du "${displayName}" wirklich entfernen?`) : window.confirm(`Möchtest du "${displayName}" wirklich entfernen?`);
         if (confirmed) {
             await db.from('project_nodes').delete().eq('id', nodeToDelete.id);
             showToast(isNote ? 'Notiz gelöscht' : 'Block gelöscht', 'success');
-            await fetchCanvasData();
+            if (typeof fetchCanvasData === 'function') await fetchCanvasData();
         }
     }
 };
@@ -2262,10 +2504,13 @@ window.addEventListener('mousemove', (e) => {
 window.handlePasteNodes = async function () {
     if (!window.copiedNodeIds || window.copiedNodeIds.length === 0) return;
 
-    const coords = getCanvasCoords(window.lastClientX, window.lastClientY);
+    const coords = window.getCanvasCoords(window.lastClientX, window.lastClientY);
     const isMgr = (window.activeCanvasMode === 'manager');
-    const mgrLayout = isMgr ? getManagerLayout() : null;
+    const mgrLayout = isMgr ? (typeof getManagerLayout === 'function' ? getManagerLayout() : null) : null;
     let offsetX = 0;
+
+    const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : 'COT';
+    const projId = typeof activeProjectId !== 'undefined' ? activeProjectId : null;
 
     for (const originalId of window.copiedNodeIds) {
         const originalNode = currentNodes.find(n => n.id === originalId);
@@ -2288,7 +2533,7 @@ window.handlePasteNodes = async function () {
             : null;
 
         const { data, error } = await db.from('project_nodes').insert([{
-            project_id: activeProjectId,
+            project_id: projId,
             name: originalNode.name,
             doc_number: originalNode.doc_number || null,
             article_number: originalNode.article_number || null,
@@ -2296,7 +2541,7 @@ window.handlePasteNodes = async function () {
             budget_design_hours: originalNode.budget_design_hours,
             budget_drafting_hours: originalNode.budget_drafting_hours,
             color_hex: originalNode.color_hex,
-            created_by: activeUserCode || 'COT',
+            created_by: uCode,
             assigned_design_user: originalNode.assigned_design_user || null,
             assigned_drafting_user: originalNode.assigned_drafting_user || null,
             progress_design: originalNode.progress_design || 0,
@@ -2327,10 +2572,10 @@ window.handlePasteNodes = async function () {
         offsetX += 320;
     }
 
-    if (isMgr && mgrLayout) {
+    if (isMgr && mgrLayout && typeof saveManagerLayout === 'function') {
         await saveManagerLayout(mgrLayout);
     }
 
     showToast(`${window.copiedNodeIds.length} Instanz(en) eingefügt`, 'success');
-    await fetchCanvasData();
+    if (typeof fetchCanvasData === 'function') await fetchCanvasData();
 };
