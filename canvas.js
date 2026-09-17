@@ -2172,10 +2172,29 @@ function renderCanvas() {
         const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
         const isDimmed = window.personalFilterActive && !isUserAssigned;
 
+        // 50/50 Ladebalken-Werte
+        const pDesign = (masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : (masterNode.completion_status === 'completed' ? 100 : 0);
+        const pDrafting = (masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : (masterNode.completion_status === 'completed' ? 100 : 0);
+        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
+
+        // Pillen-Badge mit Ladebalken (wie bei den Rahmen)
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
-        if (identifier) {
-            badgeHtml = `<div class="assembly-id-badge" style="border-color: ${nodeColor};" title="${node.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">${escapeHtml(identifier)}</div>`;
+        if (identifier || pTotal > 0 || masterNode.completion_status === 'completed') {
+            const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
+            const barColor = pTotal === 100 ? '#38a169' : (pTotal > 50 ? '#3182ce' : '#dd6b20');
+            const barHtml = `
+                <div class="zone-progress-track" title="Fertigstellung: ${pTotal}% (CAD: ${pDesign}\% \vert{} Zeichn:${pDrafting}%)">
+                    <div class="zone-progress-fill" style="width: ${pTotal}\%; background:${barColor};"></div>
+                    <span class="zone-progress-label">${pTotal}%</span>
+                </div>
+            `;
+
+            badgeHtml = `
+              <div class="assembly-id-badge zone-badge-container" style="border-color: ${nodeColor};" title="${node.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">
+                ${docLabel}${barHtml}
+              </div>
+            `;
         }
 
         const isConnectingThisNode = (connectingFirstNodeId === node.id);
@@ -2206,30 +2225,6 @@ function renderCanvas() {
 
         const typeIconSvg = bType === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-        // 50/50 Ladebalken-Werte
-        const pDesign = (masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : (masterNode.completion_status === 'completed' ? 100 : 0);
-        const pDrafting = (masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : (masterNode.completion_status === 'completed' ? 100 : 0);
-        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
-        const cadSegmentWidth = Math.round(pDesign * 0.5);
-        const drSegmentWidth = Math.round(pDrafting * 0.5);
-
-        const progressBarHtml = `
-            <div class="block-progress-wrapper" title="CAD: ${pDesign}% (50% Gewicht) | Zeichn: ${pDrafting}% (50% Gewicht)">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 3px; font-size: 10px; font-weight: bold;">
-                    <span style="color:#4a5568;">Fortschritt</span>
-                    <span style="color: ${pTotal === 100 ? '#22543d' : '#2b6cb0'};">${pTotal}%</span>
-                </div>
-                <div class="block-progress-track">
-                    <div class="block-progress-segment cad" style="width: ${cadSegmentWidth}%;"></div>
-                    <div class="block-progress-segment dr" style="width: ${drSegmentWidth}%;"></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size: 8px; color: #718096; margin-top: 2px;">
-                    <span>3D: ${pDesign}%</span>
-                    <span>2D: ${pDrafting}%</span>
-                </div>
-            </div>
-        `;
-
         el.innerHTML = `
       ${badgeHtml}
       <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
@@ -2253,13 +2248,12 @@ function renderCanvas() {
           <div style="display: flex; gap: 4px; overflow: hidden;">
             ${assignedBadgesHtml}
           </div>
-          <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${typeLabel} | Ersteller: ${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
+          <span class="author-badge" style="flex-shrink: 0;" title="Typ: ${typeLabel} \vert{} Ersteller:${escapeHtml(creator)}">${escapeHtml(typeLabel)} [${escapeHtml(creator)}]</span>
         </div>
       </div>
 
       <div class="assembly-body">
-        ${progressBarHtml}
-        <div class="charts-grid">
+        <div class="charts-grid"><div class="charts-grid">
           <div class="chart-box">
             <div class="pie-chart" style="${dPieStyle}">
               <div class="pie-inner">${dPct}%</div>
