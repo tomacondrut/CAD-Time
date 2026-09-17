@@ -3697,14 +3697,30 @@ window.toggleManagerZoneLock = function (e, zoneId) {
 window.deleteManagerZone = async function (zoneId) {
     const layout = getManagerLayout();
     const zone = (layout.zones || []).find(z => z.id === zoneId);
-    const confirmed = await customConfirm('Übersichts-Rahmen entfernen', `Möchtest du den Rahmen "${zone ? zone.title : ''}" vom Board löschen? Die Bauteile bleiben erhalten.`);
+    if (!zone) return;
+
+    const confirmed = await customConfirm(
+        'Übersichts-Rahmen entfernen',
+        `Möchtest du den Rahmen "${zone.title}" vom Board löschen? (Darin liegende Bauteile und Unterrahmen bleiben erhalten)`
+    );
+
     if (confirmed) {
-        layout.zones = (layout.zones || []).filter(z => z.id !== zoneId);
-        Object.keys(layout.placements || {}).forEach(k => {
-            if (layout.placements[k].zone_id === zoneId) {
-                layout.placements[k].zone_id = null;
+        // Untergeordnete Rahmen werden eine Ebene nach oben freigegeben
+        (layout.zones || []).forEach(z => {
+            if (z.parent_zone_id === zoneId) {
+                z.parent_zone_id = zone.parent_zone_id || null;
             }
         });
+
+        layout.zones = (layout.zones || []).filter(z => z.id !== zoneId);
+
+        // Blöcke im gelöschten Rahmen werden wieder frei auf das Board gelegt
+        Object.keys(layout.placements || {}).forEach(k => {
+            if (layout.placements[k].zone_id === zoneId) {
+                layout.placements[k].zone_id = zone.parent_zone_id || null;
+            }
+        });
+
         saveManagerLayout(layout);
         showToast('Übersichts-Rahmen entfernt', 'info');
         renderCanvas();
@@ -3798,6 +3814,18 @@ window.confirmAddExistingBlockToManager = function () {
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager-Zonen mit automatischer Verschachtelung)
+ * ERSETZEN IN: ui.js (Funktionen handleCreateManagerZone & deleteManagerZone)
+ * Zeitstempel: 2026-09-17 22:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:55:00 CEST]: Basis-Erstellung.
+ *   - [2026-09-17 22:15:00 CEST]: Erkennt beim Erstellen an den Klick-Koordinaten
+ *     automatisch den übergeordneten Manager-Rahmen (parent_zone_id).
+ * =============================================================================
+ */
 window.handleCreateManagerZone = async function (x, y) {
     const res = await customPromptDual(
         'Übersichts-Rahmen anlegen',
@@ -3810,6 +3838,12 @@ window.handleCreateManagerZone = async function (x, y) {
     if (!res || !res.val1) return;
 
     const layout = getManagerLayout();
+
+    // Erkennt, ob der neue Rahmen innerhalb eines bereits existierenden Rahmens geklickt wurde
+    const parentZone = (typeof getDeepestMgrZoneAt === 'function')
+        ? getDeepestMgrZoneAt(x + 100, y + 50, [], layout.zones)
+        : null;
+
     const newZone = {
         id: 'mz_' + Date.now(),
         title: res.val1,
@@ -3817,13 +3851,15 @@ window.handleCreateManagerZone = async function (x, y) {
         color_hex: '#2b6cb0',
         pos_x: Math.round(x),
         pos_y: Math.round(y),
-        width: 620,
-        height: 440
+        width: parentZone ? 500 : 620,
+        height: parentZone ? 360 : 440,
+        parent_zone_id: parentZone ? parentZone.id : null,
+        is_locked: false
     };
 
     layout.zones.push(newZone);
     saveManagerLayout(layout);
-    showToast(`Übersichts-Rahmen "${res.val1}" erstellt`, 'success');
+    showToast(`Übersichts-Rahmen "${res.val1}" erstellt${parentZone ? ` (in "${parentZone.title}")` : ''}`, 'success');
     renderCanvas();
 };
 
