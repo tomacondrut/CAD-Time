@@ -1254,6 +1254,7 @@ function renderCanvas() {
         const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
         // Aggregierter Rahmenfortschritt
+        // Aggregierter Rahmenfortschritt (Erledigte Blöcke zählen immer als 100%)
         const childBlocks = (currentNodes || []).filter(n => n.zone_id === zone.id && n.block_type !== 'note');
         let zoneProgress = 0;
         if (childBlocks.length > 0) {
@@ -1261,8 +1262,9 @@ function renderCanvas() {
             let totalWeights = 0;
 
             childBlocks.forEach(bn => {
-                const pD = (bn.progress_design !== null && bn.progress_design !== undefined) ? bn.progress_design : (bn.completion_status === 'completed' ? 100 : 0);
-                const pDr = (bn.progress_drafting !== null && bn.progress_drafting !== undefined) ? bn.progress_drafting : (bn.completion_status === 'completed' ? 100 : 0);
+                const isDone = bn.completion_status === 'completed';
+                const pD = isDone ? 100 : ((bn.progress_design !== null && bn.progress_design !== undefined) ? bn.progress_design : 0);
+                const pDr = isDone ? 100 : ((bn.progress_drafting !== null && bn.progress_drafting !== undefined) ? bn.progress_drafting : 0);
                 const bTotalProg = (pD * 0.5) + (pDr * 0.5);
 
                 const bWeight = (parseFloat(bn.budget_design_hours) || 0) + (parseFloat(bn.budget_drafting_hours) || 0) || 1;
@@ -2172,10 +2174,11 @@ function renderCanvas() {
         const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
         const isDimmed = window.personalFilterActive && !isUserAssigned;
 
-        // 50/50 Ladebalken-Werte
-        const pDesign = (masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : (masterNode.completion_status === 'completed' ? 100 : 0);
-        const pDrafting = (masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : (masterNode.completion_status === 'completed' ? 100 : 0);
-        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
+        // 50/50 Ladebalken-Werte (Erledigte Blöcke automatisch 100%)
+        const isBlockDone = masterNode.completion_status === 'completed';
+        const pDesign = isBlockDone ? 100 : ((masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : 0);
+        const pDrafting = isBlockDone ? 100 : ((masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : 0);
+        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5)); const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
 
         // Pillen-Badge mit Ladebalken (wie bei den Rahmen)
         const identifier = node.article_number || node.doc_number || '';

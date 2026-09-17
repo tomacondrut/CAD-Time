@@ -818,6 +818,19 @@ window.updateConfigProgressDisplay = function () {
     }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Auto-100% bei Fertigstellung & Freigabe)
+ * ERSETZEN IN: ui.js (Funktionen openConfigModal, handleSaveConfig & approveLog)
+ * Zeitstempel: 2026-09-17 20:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 19:00:00 CEST]: 50/50 Slider & Rollenprüfung.
+ *   - [2026-09-17 20:30:00 CEST]: Status 'completed' setzt CAD & Zeichnung 
+ *     automatisch auf 100% (sowohl bei Admin-Freigabe als auch im Config-Modal).
+ * =============================================================================
+ */
+
 window.openConfigModal = function (nodeId) {
     const node = currentNodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -872,22 +885,20 @@ window.openConfigModal = function (nodeId) {
         if (assignGroup) assignGroup.style.display = 'none';
     }
 
-    // =========================================================================
-    // SLIDER-INITIALISIERUNG & ROLLENBASIERTE BERECHTIGUNGSPRÜFUNG
-    // =========================================================================
+    // Sliders & Rechte
     const sD = document.getElementById('editProgressDesign');
     const sDr = document.getElementById('editProgressDrafting');
     const hintD = document.getElementById('editProgressDesignHint');
     const hintDr = document.getElementById('editProgressDraftingHint');
 
-    const curD = (node.progress_design !== null && node.progress_design !== undefined) ? node.progress_design : (node.completion_status === 'completed' ? 100 : 0);
-    const curDr = (node.progress_drafting !== null && node.progress_drafting !== undefined) ? node.progress_drafting : (node.completion_status === 'completed' ? 100 : 0);
+    const isAlreadyDone = node.completion_status === 'completed';
+    const curD = isAlreadyDone ? 100 : ((node.progress_design !== null && node.progress_design !== undefined) ? node.progress_design : 0);
+    const curDr = isAlreadyDone ? 100 : ((node.progress_drafting !== null && node.progress_drafting !== undefined) ? node.progress_drafting : 0);
 
     if (sD) sD.value = curD;
     if (sDr) sDr.value = curDr;
     updateConfigProgressDisplay();
 
-    // Berechtigung: Admin ODER zugewiesene Person der jeweiligen Disziplin
     const canEditCAD = isAdmin || (activeUserCode && activeUserCode === node.assigned_design_user) || (!node.assigned_design_user && isCreator);
     const canEditDrafting = isAdmin || (activeUserCode && activeUserCode === node.assigned_drafting_user) || (!node.assigned_drafting_user && isCreator);
 
@@ -906,7 +917,17 @@ window.openConfigModal = function (nodeId) {
     if (isAdmin) {
         if (statusGroup) statusGroup.style.display = 'block';
         const statusSelect = document.getElementById('editCompletionStatus');
-        if (statusSelect) statusSelect.value = node.completion_status || 'open';
+        if (statusSelect) {
+            statusSelect.value = node.completion_status || 'open';
+            // Dropdown-Wechsel auf 'completed' springt sofort auf 100%
+            statusSelect.onchange = function () {
+                if (statusSelect.value === 'completed') {
+                    if (sD) sD.value = 100;
+                    if (sDr) sDr.value = 100;
+                    updateConfigProgressDisplay();
+                }
+            };
+        }
     } else {
         if (statusGroup) statusGroup.style.display = 'none';
     }
@@ -942,8 +963,20 @@ window.handleSaveConfig = async function (e) {
 
     const sD = document.getElementById('editProgressDesign');
     const sDr = document.getElementById('editProgressDrafting');
-    const progress_design = sD ? Math.min(100, Math.max(0, parseInt(sD.value, 10) || 0)) : 0;
-    const progress_drafting = sDr ? Math.min(100, Math.max(0, parseInt(sDr.value, 10) || 0)) : 0;
+    let progress_design = sD ? Math.min(100, Math.max(0, parseInt(sD.value, 10) || 0)) : 0;
+    let progress_drafting = sDr ? Math.min(100, Math.max(0, parseInt(sDr.value, 10) || 0)) : 0;
+
+    let newStatus = node.completion_status || 'open';
+    if (isAdmin) {
+        const statusSelect = document.getElementById('editCompletionStatus');
+        if (statusSelect) newStatus = statusSelect.value;
+    }
+
+    // Wenn Erledigt gewählt wurde: Zwingend 100% setzen
+    if (newStatus === 'completed') {
+        progress_design = 100;
+        progress_drafting = 100;
+    }
 
     const updateData = {
         name,
@@ -952,7 +985,8 @@ window.handleSaveConfig = async function (e) {
         color_hex,
         block_type,
         progress_design,
-        progress_drafting
+        progress_drafting,
+        completion_status: newStatus
     };
 
     if (isCreatorOrAdmin) {
@@ -967,12 +1001,9 @@ window.handleSaveConfig = async function (e) {
         const bDraftEl = document.getElementById('editBudgetDrafting');
         if (bDesignEl) updateData.budget_design_hours = Math.max(0, parseFloat(bDesignEl.value) || 0);
         if (bDraftEl) updateData.budget_drafting_hours = Math.max(0, parseFloat(bDraftEl.value) || 0);
-
-        const statusSelect = document.getElementById('editCompletionStatus');
-        if (statusSelect) updateData.completion_status = statusSelect.value;
     }
 
-    // Wenn der Block verknüpft ist (wiederverwendetes Modul), Fortschritt für alle Instanzen synchronisieren
+    // Instanz-Synchronisation
     if (node.linked_id) {
         const relatedNodes = currentNodes.filter(n => n.linked_id === node.linked_id);
         const updates = relatedNodes.map(rn => {
@@ -1364,18 +1395,35 @@ window.handleDeleteLog = async function (logId) {
     }
 };
 
-window.approveLog = async function (logId) {
-    const log = currentTimeLogs.find(l => l.id === logId);
-    if (!log) return;
+const log = currentTimeLogs.find(l => l.id === logId);
+if (!log) return;
 
-    await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
+await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
 
-    if (log.task_type === 'completion') {
-        await db.from('project_nodes').update({ completion_status: 'completed' }).eq('id', log.node_id);
+// Wenn es eine Fertigmeldung ist: Status auf 'completed' UND Fortschritte auf 100% setzen
+if (log.task_type === 'completion') {
+    const targetNode = currentNodes.find(n => n.id === log.node_id);
+    const updatePayload = {
+        completion_status: 'completed',
+        progress_design: 100,
+        progress_drafting: 100
+    };
+
+    if (targetNode && targetNode.linked_id) {
+        const relatedNodes = currentNodes.filter(n => n.linked_id === targetNode.linked_id);
+        const updates = relatedNodes.map(rn => {
+            Object.assign(rn, updatePayload);
+            return db.from('project_nodes').update(updatePayload).eq('id', rn.id);
+        });
+        await Promise.all(updates);
+    } else {
+        if (targetNode) Object.assign(targetNode, updatePayload);
+        await db.from('project_nodes').update(updatePayload).eq('id', log.node_id);
     }
+}
 
-    showToast('Freigabe erfolgreich erteilt', 'success');
-    fetchCanvasData();
+showToast('Freigabe erteilt (Status: Erledigt 100%)', 'success');
+fetchCanvasData();
 };
 
 // =============================================================================
