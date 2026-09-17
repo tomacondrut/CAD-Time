@@ -3624,7 +3624,26 @@ window.saveManagerLayout = async function (layout) {
     }
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Mode-Switch mit getrenntem Viewport-State & Zone-Lock)
+ * ERSETZEN IN: ui.js (Ab window.switchCanvasMode bis Dateiende)
+ * Zeitstempel: 2026-09-17 21:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:35:00 CEST]: Placements Guard.
+ *   - [2026-09-17 21:55:00 CEST]: Speichern von Pan/Zoom getrennt nach Modus 
+ *     (cad_tm_panX_main / cad_tm_panX_manager), Zone-Lock Toggle & Zone Delete.
+ * =============================================================================
+ */
 window.switchCanvasMode = function (mode) {
+    const prevMode = window.activeCanvasMode || 'main';
+
+    // 1. Kameraposition des vorherigen Modus sichern
+    localStorage.setItem(`cad_tm_panX_${prevMode}`, window.currentPanX);
+    localStorage.setItem(`cad_tm_panY_${prevMode}`, window.currentPanY);
+    localStorage.setItem(`cad_tm_scale_${prevMode}`, window.currentScale);
+
     window.activeCanvasMode = mode;
     localStorage.setItem('cad_tm_canvas_mode', mode);
 
@@ -3641,11 +3660,55 @@ window.switchCanvasMode = function (mode) {
         btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
     }
 
+    // 2. Kameraposition des Zielmodus wiederherstellen oder zentrieren
+    const savedX = localStorage.getItem(`cad_tm_panX_${mode}`);
+    const savedY = localStorage.getItem(`cad_tm_panY_${mode}`);
+    const savedScale = localStorage.getItem(`cad_tm_scale_${mode}`);
+
+    if (savedX !== null && savedY !== null && savedScale !== null) {
+        window.currentPanX = parseFloat(savedX);
+        window.currentPanY = parseFloat(savedY);
+        window.currentScale = parseFloat(savedScale);
+        if (typeof applyCanvasTransform === 'function') applyCanvasTransform(false);
+    } else {
+        if (typeof window.centerViewOnVisible === 'function') {
+            setTimeout(() => window.centerViewOnVisible(), 60);
+        }
+    }
+
     showToast(mode === 'manager' ? 'Fortschritts-Board aktiv' : 'CAD-Konstruktionsplan aktiv', 'info');
 
     if (typeof renderCanvas === 'function') renderCanvas();
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
-    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+};
+
+window.toggleManagerZoneLock = function (e, zoneId) {
+    if (e) e.stopPropagation();
+    const layout = getManagerLayout();
+    const zone = (layout.zones || []).find(z => z.id === zoneId);
+    if (!zone) return;
+
+    zone.is_locked = !zone.is_locked;
+    saveManagerLayout(layout);
+    showToast(`Rahmen ${zone.is_locked ? 'gesperrt (Durchklicken zum Pan aktiv)' : 'entsperrt'}`, 'info');
+    renderCanvas();
+};
+
+window.deleteManagerZone = async function (zoneId) {
+    const layout = getManagerLayout();
+    const zone = (layout.zones || []).find(z => z.id === zoneId);
+    const confirmed = await customConfirm('Übersichts-Rahmen entfernen', `Möchtest du den Rahmen "${zone ? zone.title : ''}" vom Board löschen? Die Bauteile bleiben erhalten.`);
+    if (confirmed) {
+        layout.zones = (layout.zones || []).filter(z => z.id !== zoneId);
+        Object.keys(layout.placements || {}).forEach(k => {
+            if (layout.placements[k].zone_id === zoneId) {
+                layout.placements[k].zone_id = null;
+            }
+        });
+        saveManagerLayout(layout);
+        showToast('Übersichts-Rahmen entfernt', 'info');
+        renderCanvas();
+    }
 };
 
 // Automatisches Anordnen im Board
@@ -3677,7 +3740,7 @@ window.autoArrangeManagerCanvas = function () {
         let startY = 80;
         groups[color].forEach(node => {
             layout.placements[node.id] = { pos_x: startX, pos_y: startY, zone_id: null };
-            startY += 150;
+            startY += 180;
         });
         startX += 320;
     });
@@ -3766,7 +3829,7 @@ window.handleCreateManagerZone = async function (x, y) {
 
 window.addBlockToManagerCanvas = function (nodeId, targetX = null, targetY = null) {
     const layout = getManagerLayout();
-    const node = currentNodes.find(n => n.id === nodeId);
+    const node = (currentNodes || []).find(n => n.id === nodeId);
     if (!node) return;
 
     let posX = targetX;
@@ -3852,7 +3915,7 @@ document.addEventListener('DOMContentLoaded', () => {
         viewport.addEventListener('drop', (e) => {
             if (window.activeCanvasMode === 'manager') {
                 const nodeId = e.dataTransfer.getData('text/plain');
-                if (nodeId && currentNodes.some(n => n.id === nodeId)) {
+                if (nodeId && (currentNodes || []).some(n => n.id === nodeId)) {
                     e.preventDefault();
                     const coords = getCanvasCoords(e.clientX, e.clientY);
                     window.addBlockToManagerCanvas(nodeId, Math.round(coords.x - 145), Math.round(coords.y - 40));

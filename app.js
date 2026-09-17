@@ -448,7 +448,26 @@ window.renderSidebarZones = function () {
     container.appendChild(fragment);
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Visibility Engine (Manager-Mode Isolierung gegen Geister-Pfeile)
+ * ERSETZEN IN: app.js (Funktion window.syncVisibilityToDOM)
+ * Zeitstempel: 2026-09-17 21:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 22:30:00 CEST]: Basis DOM-Sync.
+ *   - [2026-09-17 21:55:00 CEST]: Im Manager-Modus Kanten-Layer leeren und 
+ *     keine CAD-Sichtbarkeitsfilter anwenden (verhindert Geister-Pfeile und -Notizen).
+ * =============================================================================
+ */
 window.syncVisibilityToDOM = function () {
+    // FIX: Wenn das Manager-Board aktiv ist, niemals CAD-Kanten oder -Pfeile zeichnen
+    if (window.activeCanvasMode === 'manager') {
+        const svgLayer = document.getElementById('connections-layer');
+        if (svgLayer) svgLayer.innerHTML = '';
+        return;
+    }
+
     // 1. Sidebar Styles anpassen (Striche, Deckkraft)
     const sidebarItems = document.querySelectorAll('.sidebar-zone-item');
     sidebarItems.forEach(el => {

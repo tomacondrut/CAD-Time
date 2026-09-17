@@ -1290,6 +1290,90 @@ window.toggleZoneLock = async function (e, zoneId) {
   * 
   */
 
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: Canvas Engine (Manager-Navigation, Artefakt-Bereinigung & Admin-Fortschritt)
+* ERSETZEN IN: canvas.js (Funktionen renderCanvas, renderConnections, centerViewOnVisible, adjustCanvasBounds)
+* Zeitstempel: 2026-09-17 21:55:00 CEST
+* Breadcrumbs:
+*   - [2026-09-17 21:35:00 CEST]: Syntax-Fix handleCanvasContextMenu.
+*   - [2026-09-17 21:55:00 CEST]: 
+*     1. Notizen und Splines/Pfeile im Manager-Modus strikt unterdrückt.
+*     2. Manager-Zonen auf Header-Drag & Lock umgestellt (kein Doppel-Drag mehr mit Viewport).
+*     3. centerViewOnVisible & adjustCanvasBounds auf mgrLayout ausgerichtet.
+*     4. Direkte 50/50-Fortschritts-Slider für Admins auf den Manager-Karten.
+* =============================================================================
+*/
+
+// --- Neue Event-Handler für Admin-Fortschritt im Manager-Board ---
+window.handleManagerProgressInput = function (nodeId, type, val) {
+    const num = parseInt(val, 10) || 0;
+    const lbl = document.getElementById(type === 'design' ? `mgr-prog-val-d-${nodeId}` : `mgr-prog-val-dr-${nodeId}`);
+    if (lbl) lbl.textContent = `${num}%`;
+
+    const otherLbl = document.getElementById(type === 'design' ? `mgr-prog-val-dr-${nodeId}` : `mgr-prog-val-d-${nodeId}`);
+    const otherVal = otherLbl ? (parseInt(otherLbl.textContent, 10) || 0) : 0;
+
+    const dVal = type === 'design' ? num : otherVal;
+    const drVal = type === 'drafting' ? num : otherVal;
+    const tot = Math.round((dVal * 0.5) + (drVal * 0.5));
+
+    const totBadge = document.getElementById(`mgr-tot-badge-${nodeId}`);
+    if (totBadge) {
+        totBadge.textContent = `${tot}% Gesamt`;
+        totBadge.style.background = tot === 100 ? '#c6f6d5' : (tot > 50 ? '#bee3f8' : '#edf2f7');
+        totBadge.style.color = tot === 100 ? '#22543d' : (tot > 50 ? '#2b6cb0' : '#4a5568');
+    }
+};
+
+window.handleManagerProgressChange = async function (nodeId, type, val) {
+    const node = currentNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const masterNode = node.linked_id
+        ? (currentNodes.find(n => n.linked_id === node.linked_id) || node)
+        : node;
+
+    const num = Math.min(100, Math.max(0, parseInt(val, 10) || 0));
+
+    if (type === 'design') {
+        masterNode.progress_design = num;
+    } else {
+        masterNode.progress_drafting = num;
+    }
+
+    const curD = masterNode.progress_design || 0;
+    const curDr = masterNode.progress_drafting || 0;
+
+    let newStatus = masterNode.completion_status || 'open';
+    if (curD === 100 && curDr === 100) {
+        newStatus = 'completed';
+    } else if (newStatus === 'completed') {
+        newStatus = 'open';
+    }
+    masterNode.completion_status = newStatus;
+
+    const updatePayload = {
+        progress_design: masterNode.progress_design,
+        progress_drafting: masterNode.progress_drafting,
+        completion_status: masterNode.completion_status
+    };
+
+    if (masterNode.linked_id) {
+        const related = currentNodes.filter(n => n.linked_id === masterNode.linked_id);
+        related.forEach(rn => Object.assign(rn, updatePayload));
+        const updates = related.map(rn => db.from('project_nodes').update(updatePayload).eq('id', rn.id));
+        await Promise.all(updates);
+    } else {
+        Object.assign(node, updatePayload);
+        await db.from('project_nodes').update(updatePayload).eq('id', masterNode.id);
+    }
+
+    showToast(`Fortschritt "${masterNode.name}" aktualisiert (${type === 'design' ? 'CAD' : 'Zeichnung'}: ${num}%)`, 'success');
+    renderCanvas();
+};
+
 function renderCanvas() {
     const canvas = document.getElementById('canvas');
     const svgLayer = document.getElementById('connections-layer');
@@ -1314,11 +1398,12 @@ function renderCanvas() {
     // 1. ZONEN RENDERN (STATUS-BOARD VS. HAUPT-ZONEN)
     // =========================================================================
     if (isManagerMode && mgrLayout && Array.isArray(mgrLayout.zones)) {
-        // MANAGER-RAHMEN (Frei gruppierbar, mit 50/50 Earned-Value Ladebalken)
+        // MANAGER-RAHMEN
         mgrLayout.zones.forEach(zone => {
             const zoneEl = document.createElement('div');
             zoneEl.id = zone.id;
-            zoneEl.className = 'project-zone draggable-enabled';
+            const isLocked = !!zone.is_locked;
+            zoneEl.className = `project-zone ${isLocked ? 'zone-locked' : 'no-pan'} draggable-enabled`;
             zoneEl.style.left = `${zone.pos_x}px`;
             zoneEl.style.top = `${zone.pos_y}px`;
             zoneEl.style.width = `${zone.width}px`;
@@ -1373,9 +1458,9 @@ function renderCanvas() {
                     <span class="zone-progress-label">${zoneProgress}%</span>
                 </div>
               </div>
-              <div class="project-zone-header no-pan" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+              <div class="project-zone-header no-pan" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: ${isLocked ? 'default' : 'move'};">
                 <span style="font-weight: bold; font-size: 13px; color: #2d3748;">📁 ${escapeHtml(zone.title)}</span>
-                <div style="display: flex; gap: 16px; align-items: center;">
+                <div style="display: flex; gap: 12px; align-items: center;">
                     <div style="display:flex; align-items: center; gap: 4px;" title="CAD Summe">
                         <div class="pie-chart" style="${zdPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
                         <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentD)} / ${formatHoursToHM(zoneBudD)}</span>
@@ -1384,74 +1469,102 @@ function renderCanvas() {
                         <div class="pie-chart" style="${zdrPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
                         <span style="font-size: 10px; font-family: monospace; color:#4a5568;">${formatHoursToHM(zoneSpentDr)} / ${formatHoursToHM(zoneBudDr)}</span>
                     </div>
+                    <div class="zone-actions" style="display:flex; gap:4px; margin-left:6px;">
+                        <button type="button" class="zone-btn" title="Position sperren/entsperren" onclick="window.toggleManagerZoneLock(event, '${zone.id}')">${isLocked ? '🔒' : '🔓'}</button>
+                        <button type="button" class="zone-btn" style="color:#e53e3e;" title="Rahmen entfernen" onclick="window.deleteManagerZone('${zone.id}')">✕</button>
+                    </div>
                 </div>
               </div>
               <div class="zone-resize-handle no-pan" title="Größe anpassen"></div>
             `;
 
-            let isDragging = false;
-            let startClientX = 0, startClientY = 0;
-            let initZLeft = 0, initZTop = 0;
-            let blockStartPositions = [];
+            // Dragging NUR über den Header initiieren (verhindert Blockade des Canvas-Panoramas im Rahmeninneren)
+            if (!isLocked) {
+                let isDragging = false;
+                let startClientX = 0, startClientY = 0;
+                let initZLeft = 0, initZTop = 0;
+                let blockStartPositions = [];
 
-            const startMgrZoneDrag = (e) => {
-                if (e.target.closest('.zone-resize-handle, input, select, button')) return;
-                isDragging = true;
-                startClientX = e.clientX;
-                startClientY = e.clientY;
-                initZLeft = zone.pos_x;
-                initZTop = zone.pos_y;
+                const startMgrZoneDrag = (e) => {
+                    if (e.target.closest('.zone-actions, button, input, select')) return;
+                    if (e.type === 'touchstart' && e.touches.length > 1) return;
+                    if (e.cancelable) e.stopPropagation();
 
-                blockStartPositions = containedBlocks.map(b => ({
-                    id: b.id,
-                    x: mgrLayout.placements[b.id]?.pos_x || 0,
-                    y: mgrLayout.placements[b.id]?.pos_y || 0
-                }));
+                    window.isDraggingAnything = true;
+                    isDragging = true;
+                    startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                    startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                    initZLeft = zone.pos_x;
+                    initZTop = zone.pos_y;
 
-                const onMove = (me) => {
-                    if (!isDragging) return;
-                    const scale = window.currentScale || 1;
-                    const dx = (me.clientX - startClientX) / scale;
-                    const dy = (me.clientY - startClientY) / scale;
+                    blockStartPositions = containedBlocks.map(b => ({
+                        id: b.id,
+                        x: mgrLayout.placements[b.id]?.pos_x || 0,
+                        y: mgrLayout.placements[b.id]?.pos_y || 0
+                    }));
 
-                    zone.pos_x = Math.round(initZLeft + dx);
-                    zone.pos_y = Math.round(initZTop + dy);
-                    zoneEl.style.left = `${zone.pos_x}px`;
-                    zoneEl.style.top = `${zone.pos_y}px`;
+                    const onMove = (me) => {
+                        if (!isDragging) return;
+                        if (me.type === 'touchmove' && me.cancelable) me.preventDefault();
 
-                    blockStartPositions.forEach(bp => {
-                        const bEl = document.getElementById(bp.id);
-                        const curX = Math.round(bp.x + dx);
-                        const curY = Math.round(bp.y + dy);
-                        if (bEl) {
-                            bEl.style.left = `${curX}px`;
-                            bEl.style.top = `${curY}px`;
-                        }
-                        if (mgrLayout.placements[bp.id]) {
-                            mgrLayout.placements[bp.id].pos_x = curX;
-                            mgrLayout.placements[bp.id].pos_y = curY;
-                        }
-                    });
+                        const clientX = me.type.includes('touch') ? me.touches[0].clientX : me.clientX;
+                        const clientY = me.type.includes('touch') ? me.touches[0].clientY : me.clientY;
+                        const scale = window.currentScale || 1;
+                        const dx = (clientX - startClientX) / scale;
+                        const dy = (clientY - startClientY) / scale;
+
+                        zone.pos_x = Math.round(initZLeft + dx);
+                        zone.pos_y = Math.round(initZTop + dy);
+                        zoneEl.style.left = `${zone.pos_x}px`;
+                        zoneEl.style.top = `${zone.pos_y}px`;
+
+                        blockStartPositions.forEach(bp => {
+                            const bEl = document.getElementById(bp.id);
+                            const curX = Math.round(bp.x + dx);
+                            const curY = Math.round(bp.y + dy);
+                            if (bEl) {
+                                bEl.style.left = `${curX}px`;
+                                bEl.style.top = `${curY}px`;
+                            }
+                            if (mgrLayout.placements[bp.id]) {
+                                mgrLayout.placements[bp.id].pos_x = curX;
+                                mgrLayout.placements[bp.id].pos_y = curY;
+                            }
+                        });
+                    };
+
+                    const onUp = () => {
+                        if (!isDragging) return;
+                        isDragging = false;
+                        window.isDraggingAnything = false;
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                        window.removeEventListener('touchmove', onMove);
+                        window.removeEventListener('touchend', onUp);
+                        window.removeEventListener('touchcancel', onUp);
+                        if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
+                    };
+
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                    window.addEventListener('touchmove', onMove, { passive: false });
+                    window.addEventListener('touchend', onUp);
+                    window.addEventListener('touchcancel', onUp);
                 };
 
-                const onUp = () => {
-                    isDragging = false;
-                    window.removeEventListener('mousemove', onMove);
-                    window.removeEventListener('mouseup', onUp);
-                    if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
-                };
-
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
-            };
-
-            zoneEl.addEventListener('mousedown', startMgrZoneDrag);
+                const headerEl = zoneEl.querySelector('.project-zone-header');
+                if (headerEl) {
+                    headerEl.addEventListener('mousedown', startMgrZoneDrag);
+                    headerEl.addEventListener('touchstart', startMgrZoneDrag, { passive: false });
+                }
+            }
 
             const rHandle = zoneEl.querySelector('.zone-resize-handle');
             if (rHandle) {
                 rHandle.addEventListener('mousedown', (e) => {
                     e.stopPropagation();
                     let isResizing = true;
+                    window.isDraggingAnything = true;
                     const scale = window.currentScale || 1;
                     const sW = zone.width;
                     const sH = zone.height;
@@ -1468,6 +1581,7 @@ function renderCanvas() {
 
                     const onRUp = () => {
                         isResizing = false;
+                        window.isDraggingAnything = false;
                         window.removeEventListener('mousemove', onRMove);
                         window.removeEventListener('mouseup', onRUp);
                         if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
@@ -1481,7 +1595,7 @@ function renderCanvas() {
             canvas.appendChild(zoneEl);
         });
     } else {
-        // HAUPT-CANVAS: REGULÄRE ZONEN RENDERN
+        // HAUPT-CANVAS: REGULÄRE ZONEN RENDERN (bleibt wie gewohnt)
         const nodeDirectStats = {};
         (currentNodes || []).forEach(n => {
             const logs = (currentTimeLogs || []).filter(l => l.node_id === n.id);
@@ -1567,7 +1681,6 @@ function renderCanvas() {
             const zdPieStyle = generatePieStyle(zStats.dSpent, zStats.dBudg, zone.color_hex || '#a0aec0');
             const zdrPieStyle = generatePieStyle(zStats.drSpent, zStats.drBudg, '#38a169');
 
-            // Rahmenfortschritt
             const allZoneIds = [zone.id, ...(typeof getAllDescendantZones === 'function' ? getAllDescendantZones(zone.id) : [])];
             const childBlocks = (currentNodes || []).filter(n => allZoneIds.includes(n.zone_id) && n.block_type !== 'note');
 
@@ -1972,21 +2085,13 @@ function renderCanvas() {
     }).map(wrapper => wrapper.node);
 
     sortedNodes.forEach(node => {
-        // HIER ENTFERNT: Die "Defensive Sichtbarkeitsprüfung" mit 'return' wurde gelöscht
+        const isNote = (node.block_type === 'note' || node.doc_number === 'NOTE' || node.doc_number === 'TODO');
 
+        // FIX: Im Manager-Modus werden Notizen vollständig ignoriert (keine Artefakte)
+        if (isManagerMode && isNote) return;
 
-        // 2a. STICKY NOTES & TO-DO CARDS
-        // =============================================================================
-        // Projekt: CAD Time Manager
-        // Domain: NATIVE Canvas Engine (Persönlicher Filter & Rotes Pulsieren bei Überfälligkeit)
-        // ERSETZEN IN: canvas.js (Abschnitt 2a in renderCanvas)
-        // Zeitstempel: 2026-08-27 20:45:00 CEST
-        // Breadcrumbs:
-        //   - [2026-08-27 20:30:00 CEST]: Notizen & To-Do Rendering.
-        //   - [2026-08-27 20:45:00 CEST]: Filter-Logik geschärft (Dimmen wenn nicht
-        //     zugewiesen) & Klasse 'note-overdue' für pulsierende rote Warnung ergänzt.
-        // =============================================================================
-        if (node.block_type === 'note' || node.doc_number === 'NOTE' || node.doc_number === 'TODO') {
+        // 2a. STICKY NOTES & TO-DO CARDS (NUR IM HAUPT-CANVAS)
+        if (isNote) {
             const isPrivate = node.article_number === 'private';
             const isTodo = node.doc_number === 'TODO';
             const userCode = (activeUserCode || '').toUpperCase();
@@ -2000,7 +2105,6 @@ function renderCanvas() {
             if (noteW < 120) noteW = 220;
             if (noteH < 60) noteH = isTodo ? 140 : 90;
 
-            // Daten parsen (JSON oder Legacy String)
             const noteData = (typeof parseNotePayload === 'function')
                 ? parseNotePayload(node.name)
                 : { text: node.name || '', dueDate: null, items: [] };
@@ -2009,7 +2113,6 @@ function renderCanvas() {
             const doneItems = noteData.items ? noteData.items.filter(i => i.done).length : 0;
             const isAllCompleted = isTodo && totalItems > 0 && doneItems === totalItems;
 
-            // Überfälligkeits-Prüfung (nur aktiv wenn noch nicht alle Punkte abgehakt sind)
             let isOverdue = false;
             let isDueToday = false;
             if (isTodo && noteData.dueDate && !isAllCompleted) {
@@ -2018,10 +2121,8 @@ function renderCanvas() {
                 isDueToday = noteData.dueDate === todayStr;
             }
 
-            // Persönlicher Filter: Nur aktiv zugewiesene Notizen/To-Dos hervorheben, andere ausgrauen
             const isAssignedToMe = (node.assigned_design_user && node.assigned_design_user.toUpperCase() === userCode);
             const isCreatedByMe = (noteCreator === userCode);
-            // Kriterium: Zugewiesen an mich ODER (falls keine Zuweisung existiert) von mir erstellt
             const matchesFilter = node.assigned_design_user ? isAssignedToMe : isCreatedByMe;
             const isDimmed = window.personalFilterActive && !matchesFilter;
 
@@ -2029,20 +2130,11 @@ function renderCanvas() {
             el.id = node.id;
             const canDrag = isAdmin || (userCode === noteCreator);
 
-            // =============================================================================
-            // Projekt: CAD Time Manager
-            // Domain: NATIVE Canvas Engine (Voll-Puls Inline-Bereinigung)
-            // ERSETZEN IN: canvas.js (Im Bereich der Style-Zuweisung von el)
-            // Zeitstempel: 2026-08-27 21:12:00 CEST
-            // Breadcrumb: [2026-08-27 21:12:00 CEST] backgroundColor und border bei überfälligen
-            // Notizen freigegeben, damit CSS-Keyframes vollflächig animieren.
-            // =============================================================================
             el.className = `note-card no-pan ${canDrag ? 'draggable-enabled' : 'draggable-disabled'} ${isDimmed ? 'node-dimmed' : ''} ${isOverdue ? 'note-overdue' : ''}`;
             el.style.left = `${node.pos_x}px`;
             el.style.top = `${node.pos_y}px`;
 
             if (isOverdue) {
-                // Keine fixen inline Farben, damit CSS overdueFullPulse steuern kann
                 el.style.backgroundColor = '';
                 el.style.border = '';
             } else {
@@ -2051,7 +2143,6 @@ function renderCanvas() {
             }
 
             el.style.zIndex = isOverdue ? '180' : '150';
-
             el.style.width = isCollapsed ? '42px' : `${noteW}px`;
             el.style.height = isCollapsed ? '42px' : `${noteH}px`;
             el.style.minHeight = isCollapsed ? '42px' : (isTodo ? '90px' : '60px');
@@ -2130,18 +2221,6 @@ function renderCanvas() {
                 let startClientX = 0, startClientY = 0;
                 let initX = 0, initY = 0;
 
-                /**
-                           * =============================================================================
-                           * Projekt: CAD Time Manager
-                           * Domain: NATIVE Canvas Engine (Zonen-Highlighting für Notizen)
-                           * ERSETZEN IN: canvas.js (Funktion startNoteDrag innerhalb von renderCanvas)
-                           * Zeitstempel: 2026-08-29 20:15:00 CEST
-                           * Breadcrumbs:
-                           *   - [2026-08-27 20:45:00 CEST]: Filter-Logik geschärft & 'note-overdue' ergänzt.
-                           *   - [2026-08-29 20:15:00 CEST]: Zonen-Hover-Highlighting beim Draggen 
-                           *     von Notizen (analog zu Blöcken) hinzugefügt.
-                           * =============================================================================
-                           */
                 const startNoteDrag = (e) => {
                     if (e.target.closest('.note-resize-handle, span[title="Zuklappen"], input[type="checkbox"]')) return;
                     if (e.type === 'mousedown' && e.button !== 0) return;
@@ -2153,7 +2232,6 @@ function renderCanvas() {
 
                     startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                     startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-
                     initX = node.pos_x;
                     initY = node.pos_y;
                     if (e.cancelable) e.stopPropagation();
@@ -2164,7 +2242,6 @@ function renderCanvas() {
 
                         const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
                         const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
-
                         const scale = window.currentScale || 1;
                         const dx = (clientX - startClientX) / scale;
                         const dy = (clientY - startClientY) / scale;
@@ -2175,19 +2252,6 @@ function renderCanvas() {
                         node.pos_y = Math.round(initY + dy);
                         el.style.left = `${node.pos_x}px`;
                         el.style.top = `${node.pos_y}px`;
-
-                        // Zonen-Highlighting während des Verschiebens
-                        const targetZone = (typeof getDeepestZoneAt === 'function')
-                            ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
-                            : null;
-
-                        (currentZones || []).forEach(z => {
-                            const zEl = document.getElementById(z.id);
-                            if (zEl) {
-                                if (targetZone && z.id === targetZone.id) zEl.classList.add('zone-hover-highlight');
-                                else zEl.classList.remove('zone-hover-highlight');
-                            }
-                        });
                     };
 
                     const onMouseUp = async () => {
@@ -2200,30 +2264,18 @@ function renderCanvas() {
                         window.removeEventListener('touchend', onMouseUp);
                         window.removeEventListener('touchcancel', onMouseUp);
 
-                        // Highlights beim Loslassen entfernen
-                        (currentZones || []).forEach(z => {
-                            const zEl = document.getElementById(z.id);
-                            if (zEl) zEl.classList.remove('zone-hover-highlight');
-                        });
-
                         const targetZone = (typeof getDeepestZoneAt === 'function')
                             ? getDeepestZoneAt(node.pos_x + 95, node.pos_y + 40)
                             : null;
-                        const targetZoneId = targetZone ? targetZone.id : null;
-                        node.zone_id = targetZoneId;
+                        node.zone_id = targetZone ? targetZone.id : null;
 
                         await db.from('project_nodes').update({
                             pos_x: node.pos_x,
                             pos_y: node.pos_y,
-                            zone_id: targetZoneId
+                            zone_id: node.zone_id
                         }).eq('id', node.id);
 
                         window.isDraggingAnything = false;
-                        if (typeof renderCanvas === 'function') renderCanvas();
-                        if (window.pendingCanvasUpdate && typeof fetchCanvasData === 'function') {
-                            window.pendingCanvasUpdate = false;
-                            fetchCanvasData();
-                        }
                     };
 
                     window.addEventListener('mousemove', onMouseMove);
@@ -2235,76 +2287,6 @@ function renderCanvas() {
 
                 el.addEventListener('mousedown', startNoteDrag);
                 el.addEventListener('touchstart', startNoteDrag, { passive: false });
-
-                el.addEventListener('click', (e) => {
-                    if (didDrag) { didDrag = false; return; }
-                    if (isCollapsed) toggleNoteCollapse(e, node.id);
-                });
-
-                if (!isCollapsed) {
-                    const resizeHandle = el.querySelector('.note-resize-handle');
-                    if (resizeHandle) {
-                        const startNoteResize = (e) => {
-                            if (e.type === 'touchstart' && e.touches.length > 1) return;
-                            if (e.cancelable) e.stopPropagation();
-
-                            window.isDraggingAnything = true;
-                            let isResizing = true;
-                            const scale = window.currentScale || 1;
-                            const startW = noteW;
-                            const startH = noteH;
-
-                            const startMouseX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                            const startMouseY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-
-                            const onResizeMove = (moveEvent) => {
-                                if (!isResizing) return;
-                                if (moveEvent.type === 'touchmove' && moveEvent.cancelable) moveEvent.preventDefault();
-
-                                const clientX = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
-                                const clientY = moveEvent.type.includes('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
-
-                                const dw = (clientX - startMouseX) / scale;
-                                const dh = (clientY - startMouseY) / scale;
-
-                                const newW = Math.max(140, Math.round(startW + dw));
-                                const newH = Math.max(70, Math.round(startH + dh));
-
-                                el.style.width = `${newW}px`;
-                                el.style.height = `${newH}px`;
-                                node.budget_design_hours = newW;
-                                node.budget_drafting_hours = newH;
-                            };
-
-                            const onResizeUp = async () => {
-                                if (!isResizing) return;
-                                isResizing = false;
-
-                                window.removeEventListener('mousemove', onResizeMove);
-                                window.removeEventListener('mouseup', onResizeUp);
-                                window.removeEventListener('touchmove', onResizeMove);
-                                window.removeEventListener('touchend', onResizeUp);
-                                window.removeEventListener('touchcancel', onResizeUp);
-
-                                await db.from('project_nodes').update({
-                                    budget_design_hours: node.budget_design_hours,
-                                    budget_drafting_hours: node.budget_drafting_hours
-                                }).eq('id', node.id);
-
-                                window.isDraggingAnything = false;
-                            };
-
-                            window.addEventListener('mousemove', onResizeMove);
-                            window.addEventListener('mouseup', onResizeUp);
-                            window.addEventListener('touchmove', onResizeMove, { passive: false });
-                            window.addEventListener('touchend', onResizeUp);
-                            window.addEventListener('touchcancel', onResizeUp);
-                        };
-
-                        resizeHandle.addEventListener('mousedown', startNoteResize);
-                        resizeHandle.addEventListener('touchstart', startNoteResize, { passive: false });
-                    }
-                }
             }
 
             canvas.appendChild(el);
@@ -2312,16 +2294,6 @@ function renderCanvas() {
         }
 
         // 2b. REGULÄRE BAUGRUPPEN / BAUTEILE
-        // HIER ENTFERNT: Die isNodeHiddenByAncestor Abfrage mit 'return' wurde gelöscht
-
-        // =====================================================================
-        // 2b. REGULÄRE BAUGRUPPEN / BAUTEILE
-        // Zeitstempel: 2026-09-17 21:30:00 CEST
-        // Breadcrumb: [2026-09-17 21:30:00 CEST] Vollständige Weiche für CAD-Plan 
-        // vs. Manager-Board (ohne Buchungsfelder, isolierte Manager-Koordinaten)
-        // =====================================================================
-
-        // MANAGER-MODE GUARD: Im Manager-Cockpit nur platzierte Blöcke anzeigen
         if (isManagerMode && (!mgrLayout || !mgrLayout.placements || !mgrLayout.placements[node.id])) {
             return;
         }
@@ -2392,82 +2364,11 @@ function renderCanvas() {
             completionBtnHtml = `<button type="button" style="background:none; border:none; color:#38a169; cursor:pointer; font-size:11px; font-weight:bold;" onclick="handleRequestCompletion('${node.id}')">✔ Fertigmelden</button>`;
         }
 
-        let inlineLogsHtml = '';
-        if (isExpanded && !isManagerMode) {
-            if (nodeLogs.length === 0) {
-                inlineLogsHtml = `
-          <div class="inline-logs-container">
-            <div style="font-size:10px; color:#718096; text-align:center; padding: 4px 0;">Keine Zeiten erfasst.</div>
-          </div>
-        `;
-            } else {
-                let tableRows = '';
-                nodeLogs.forEach(log => {
-                    const d = new Date(log.logged_at);
-                    const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-                    const kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichn.' : 'Status');
-                    const badge = log.status === 'approved' ? '<span class="badge-approved">OK</span>' : '<span class="badge-pending">Wartend</span>';
-
-                    let timeFormatted = formatHoursToHM(log.hours);
-                    if (log.task_type === 'completion') {
-                        timeFormatted = log.note.includes('Revision') || log.note.includes('Ablehnen') ? '↺' : '✔';
-                    }
-
-                    let noteIconHtml = '';
-                    if (log.note && log.note.trim() !== '') {
-                        noteIconHtml = `
-              <span class="info-tooltip-trigger">ℹ️
-                <span class="tooltip-overlay">${escapeHtml(log.note)}</span>
-              </span>
-            `;
-                    }
-
-                    let deleteActionHtml = '';
-                    const canDeleteLog = isAdmin || (log.status === 'pending' && log.user_code === activeUserCode);
-                    if (canDeleteLog) {
-                        deleteActionHtml = `<span class="btn-delete-log" title="Eintrag löschen" onclick="handleDeleteLog('${log.id}')">✕</span>`;
-                    }
-
-                    tableRows += `
-            <tr>
-              <td><strong>${escapeHtml(log.user_code)}</strong></td>
-              <td>${dateStr}</td>
-              <td>${kat}</td>
-              <td>${timeFormatted} ${noteIconHtml}</td>
-              <td>${badge} ${deleteActionHtml}</td>
-            </tr>
-          `;
-                });
-
-                inlineLogsHtml = `
-          <div class="inline-logs-container">
-            <table class="log-table">
-              <thead>
-                <tr>
-                  <th>Kürzel</th>
-                  <th>Datum</th>
-                  <th>Kat.</th>
-                  <th>Zeit</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-          </div>
-        `;
-            }
-        }
-
-        const isUserAssigned = (node.assigned_design_user === activeUserCode) || (node.assigned_drafting_user === activeUserCode);
-        const isDimmed = window.personalFilterActive && !isUserAssigned;
-
-        // 50/50 Ladebalken-Werte (Erledigte Blöcke automatisch 100%)
         const isBlockDone = masterNode.completion_status === 'completed';
         const pDesign = isBlockDone ? 100 : ((masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : 0);
         const pDrafting = isBlockDone ? 100 : ((masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : 0);
         const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
 
-        // Pillen-Badge mit Ladebalken
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
         if (identifier || pTotal > 0 || isBlockDone) {
@@ -2481,24 +2382,21 @@ function renderCanvas() {
             `;
 
             badgeHtml = `
-              <div class="assembly-id-badge zone-badge-container" style="border-color: ${nodeColor};" title="${node.article_number ? 'Artikelnummer' : 'Vault DOC-Nummer'}">
+              <div class="assembly-id-badge zone-badge-container" style="border-color: ${nodeColor};">
                 ${docLabel}${barHtml}
               </div>
             `;
         }
 
-        const isConnectingThisNode = (connectingFirstNodeId === node.id);
         const isSelected = window.selectedNodeIds.has(node.id);
-
         const el = document.createElement('div');
         el.id = node.id;
         if (isEffectivelyLinked) el.dataset.linkedId = node.linked_id;
 
-        // Koordinaten je nach aktivem Modus
         const posX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? node.pos_x) : node.pos_x;
         const posY = isManagerMode ? (mgrLayout.placements[node.id]?.pos_y ?? node.pos_y) : node.pos_y;
 
-        el.className = `assembly-card no-pan ${isManagerMode ? 'manager-card draggable-enabled' : (canDrag ? 'draggable-enabled' : 'draggable-disabled')} ${isSelected ? 'selected-node' : ''} ${isDimmed ? 'node-dimmed' : ''}`;
+        el.className = `assembly-card no-pan ${isManagerMode ? 'manager-card draggable-enabled' : (canDrag ? 'draggable-enabled' : 'draggable-disabled')} ${isSelected ? 'selected-node' : ''}`;
         el.style.left = `${posX}px`;
         el.style.top = `${posY}px`;
         el.style.borderColor = nodeColor;
@@ -2506,24 +2404,74 @@ function renderCanvas() {
         el.style.zIndex = isExpanded ? 2000 : 100;
 
         const linkedIconHtml = isEffectivelyLinked
-            ? `<span class="linked-icon" title="${isMaster ? 'Master-Instanz (Zeiten synchron)' : 'Referenz-Instanz (loggt auf Master)'}">🔗${isMaster ? '' : ' Ref'}</span>`
+            ? `<span class="linked-icon" title="${isMaster ? 'Master-Instanz' : 'Referenz-Instanz'}">🔗${isMaster ? '' : ' Ref'}</span>`
             : '';
 
         let assignedBadgesHtml = '';
         if (node.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px; display:inline-flex; align-items:center; gap:3px;" title="CAD / 3D: ${escapeHtml(node.assigned_design_user)}"><span style="border:1.5px solid #fff; border-radius:2px; padding:0 2px; font-size:8px; line-height:1; font-weight:bold;">3D</span> <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px;" title="CAD: ${escapeHtml(node.assigned_design_user)}">3D <strong>${escapeHtml(node.assigned_design_user)}</strong></span>`;
         }
         if (node.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px; display:inline-flex; align-items:center; gap:3px;" title="Zeichnung: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px;" title="Zeichnung: ${escapeHtml(node.assigned_drafting_user)}">📄 <strong>${escapeHtml(node.assigned_drafting_user)}</strong></span>`;
         }
 
         const typeIconSvg = bType === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-        // =====================================================================
-        // HTML AUFBAU: MANAGER-BOARD VS. HAUPT-CANVAS
-        // =====================================================================
         if (isManagerMode) {
-            // Schlanke Manager-Karte: Reines Ergebnis ohne Buchungsfelder
+            // FIX: Admin-Fortschritts-Regler direkt auf der Manager-Karte
+            let progressControlsHtml = '';
+            if (isAdmin) {
+                progressControlsHtml = `
+                  <div class="mgr-progress-box" style="margin-top: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px;" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                      <span style="font-size:9px; font-weight:bold; text-transform:uppercase; color:#4a5568;">Fertigstellungsgrad (50/50)</span>
+                      <span id="mgr-tot-badge-${node.id}" style="font-size:10px; font-weight:bold; padding:1px 6px; border-radius:10px; background:${pTotal === 100 ? '#c6f6d5' : (pTotal > 50 ? '#bee3f8' : '#edf2f7')}; color:${pTotal === 100 ? '#22543d' : (pTotal > 50 ? '#2b6cb0' : '#4a5568')};">${pTotal}% Gesamt</span>
+                    </div>
+
+                    <div style="margin-bottom: 4px;">
+                      <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:#2b6cb0; margin-bottom:1px;">
+                        <span>📐 CAD (3D)</span>
+                        <span id="mgr-prog-val-d-${node.id}">${pDesign}%</span>
+                      </div>
+                      <input type="range" class="mgr-prog-slider" min="0" max="100" step="5" value="${pDesign}" 
+                        style="width:100%; height:4px; accent-color:#2b6cb0; cursor:pointer;" 
+                        oninput="window.handleManagerProgressInput('${node.id}', 'design', this.value)"
+                        onchange="window.handleManagerProgressChange('${node.id}', 'design', this.value)" />
+                    </div>
+
+                    <div>
+                      <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:#38a169; margin-bottom:1px;">
+                        <span>📄 Zeichnung (2D)</span>
+                        <span id="mgr-prog-val-dr-${node.id}">${pDrafting}%</span>
+                      </div>
+                      <input type="range" class="mgr-prog-slider" min="0" max="100" step="5" value="${pDrafting}" 
+                        style="width:100%; height:4px; accent-color:#38a169; cursor:pointer;" 
+                        oninput="window.handleManagerProgressInput('${node.id}', 'drafting', this.value)"
+                        onchange="window.handleManagerProgressChange('${node.id}', 'drafting', this.value)" />
+                    </div>
+                  </div>
+                `;
+            } else {
+                progressControlsHtml = `
+                  <div class="mgr-progress-box" style="margin-top: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                      <span style="font-size:9px; font-weight:bold; text-transform:uppercase; color:#4a5568;">Status</span>
+                      <span style="font-size:10px; font-weight:bold; color:${pTotal === 100 ? '#22543d' : '#2b6cb0'};">${pTotal}% Gesamt</span>
+                    </div>
+                    <div style="margin-bottom: 3px;">
+                      <div style="display:flex; justify-content:space-between; font-size:9px; color:#2b6cb0; font-weight:bold;">
+                        <span>📐 CAD: ${pDesign}%</span>
+                        <span>📄 Zeichn: ${pDrafting}%</span>
+                      </div>
+                      <div style="width:100%; height:6px; background:#e2e8f0; border-radius:3px; overflow:hidden; display:flex; margin-top:2px;">
+                        <div style="width:${pDesign * 0.5}%; height:100%; background:#2b6cb0;"></div>
+                        <div style="width:${pDrafting * 0.5}%; height:100%; background:#38a169;"></div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+            }
+
             el.innerHTML = `
               ${badgeHtml}
               <div class="assembly-header" style="background: ${nodeColor}; display: flex; justify-content: space-between; align-items: center; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 6px 10px;">
@@ -2552,16 +2500,17 @@ function renderCanvas() {
                     <div class="chart-sub">${drStr}</div>
                   </div>
                 </div>
+                ${progressControlsHtml}
               </div>
             `;
         } else {
-            // Reguläre CAD-Karte mit Handles, Zeiterfassung & Log-Akkordeon
+            // Reguläre CAD-Karte bleibt unverändert
             el.innerHTML = `
               ${badgeHtml}
-              <div id="ep-top-${node.id}" class="ep-handle ep-top ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
-              <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
-              <div id="ep-left-${node.id}" class="ep-handle ep-left ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
-              <div id="ep-right-${node.id}" class="ep-handle ep-right ${isConnectingThisNode ? 'active-source' : ''}" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
+              <div id="ep-top-${node.id}" class="ep-handle ep-top" title="Knotenpunkt oben" onclick="handleEndpointClick(event, '${node.id}', 'top')"></div>
+              <div id="ep-bottom-${node.id}" class="ep-handle ep-bottom" title="Knotenpunkt unten" onclick="handleEndpointClick(event, '${node.id}', 'bottom')"></div>
+              <div id="ep-left-${node.id}" class="ep-handle ep-left" title="Knotenpunkt links" onclick="handleEndpointClick(event, '${node.id}', 'left')"></div>
+              <div id="ep-right-${node.id}" class="ep-handle ep-right" title="Knotenpunkt rechts" onclick="handleEndpointClick(event, '${node.id}', 'right')"></div>
 
               <div class="assembly-header" style="background: ${nodeColor}; flex-direction: column; align-items: stretch; gap: 6px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
@@ -2630,46 +2579,12 @@ function renderCanvas() {
                     ${completionBtnHtml}
                 </div>
 
-                ${inlineLogsHtml}
+                ${isExpanded ? `<div class="inline-logs-container"><table class="log-table"><thead><tr><th>Kürzel</th><th>Datum</th><th>Kat.</th><th>Zeit</th><th>Status</th></tr></thead><tbody>${nodeLogs.map(l => `<tr><td><strong>${escapeHtml(l.user_code)}</strong></td><td>${new Date(l.logged_at).toLocaleDateString('de-DE')}</td><td>${l.task_type}</td><td>${formatHoursToHM(l.hours)}</td><td>${l.status}</td></tr>`).join('')}</tbody></table></div>` : ''}
               </div>
             `;
         }
 
-        // Event-Listener
-        el.addEventListener('mouseenter', () => {
-            window.hoveredNodeId = node.id;
-            if (node.linked_id) {
-                document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.add('linked-highlight'));
-            }
-        });
-
-        el.addEventListener('mouseleave', () => {
-            window.hoveredNodeId = null;
-            if (node.linked_id) {
-                document.querySelectorAll(`.assembly-card[data-linked-id="${node.linked_id}"]`).forEach(card => card.classList.remove('linked-highlight'));
-            }
-        });
-
-        el.addEventListener('click', (e) => {
-            if (e.target.closest('button, input, select, .ep-handle')) return;
-            e.stopPropagation();
-            if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                if (window.selectedNodeIds.has(node.id)) window.selectedNodeIds.delete(node.id);
-                else window.selectedNodeIds.add(node.id);
-            } else {
-                window.selectedNodeIds.clear();
-                window.selectedNodeIds.add(node.id);
-            }
-            renderCanvas();
-        });
-
-        el.addEventListener('dblclick', (e) => {
-            if (!e.target.closest('.ep-handle') && !e.target.closest('.btn-delete-log') && !e.target.closest('.btn-tree-toggle') && !e.target.closest('button')) {
-                openConfigModal(node.id);
-            }
-        });
-
-        // Drag & Drop Handling (Maus & Touch mit Manager-Zonen-Erkennung)
+        // Drag & Drop Handling für Karten
         if (canDrag || isManagerMode) {
             let isDragging = false;
             let startClientX = 0, startClientY = 0;
@@ -2677,13 +2592,12 @@ function renderCanvas() {
             let initCurY = posY;
 
             const startCardDrag = (e) => {
-                if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle')) return;
+                if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
                 if (e.type === 'touchstart' && e.touches.length > 1) return;
 
                 window.isDraggingAnything = true;
                 isDragging = true;
-
                 startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                 startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
                 initCurX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? posX) : node.pos_x;
@@ -2728,7 +2642,6 @@ function renderCanvas() {
                     const finalY = parseInt(el.style.top, 10);
 
                     if (isManagerMode) {
-                        // Manager-Board: Zuweisung zu Manager-Rahmen prüfen
                         let matchedZoneId = null;
                         const centerX = finalX + 145;
                         const centerY = finalY + 60;
@@ -2747,19 +2660,17 @@ function renderCanvas() {
                             zone_id: matchedZoneId
                         };
                         saveManagerLayout(mgrLayout);
-                        renderCanvas(); // Rahmen-Fortschritt & Budgets sofort neu berechnen
+                        renderCanvas();
                     } else {
-                        // Haupt-Canvas: DB-Update
                         const centerX = finalX + 160;
                         const centerY = finalY + 100;
                         const targetZone = getDeepestZoneAt(centerX, centerY);
-                        const targetZoneId = targetZone ? targetZone.id : null;
-                        node.zone_id = targetZoneId;
+                        node.zone_id = targetZone ? targetZone.id : null;
 
                         await db.from('project_nodes').update({
                             pos_x: finalX,
                             pos_y: finalY,
-                            zone_id: targetZoneId
+                            zone_id: node.zone_id
                         }).eq('id', node.id);
                     }
 
@@ -2783,10 +2694,266 @@ function renderCanvas() {
     if (typeof window.adjustCanvasBounds === 'function') window.adjustCanvasBounds();
     renderConnections();
 
-    // NEU: Nachdem alles lückenlos ins DOM geladen wurde, übergeben wir an 
-    // unsere Anti-Flacker-Engine, die isolierte Elemente per CSS versteckt.
     if (typeof window.syncVisibilityToDOM === 'function') window.syncVisibilityToDOM();
 }
+
+// FIX: Keine CAD-Kanten und Materialfluss-Pfeile auf dem Manager-Board
+function renderConnections(mouseCoords = null) {
+    const svgLayer = document.getElementById('connections-layer');
+    if (!svgLayer) return;
+
+    if (window.activeCanvasMode === 'manager') {
+        svgLayer.innerHTML = '';
+        return;
+    }
+
+    svgLayer.innerHTML = `
+        <defs>
+            <marker id="arrowhead" markerWidth="7" markerHeight="5" refX="1.5" refY="2.5" orient="auto">
+                <polygon points="0 0, 7 2.5, 0 5" fill="#dd6b20" />
+            </marker>
+        </defs>
+    `;
+
+    const nodeRects = {};
+    (currentEdges || []).forEach(edge => {
+        if (!nodeRects[edge.source]) {
+            const el = document.getElementById(edge.source);
+            nodeRects[edge.source] = { w: el ? el.offsetWidth : 320, h: el ? el.offsetHeight : 200 };
+        }
+        if (!nodeRects[edge.target]) {
+            const el = document.getElementById(edge.target);
+            nodeRects[edge.target] = { w: el ? el.offsetWidth : 320, h: el ? el.offsetHeight : 200 };
+        }
+    });
+
+    const getFastCoords = (node, handleType) => {
+        const rect = nodeRects[node.id] || { w: 320, h: 200 };
+        const w = rect.w;
+        const h = rect.h;
+        switch (handleType) {
+            case 'top': return { x: node.pos_x + w / 2, y: node.pos_y };
+            case 'bottom': return { x: node.pos_x + w / 2, y: node.pos_y + h };
+            case 'left': return { x: node.pos_x, y: node.pos_y + h / 2 };
+            case 'right': return { x: node.pos_x + w, y: node.pos_y + h / 2 };
+            default: return { x: node.pos_x + w / 2, y: node.pos_y + h };
+        }
+    };
+
+    const fragment = document.createDocumentFragment();
+
+    (currentEdges || []).forEach(edge => {
+        const srcNode = currentNodes.find(n => n.id === edge.source);
+        const tgtNode = currentNodes.find(n => n.id === edge.target);
+
+        const srcHidden = isNodeHiddenByAncestor(edge.source) || (srcNode && srcNode.zone_id && window.isZoneHidden(srcNode.zone_id));
+        const tgtHidden = isNodeHiddenByAncestor(edge.target) || (tgtNode && tgtNode.zone_id && window.isZoneHidden(tgtNode.zone_id));
+
+        if (srcHidden || tgtHidden || collapsedParents.has(edge.source)) return;
+
+        if (srcNode && tgtNode) {
+            const p1 = getFastCoords(srcNode, edge.source_handle || 'bottom');
+            const p2 = getFastCoords(tgtNode, edge.target_handle || 'top');
+            const isHorizontal = (edge.source_handle === 'right' || edge.source_handle === 'left') &&
+                (edge.target_handle === 'right' || edge.target_handle === 'left');
+
+            let pathD = '';
+            if (isHorizontal) {
+                const dx = Math.max(30, Math.abs(p2.x - p1.x) * 0.4);
+                pathD = `M ${p1.x} ${p1.y} C ${p1.x + (p2.x >= p1.x ? dx : -dx)} ${p1.y}, ${p2.x + (p2.x >= p1.x ? -dx : dx)} ${p2.y}, ${p2.x} ${p2.y}`;
+            } else {
+                const dy = Math.max(30, Math.abs(p2.y - p1.y) * 0.4);
+                pathD = `M ${p1.x} ${p1.y} C ${p1.x} ${p1.y + (p2.y >= p1.y ? dy : -dy)}, ${p2.x} ${p2.y + (p2.y >= p1.y ? -dy : dy)}, ${p2.x} ${p2.y}`;
+            }
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathD);
+            path.setAttribute('class', 'connection-line');
+            path.setAttribute('title', `Verbindung (${srcNode.name} ➔ ${tgtNode.name})`);
+            path.addEventListener('click', () => handleDisconnectClick(edge.source, edge.target));
+            fragment.appendChild(path);
+        }
+    });
+
+    const arrowsToRender = window.currentFlowArrows || [];
+    arrowsToRender.forEach(arrow => {
+        const srcZone = currentZones.find(z => String(z.id) === String(arrow.source_zone_id));
+        const tgtZone = currentZones.find(z => String(z.id) === String(arrow.target_zone_id));
+
+        if (!srcZone || !tgtZone || window.isZoneHidden(srcZone.id) || window.isZoneHidden(tgtZone.id)) return;
+
+        const srcX1 = parseFloat(srcZone.pos_x) || 0;
+        const srcY1 = parseFloat(srcZone.pos_y) || 0;
+        const srcW = parseFloat(srcZone.width) || 400;
+        const srcH = parseFloat(srcZone.height) || 300;
+        const srcX2 = srcX1 + srcW;
+        const srcY2 = srcY1 + srcH;
+
+        const tgtX1 = parseFloat(tgtZone.pos_x) || 0;
+        const tgtY1 = parseFloat(tgtZone.pos_y) || 0;
+        const tgtW = parseFloat(tgtZone.width) || 400;
+        const tgtH = parseFloat(tgtZone.height) || 300;
+        const tgtX2 = tgtX1 + tgtW;
+        const tgtY2 = tgtY1 + tgtH;
+
+        let x1, y1, x2, y2;
+        const isTargetBelow = tgtY1 >= srcY2 - 20;
+        const isTargetAbove = tgtY2 <= srcY1 + 20;
+        const isTargetLeft = tgtX2 <= srcX1 + 20;
+
+        const stub = 10;
+        const minTangent = 50;
+        let pathD = '';
+
+        if (isTargetBelow) {
+            x1 = srcX1 + srcW / 2; y1 = srcY2;
+            x2 = tgtX1 + tgtW / 2; y2 = tgtY1;
+            const dist = Math.max(minTangent, Math.abs(y2 - y1) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1} ${y1 + stub} C ${x1} ${y1 + stub + dist}, ${x2} ${y2 - stub - dist}, ${x2} ${y2 - stub} L ${x2} ${y2}`;
+        } else if (isTargetAbove) {
+            x1 = srcX1 + srcW / 2; y1 = srcY1;
+            x2 = tgtX1 + tgtW / 2; y2 = tgtY2;
+            const dist = Math.max(minTangent, Math.abs(y1 - y2) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1} ${y1 - stub} C ${x1} ${y1 - stub - dist}, ${x2} ${y2 + stub + dist}, ${x2} ${y2 + stub} L ${x2} ${y2}`;
+        } else if (isTargetLeft) {
+            x1 = srcX1; y1 = srcY1 + srcH / 2;
+            x2 = tgtX2; y2 = tgtY1 + tgtH / 2;
+            const dist = Math.max(minTangent, Math.abs(x1 - x2) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1 - stub} ${y1} C ${x1 - stub - dist} ${y1}, ${x2 + stub + dist} ${y2}, ${x2 + stub} ${y2} L ${x2} ${y2}`;
+        } else {
+            x1 = srcX2; y1 = srcY1 + srcH / 2;
+            x2 = tgtX1; y2 = tgtY1 + tgtH / 2;
+            const dist = Math.max(minTangent, Math.abs(x2 - x1) * 0.4);
+            pathD = `M ${x1} ${y1} L ${x1 + stub} ${y1} C ${x1 + stub + dist} ${y1}, ${x2 - stub - dist} ${y2}, ${x2 - stub} ${y2} L ${x2} ${y2}`;
+        }
+
+        const flowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        flowPath.setAttribute('d', pathD);
+        flowPath.setAttribute('class', 'flow-arrow-line');
+        flowPath.setAttribute('marker-end', 'url(#arrowhead)');
+        flowPath.setAttribute('title', `Materialfluss: ${srcZone.title} ➔ ${tgtZone.title}`);
+        flowPath.addEventListener('click', () => handleDeleteFlowArrow(arrow.id));
+        fragment.appendChild(flowPath);
+    });
+
+    svgLayer.appendChild(fragment);
+}
+
+// FIX: Bounding-Box Berechnung berücksichtigt Manager-Board Layout
+window.centerViewOnVisible = function (targetZoneId = null) {
+    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasElements = false;
+
+    const updateBounds = (x, y, w, h) => {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+        hasElements = true;
+    };
+
+    if (window.activeCanvasMode === 'manager') {
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
+        (mgrLayout.zones || []).forEach(z => {
+            updateBounds(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 620, parseFloat(z.height) || 440);
+        });
+        Object.keys(mgrLayout.placements || {}).forEach(nId => {
+            const p = mgrLayout.placements[nId];
+            if (p) {
+                updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
+            }
+        });
+    } else {
+        if (targetZoneId) {
+            const specific = (currentZones || []).find(z => z.id === targetZoneId);
+            if (specific) {
+                updateBounds(parseFloat(specific.pos_x) || 0, parseFloat(specific.pos_y) || 0, parseFloat(specific.width) || 400, parseFloat(specific.height) || 300);
+            }
+        } else {
+            const visibleZones = (currentZones || []).filter(z => !window.isZoneHidden(z.id));
+            visibleZones.forEach(z => {
+                updateBounds(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 400, parseFloat(z.height) || 300);
+            });
+
+            const visibleNodes = (currentNodes || []).filter(n => !isNodeHiddenByAncestor(n.id) && !(n.zone_id && window.isZoneHidden(n.zone_id)));
+            visibleNodes.forEach(n => {
+                const isNote = (n.block_type === 'note' || n.doc_number === 'NOTE' || n.doc_number === 'TODO');
+                const w = isNote ? (parseFloat(n.budget_design_hours) || 220) : 320;
+                const h = isNote ? (parseFloat(n.budget_drafting_hours) || 120) : 200;
+                updateBounds(parseFloat(n.pos_x) || 0, parseFloat(n.pos_y) || 0, w, h);
+            });
+        }
+    }
+
+    if (!hasElements || !isFinite(minX) || !isFinite(minY)) {
+        window.currentScale = 1;
+        window.currentPanX = 50;
+        window.currentPanY = 50;
+        applyCanvasTransform(false);
+        return;
+    }
+
+    const viewportEl = document.getElementById('viewport');
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+
+    const padding = 100;
+    const bboxW = maxX - minX;
+    const bboxH = maxY - minY;
+
+    const centerX = minX + bboxW / 2;
+    const centerY = minY + bboxH / 2;
+
+    const scaleX = (vw - padding * 2) / Math.max(bboxW, 100);
+    const scaleY = (vh - padding * 2) / Math.max(bboxH, 100);
+
+    let targetScale = Math.min(scaleX, scaleY);
+    targetScale = Math.max(0.05, Math.min(targetScale, 2.5));
+
+    window.currentScale = targetScale;
+    window.currentPanX = (vw / 2) - (centerX * window.currentScale);
+    window.currentPanY = (vh / 2) - (centerY * window.currentScale);
+
+    applyCanvasTransform(false);
+};
+
+// FIX: Dynamische Canvas-Größe berücksichtigt Manager-Board Elemente
+window.adjustCanvasBounds = function () {
+    let maxX = 0, maxY = 0;
+
+    if (window.activeCanvasMode === 'manager') {
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
+        (mgrLayout.zones || []).forEach(z => {
+            if ((parseFloat(z.pos_x) || 0) + (parseFloat(z.width) || 620) > maxX) maxX = (parseFloat(z.pos_x) || 0) + (parseFloat(z.width) || 620);
+            if ((parseFloat(z.pos_y) || 0) + (parseFloat(z.height) || 440) > maxY) maxY = (parseFloat(z.pos_y) || 0) + (parseFloat(z.height) || 440);
+        });
+        Object.keys(mgrLayout.placements || {}).forEach(nId => {
+            const p = mgrLayout.placements[nId];
+            if (p) {
+                if ((parseFloat(p.pos_x) || 0) + 320 > maxX) maxX = (parseFloat(p.pos_x) || 0) + 320;
+                if ((parseFloat(p.pos_y) || 0) + 200 > maxY) maxY = (parseFloat(p.pos_y) || 0) + 200;
+            }
+        });
+    } else {
+        (currentZones || []).forEach(z => {
+            if (z.pos_x + z.width > maxX) maxX = z.pos_x + z.width;
+            if (z.pos_y + z.height > maxY) maxY = z.pos_y + z.height;
+        });
+
+        (currentNodes || []).forEach(n => {
+            if (n.pos_x + 350 > maxX) maxX = n.pos_x + 350;
+            if (n.pos_y + 250 > maxY) maxY = n.pos_y + 250;
+        });
+    }
+
+    const canvasEl = document.getElementById('canvas');
+    if (canvasEl) {
+        canvasEl.style.width = Math.max(3000, maxX + 1000) + 'px';
+        canvasEl.style.height = Math.max(3000, maxY + 1000) + 'px';
+    }
+};
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
