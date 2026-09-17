@@ -155,7 +155,20 @@ window.toggleNoteCollapse = async function (e, nodeId) {
  *     sondern "Vorhandenen Block platzieren" und "Manager-Rahmen anlegen".
  * =============================================================================
  */
-n(e) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Kontextmenü für Main & Manager-Canvas - Syntax-Fix)
+ * ERSETZEN IN: canvas.js (Funktion handleCanvasContextMenu)
+ * Zeitstempel: 2026-09-17 21:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:35:00 CEST]: 60-Minuten-Löschschutz.
+ *   - [2026-09-17 21:15:00 CEST]: Trennung Main vs. Manager-Modus.
+ *   - [2026-09-17 21:35:00 CEST]: Syntax-Fix: Abgeschnittenes 'n(e) {' zu
+ *     'function handleCanvasContextMenu(e) {' korrigiert.
+ * =============================================================================
+ */
+function handleCanvasContextMenu(e) {
     e.preventDefault();
     if (e.target.closest('button, input, select, .sidebar')) return;
 
@@ -244,9 +257,7 @@ n(e) {
         menu.style.top = e.clientY + 'px';
     }
     contextMenuCoords = getCanvasCoords(e.clientX, e.clientY);
-};
-
-window.cancelConnectionMode = function () {
+} window.cancelConnectionMode = function () {
     connectingFirstNodeId = null;
     connectingFirstPoint = null;
     renderConnections();

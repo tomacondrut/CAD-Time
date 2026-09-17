@@ -586,16 +586,18 @@
             </div>
             <div class="sidebar-content">
                 <div class="sidebar-section-title">Aktives Projekt</div>
+                <select id="sidebarProjectSelect" onchange="handleSidebarProjectChange(this.value)" style="width: 100%; padding: 6px; font-size: 12px; margin-bottom: 10px; background: #2d3748; color: #fff; border: 1px solid #4a5568; border-radius: 4px;"></select>
+
 
                 <!--
-                =============================================================================
-                Projekt: CAD Time Manager
-                Domain: Sidebar (Kompakter & ausklappbarer Budget-Verbrauch mit Vergabe-Quote)
-                ERSETZEN IN: index.html (Im #sidebar -> Bereich "sidebar-stat" für Budget)
-                Zeitstempel: 2026-09-17 20:55:00 CEST
-                Breadcrumb: [2026-09-17 20:55:00 CEST] Kompakte Leiste mit Vergabe-Stunden und Akkordeon-Detailansicht
-                =============================================================================
-                -->
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Sidebar (Kompakter & ausklappbarer Budget-Verbrauch mit Vergabe-Quote)
+    ERSETZEN IN: index.html (Im #sidebar -> Bereich "sidebar-stat" für Budget)
+    Zeitstempel: 2026-09-17 20:55:00 CEST
+    Breadcrumb: [2026-09-17 20:55:00 CEST] Kompakte Leiste mit Vergabe-Stunden und Akkordeon-Detailansicht
+    =============================================================================
+    -->
                 <div class="sidebar-stat" id="sbBudgetStatContainer">
                     <div class="sidebar-stat-label">
                         <span>Projekt-Budgets</span>
@@ -681,14 +683,14 @@
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
 
             <!--
-            =============================================================================
-            Projekt: CAD Time Manager
-            Domain: Viewport (Canvas-Modus Toggle: Konstruktion vs. Manager-Cockpit)
-            EINGEFÜGT IN: index.html (Im #viewport direkt nach mobileMenuBtn)
-            Zeitstempel: 2026-09-17 21:05:00 CEST
-            Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
-            =============================================================================
-            -->
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Viewport (Canvas-Modus Toggle: Konstruktion vs. Manager-Cockpit)
+    EINGEFÜGT IN: index.html (Im #viewport direkt nach mobileMenuBtn)
+    Zeitstempel: 2026-09-17 21:05:00 CEST
+    Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
+    =============================================================================
+    -->
             <div class="canvas-mode-switcher-container">
                 <div class="canvas-mode-switcher">
                     <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 CAD-Konstruktionsplan</button>
@@ -697,9 +699,21 @@
                 <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="autoArrangeManagerCanvas()" title="Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen">🗂️ Nach Farbe & Name sortieren</button>
             </div>
 
-            <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
-            <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
-            <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+            <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Viewport Header-Aktionen (Buttons oben rechts)
+    ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
+    Zeitstempel: 2026-09-17 21:35:00 CEST
+    Breadcrumbs:
+      - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
+      - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
+    =============================================================================
+    -->
+            <button id="newFileBtn" class="top-right-btn" style="right: 308px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
+            <button id="saveFileBtn" class="top-right-btn" style="right: 260px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
+            <button id="loadFileBtn" class="top-right-btn" style="right: 212px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+            <button id="reportBtn" class="top-right-btn" style="right: 164px;" title="Reporting & Auswertung" onclick="openReportModal()">📊</button>
             <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
             <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
             <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>

@@ -3554,10 +3554,25 @@ window.addEventListener('keydown', (e) => {
 window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
 
 // Lädt den Board-Zustand für das aktive Projekt
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Fortschritts-Board State & Placements Guard)
+ * ERSETZEN IN: ui.js (Funktion window.getManagerLayout)
+ * Zeitstempel: 2026-09-17 21:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:50:00 CEST]: Board-Zustand Laden & Fallbacks.
+ *   - [2026-09-17 21:35:00 CEST]: placements-Objekt Guard ergänzt gegen 
+ *     'Cannot set properties of undefined' bei unvollständigen Datensätzen.
+ * =============================================================================
+ */
 window.getManagerLayout = function () {
     const proj = (typeof getCurrentProject === 'function') ? getCurrentProject() : null;
 
     if (proj && proj.manager_layout && Array.isArray(proj.manager_layout.zones)) {
+        if (!proj.manager_layout.placements || typeof proj.manager_layout.placements !== 'object') {
+            proj.manager_layout.placements = {};
+        }
         return proj.manager_layout;
     }
 
@@ -3584,6 +3599,10 @@ window.getManagerLayout = function () {
             curY += (idx % 2 === 1) ? 140 : 0;
             if (curY > 380) curY = 140;
         });
+    }
+
+    if (!layout.placements || typeof layout.placements !== 'object') {
+        layout.placements = {};
     }
 
     return layout;
