@@ -637,28 +637,33 @@
                     </div>
                 </div>
 
-                <!-- Canvas Bereich -->
-                <div id="viewport">
-                    <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
-
-                    <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
-                    <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
-                    <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
-                    <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
-                    <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
-                    <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
-
-                    <div class="zoom-controls">
-                        <button class="btn-zoom" id="btnZoomIn">+</button>
-                        <button class="btn-zoom" id="btnZoomReset">⟲</button>
-                        <button class="btn-zoom" id="btnZoomOut">-</button>
-                    </div>
-
-                    <div id="canvas" class="hide-handles">
-                        <svg id="connections-layer"></svg>
-                    </div>
-                </div>
+                <div class="sidebar-section-title" style="margin-top: 20px;">Top-Bereiche (Ansicht)</div>
+                <div id="sidebarZonesContainer" style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 20px;"></div>
             </div>
+        </div>
+
+        <!-- Canvas Bereich -->
+        <div id="viewport">
+            <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
+
+            <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
+            <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
+            <button id="loadFileBtn" class="top-right-btn" style="right: 164px;" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+            <button id="printBtn" class="top-right-btn" style="right: 116px;" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
+            <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
+            <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
+
+            <div class="zoom-controls">
+                <button class="btn-zoom" id="btnZoomIn">+</button>
+                <button class="btn-zoom" id="btnZoomReset">⟲</button>
+                <button class="btn-zoom" id="btnZoomOut">-</button>
+            </div>
+
+            <div id="canvas" class="hide-handles">
+                <svg id="connections-layer"></svg>
+            </div>
+        </div>
+    </div>
 
     <!-- Konfigurations-Modal (Block) -->
     <div id="configModal" class="modal-backdrop">
