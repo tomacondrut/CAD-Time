@@ -187,53 +187,28 @@
                     </div>
                 </div>
 
-                <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: UI Modal (Fertigstellungsgrad Sliders 50/50)
-    EINGEFÜGT IN: index.html (Im configModal vor den Budget-Feldern)
-    Zeitstempel: 2026-09-17 19:30:00 CEST
-    Breadcrumb: [2026-09-17 19:30:00 CEST] Sliders für CAD & Zeichnung mit 50/50 Gesamtanzeige
-    =============================================================================
-    -->
-                <div class="progress-config-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label style="font-size: 11px; font-weight: 700; color: #4a5568; text-transform: uppercase; margin: 0;">Fertigstellungsgrad (50% CAD / 50% Zeichnung)</label>
-                        <span id="editProgressTotalBadge" class="progress-pill-badge">0% Gesamt</span>
-                    </div>
-
-                    <div style="margin-bottom: 8px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #2b6cb0; font-weight: bold; margin-bottom: 2px;">
-                            <span>📐 CAD / 3D Konstruktion</span>
-                            <span id="editProgressDesignVal">0%</span>
-                        </div>
-                        <input type="range" id="editProgressDesign" min="0" max="100" step="5" value="0" style="width: 100%; accent-color: #2b6cb0; cursor: pointer;" oninput="updateConfigProgressDisplay()" />
-                        <div id="editProgressDesignHint" style="font-size: 9px; color: #e53e3e; display: none;">Nur zugewiesener CAD-Bearbeiter oder Admin</div>
-                    </div>
-
-                    <div>
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #38a169; font-weight: bold; margin-bottom: 2px;">
-                            <span>📄 2D Zeichnungserstellung</span>
-                            <span id="editProgressDraftingVal">0%</span>
-                        </div>
-                        <input type="range" id="editProgressDrafting" min="0" max="100" step="5" value="0" style="width: 100%; accent-color: #38a169; cursor: pointer;" oninput="updateConfigProgressDisplay()" />
-                        <div id="editProgressDraftingHint" style="font-size: 9px; color: #e53e3e; display: none;">Nur zugewiesener Zeichner oder Admin</div>
-                    </div>
-                </div>
-
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
+                        <label>DOC-Nummer (Vault):</label>
+                        <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden; background: #fff;">
+                            <span style="background: #edf2f7; padding: 8px 10px; color: #4a5568; font-weight: bold; border-right: 1px solid #cbd5e0; font-size: 13px; display: flex; align-items: center;">DOC</span>
+                            <input type="text" id="newBlockDocNumber" pattern="\d{7}" maxlength="7" placeholder="1234567" style="border: none !important; border-radius: 0 !important; outline: none; flex: 1; padding: 8px;" />
+                        </div>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Artikel-Nr. (APM):</label>
+                        <input type="text" id="newBlockArticle" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
+                </div>
+                <div id="newBlockBudgetRow" style="display: none; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
                         <label>Budget CAD (h):</label>
-                        <input type="number" min="0" step="0.5" id="editBudgetDesign" required />
+                        <input type="number" min="0" step="0.5" id="newBlockBudgetDesign" value="0" />
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label>Budget Zeichnung (h):</label>
-                        <input type="number" min="0" step="0.5" id="editBudgetDrafting" required />
+                        <input type="number" min="0" step="0.5" id="newBlockBudgetDrafting" value="0" />
                     </div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn-sec" onclick="closeModal('newBlockModal')">Abbrechen</button>
-                    <button type="submit" class="btn-prim">Erstellen</button>
                 </div>
             </form>
         </div>
@@ -696,7 +671,6 @@
                     <label>Bezeichnung:</label>
                     <input type="text" id="editName" required />
                 </div>
-
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 1;">
                         <label>DOC-Nummer (Vault):</label>
@@ -708,6 +682,32 @@
                     <div class="form-group" style="flex: 1;">
                         <label>Artikel-Nr. (APM):</label>
                         <input type="text" id="editArticleNumber" pattern="\d{5}" maxlength="5" placeholder="12345" />
+                    </div>
+                </div>
+
+                <!-- Fertigstellungsgrad Sliders 50/50 -->
+                <div class="progress-config-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 11px; font-weight: 700; color: #4a5568; text-transform: uppercase; margin: 0;">Fertigstellungsgrad (50% CAD / 50% Zeichnung)</label>
+                        <span id="editProgressTotalBadge" class="progress-pill-badge">0% Gesamt</span>
+                    </div>
+
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #2b6cb0; font-weight: bold; margin-bottom: 2px;">
+                            <span>📐 CAD / 3D Konstruktion</span>
+                            <span id="editProgressDesignVal">0%</span>
+                        </div>
+                        <input type="range" id="editProgressDesign" min="0" max="100" step="5" value="0" style="width: 100%; accent-color: #2b6cb0; cursor: pointer;" oninput="updateConfigProgressDisplay()" />
+                        <div id="editProgressDesignHint" style="font-size: 9px; color: #e53e3e; display: none;">Nur zugewiesener CAD-Bearbeiter oder Admin</div>
+                    </div>
+
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #38a169; font-weight: bold; margin-bottom: 2px;">
+                            <span>📄 2D Zeichnungserstellung</span>
+                            <span id="editProgressDraftingVal">0%</span>
+                        </div>
+                        <input type="range" id="editProgressDrafting" min="0" max="100" step="5" value="0" style="width: 100%; accent-color: #38a169; cursor: pointer;" oninput="updateConfigProgressDisplay()" />
+                        <div id="editProgressDraftingHint" style="font-size: 9px; color: #e53e3e; display: none;">Nur zugewiesener Zeichner oder Admin</div>
                     </div>
                 </div>
 
