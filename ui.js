@@ -3337,3 +3337,44 @@ function renderStructurePrintSheet(container, proj, showTimes) {
 
     container.innerHTML = html;
 }
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Globaler ESC-Key Modal & Dialog Closer)
+* HINZUFÜGEN IN: ui.js (Am Ende der Datei)
+* Zeitstempel: 2026-09-17 20:20:00 CEST
+* Breadcrumbs:
+*   - [2026-09-17 20:20:00 CEST]: Capture-Phase Keydown-Listener für 'Escape' integriert.
+*     Schließt offene Modals (z.B. configModal) und Dialoge zuverlässig auch dann,
+*     wenn der Fokus in einem Textfeld oder auf einem Range-Slider liegt.
+* =============================================================================
+*/
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+        // 1. Geöffneten Bestätigungs- / Prompt-Dialog abbrechen
+        const dialog = document.getElementById('dialogModal');
+        if (dialog && (dialog.style.display === 'flex' || getComputedStyle(dialog).display === 'flex')) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof closeDialog === 'function') closeDialog(false);
+            return;
+        }
+
+        // 2. Alle aktuell geöffneten Modals ermitteln (außer dem Login-Overlay)
+        const openModals = Array.from(document.querySelectorAll('.modal-backdrop')).filter(m =>
+            m.id !== 'userLoginOverlay' &&
+            (m.style.display === 'flex' || getComputedStyle(m).display === 'flex')
+        );
+
+        if (openModals.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            // Das oberste geöffnete Modal schließen (äquivalent zum Klick auf "Abbrechen")
+            const topModal = openModals[openModals.length - 1];
+            if (typeof closeModal === 'function') {
+                closeModal(topModal.id);
+            }
+        }
+    }
+}, true); // 'true' = Capture-Phase: feuert vor eventuellen Input-Blockaden

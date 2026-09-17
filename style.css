@@ -1824,3 +1824,37 @@ html, body {
     font-size: 11px;
     font-weight: bold;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Fix: Sticky Modal-Footer & Scrollbar für Config-Modal)
+ * ERSETZEN / EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-17 20:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:55:00 CEST]: 90vh-Begrenzung für Modals.
+ *   - [2026-09-17 20:20:00 CEST]: overflow-y: auto für #configModal aktiviert 
+ *     und .modal-actions mit position: sticky am unteren Fensterrand fixiert,
+ *     damit Speichern/Abbrechen auf allen Bildschirmgrößen permanent sichtbar bleiben.
+ * =============================================================================
+ */
+
+#configModal .modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+}
+
+#configModal .modal-actions {
+    position: sticky;
+    bottom: -12px;
+    background: #ffffff;
+    padding-top: 12px;
+    padding-bottom: 6px;
+    margin-top: 16px;
+    border-top: 1px solid #edf2f7;
+    z-index: 50;
+    box-shadow: 0 -4px 8px rgba(255, 255, 255, 0.95);
+}
