@@ -1858,3 +1858,114 @@ html, body {
     z-index: 50;
     box-shadow: 0 -4px 8px rgba(255, 255, 255, 0.95);
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Sidebar Kompakt-Budgets & Vergabe-Dualbalken)
+ * HINZUFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-17 20:55:00 CEST
+ * =============================================================================
+ */
+
+.sb-details-toggle {
+    background: transparent;
+    border: none;
+    color: #63b3ed;
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease;
+}
+
+    .sb-details-toggle:hover {
+        color: #90cdf4;
+    }
+
+.sb-budget-compact {
+    padding-top: 4px;
+}
+
+.sb-compact-row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.sb-compact-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.sb-compact-numbers {
+    font-family: monospace;
+    font-size: 10px;
+    color: #cbd5e0;
+}
+
+/* Überlagerter Balken: Vergeben (hell/transparent) & Verbraucht (voll) */
+.sb-dual-bar-track {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    background: #1a202c;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sb-bar-alloc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    opacity: 0.35;
+    transition: width 0.3s ease;
+}
+
+    .sb-bar-alloc.cad {
+        background: #63b3ed;
+    }
+
+    .sb-bar-alloc.draft {
+        background: #68d391;
+    }
+
+.sb-bar-spent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+    .sb-bar-spent.cad {
+        background: #3182ce;
+    }
+
+    .sb-bar-spent.draft {
+        background: #38a169;
+    }
+
+/* Detail-Tabelle im ausgeklappten Zustand */
+.sb-detail-table {
+    background: #1a202c;
+    border: 1px solid #4a5568;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 10px;
+    font-size: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sb-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #a0aec0;
+}
