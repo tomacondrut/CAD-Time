@@ -1255,19 +1255,42 @@ function renderCanvas() {
 
         // Aggregierter Rahmenfortschritt
         // Aggregierter Rahmenfortschritt (Erledigte Blöcke zählen immer als 100%)
-        const childBlocks = (currentNodes || []).filter(n => n.zone_id === zone.id && n.block_type !== 'note');
+        /**
+          * =============================================================================
+          * Projekt: CAD Time Manager
+          * Domain: Canvas Engine (Rahmenfortschritt inkl. Referenz-Instanzen)
+          * ERSETZEN IN: canvas.js (In renderCanvas -> sortedZones.forEach)
+          * Zeitstempel: 2026-09-17 20:45:00 CEST
+          * Breadcrumbs:
+          *   - [2026-09-17 19:10:00 CEST]: Initiale Rahmen-Fortschrittsberechnung.
+          *   - [2026-09-17 20:45:00 CEST]: Referenz-Instanzen fließen vollwertig 
+          *     in den Rahmenfortschritt ein (Fortschritt & Budget-Gewichtung werden 
+          *     vom Master bezogen). Unterrahmen werden rekursiv erfasst.
+          * =============================================================================
+          */
+        // 1. Alle Blöcke dieses Rahmens ermitteln (inklusive Blöcke in Unterrahmen)
+        const allZoneIds = [zone.id, ...(typeof getAllDescendantZones === 'function' ? getAllDescendantZones(zone.id) : [])];
+        const childBlocks = (currentNodes || []).filter(n => allZoneIds.includes(n.zone_id) && n.block_type !== 'note');
+
         let zoneProgress = 0;
         if (childBlocks.length > 0) {
             let totalWeightedScore = 0;
             let totalWeights = 0;
 
             childBlocks.forEach(bn => {
-                const isDone = bn.completion_status === 'completed';
-                const pD = isDone ? 100 : ((bn.progress_design !== null && bn.progress_design !== undefined) ? bn.progress_design : 0);
-                const pDr = isDone ? 100 : ((bn.progress_drafting !== null && bn.progress_drafting !== undefined) ? bn.progress_drafting : 0);
+                // Bei Referenzen: Master-Objekt ermitteln, um Fortschritt und Gewichtung abzugleifen
+                const masterObj = bn.linked_id
+                    ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn)
+                    : bn;
+
+                const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
+                const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
+                const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
                 const bTotalProg = (pD * 0.5) + (pDr * 0.5);
 
-                const bWeight = (parseFloat(bn.budget_design_hours) || 0) + (parseFloat(bn.budget_drafting_hours) || 0) || 1;
+                // Gewichtung anhand der Master-Stunden (komplexere Baugruppen wiegen im Fortschritt mehr als Kleinteile)
+                const bWeight = (parseFloat(masterObj.budget_design_hours) || 0) + (parseFloat(masterObj.budget_drafting_hours) || 0) || 1;
+
                 totalWeightedScore += (bTotalProg * bWeight);
                 totalWeights += bWeight;
             });
@@ -2178,17 +2201,17 @@ function renderCanvas() {
         const isBlockDone = masterNode.completion_status === 'completed';
         const pDesign = isBlockDone ? 100 : ((masterNode.progress_design !== null && masterNode.progress_design !== undefined) ? masterNode.progress_design : 0);
         const pDrafting = isBlockDone ? 100 : ((masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : 0);
-        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5)); const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
+        const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
 
         // Pillen-Badge mit Ladebalken (wie bei den Rahmen)
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
-        if (identifier || pTotal > 0 || masterNode.completion_status === 'completed') {
+        if (identifier || pTotal > 0 || isBlockDone) {
             const docLabel = identifier ? `<span class="badge-doc-text">${escapeHtml(identifier)}</span>` : '';
             const barColor = pTotal === 100 ? '#38a169' : (pTotal > 50 ? '#3182ce' : '#dd6b20');
             const barHtml = `
-                <div class="zone-progress-track" title="Fertigstellung: ${pTotal}% (CAD: ${pDesign}\% \vert{} Zeichn:${pDrafting}%)">
-                    <div class="zone-progress-fill" style="width: ${pTotal}\%; background:${barColor};"></div>
+                <div class="zone-progress-track" title="Fertigstellung: ${pTotal}% (CAD: ${pDesign}% | Zeichn: ${pDrafting}%)">
+                    <div class="zone-progress-fill" style="width: ${pTotal}%; background: ${barColor};"></div>
                     <span class="zone-progress-label">${pTotal}%</span>
                 </div>
             `;
