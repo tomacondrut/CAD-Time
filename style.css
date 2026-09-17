@@ -1969,3 +1969,99 @@ html, body {
     align-items: center;
     color: #a0aec0;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Manager-Canvas Switcher & Executive Cards)
+ * HINZUFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-17 21:05:00 CEST
+ * =============================================================================
+ */
+
+/* Zentrierter Canvas-Modus Umschalter */
+.canvas-mode-switcher-container {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.canvas-mode-switcher {
+    display: flex;
+    background: #1a202c;
+    padding: 3px;
+    border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    border: 1px solid #4a5568;
+}
+
+    .canvas-mode-switcher .mode-btn {
+        background: transparent;
+        border: none;
+        color: #a0aec0;
+        padding: 6px 14px;
+        border-radius: 16px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+        .canvas-mode-switcher .mode-btn:hover {
+            color: #fff;
+        }
+
+        .canvas-mode-switcher .mode-btn.active {
+            background: #2b6cb0;
+            color: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+.btn-manager-action {
+    background: #fff;
+    border: 1px solid #cbd5e0;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #2d3748;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+    .btn-manager-action:hover {
+        background: #edf2f7;
+        color: #2b6cb0;
+    }
+
+/* Manager Card (Kompakt, nur Pie-Charts und Fertigstellung) */
+.assembly-card.manager-card {
+    width: 290px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    cursor: grab !important;
+}
+
+    .assembly-card.manager-card:active {
+        cursor: grabbing !important;
+    }
+
+    .assembly-card.manager-card .assembly-header {
+        padding: 6px 10px;
+    }
+
+    .assembly-card.manager-card .assembly-body {
+        padding: 8px 10px;
+    }
+
+    .assembly-card.manager-card .charts-grid {
+        margin: 4px 0 0 0;
+        padding: 6px;
+    }

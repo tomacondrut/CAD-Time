@@ -13,13 +13,56 @@
     <div id="toast"></div>
 
     <!-- Canvas Rechtsklick-Kontextmenü -->
-    <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 175px; padding: 4px 0;">
-        <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Block hinzufügen</div>
-        <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">⬚ Bereich / Kasten</div>
+    <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Context-Menu & Manager Block-Auswahl
+    ERSETZEN IN: index.html (Im Bereich #canvasContextMenu)
+    Zeitstempel: 2026-09-17 21:15:00 CEST
+    Breadcrumbs:
+      - [2026-08-25 17:45:00 CEST]: Standard-Kontextmenü.
+      - [2026-09-17 21:15:00 CEST]: Kontextmenü-Trennung für Main vs. Manager-Canvas
+        sowie Modal "Vorhandenen Block platzieren" hinzugefügt.
+    =============================================================================
+    -->
+    <div id="canvasContextMenu" style="display: none; position: fixed; background: #ffffff; border: 1px solid #cbd5e0; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); z-index: 5000; min-width: 190px; padding: 4px 0;">
+        <!-- Standard-Aktionen (Haupt-Canvas) -->
+        <div id="ctxMenuAddBlock" class="context-menu-item" onclick="handleContextMenuAction('block')">➕ Neuen Block erstellen</div>
+        <div id="ctxMenuAddZone" class="context-menu-item" onclick="handleContextMenuAction('zone')">⬚ Bereich / Kasten anlegen</div>
         <div id="ctxMenuAddNote" class="context-menu-item" onclick="handleContextMenuAction('note')">📝 Notiz / Textzettel</div>
         <div id="ctxMenuToggleHandles" class="context-menu-item" style="border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('toggle_handles')">🔌 Knotenpunkte einblenden</div>
         <div id="ctxMenuDuplicateNode" class="context-menu-item" style="display: none; color: #2b6cb0; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('duplicate')">🔗 Als Instanz duplizieren</div>
         <div id="ctxMenuDeleteNode" class="context-menu-item" style="display: none; color: #e53e3e;" onclick="handleContextMenuAction('delete')">✕ Block löschen</div>
+
+        <!-- Manager-Aktionen (Nur im Manager-Canvas aktiv) -->
+        <div id="ctxMenuMgrAddExisting" class="context-menu-item" style="display: none; font-weight: bold; color: #2b6cb0;" onclick="handleContextMenuAction('mgr_add_existing')">📦 Vorhandenen Block platzieren</div>
+        <div id="ctxMenuMgrAddZone" class="context-menu-item" style="display: none;" onclick="handleContextMenuAction('mgr_add_zone')">⬚ Manager-Rahmen anlegen</div>
+        <div id="ctxMenuMgrRemoveNode" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_remove_node')">✕ Vom Manager-Board entfernen</div>
+        <div id="ctxMenuMgrDeleteZone" class="context-menu-item" style="display: none; color: #c53030; border-top: 1px solid #edf2f7;" onclick="handleContextMenuAction('mgr_delete_zone')">✕ Manager-Rahmen löschen</div>
+    </div>
+
+    <!-- Modal: Vorhandenen Block auf Manager-Canvas platzieren -->
+    <div id="mgrAddBlockModal" class="modal-backdrop">
+        <div class="modal-content" style="width: 440px;">
+            <div class="modal-header">📦 Vorhandenen Block auf Board platzieren</div>
+            <p style="font-size: 12px; color: #718096; margin-bottom: 12px;">
+                Wähle einen bestehenden Block aus der CAD-Konstruktion aus, um ihn hier für Auswertungen und Klassifizierungen anzuordnen.
+            </p>
+            <div class="form-group">
+                <label>Bestehender Block / Baugruppe:</label>
+                <select id="mgrSelectExistingNode" style="padding: 8px; font-size: 12px;"></select>
+            </div>
+            <div class="form-group">
+                <label>Ziel-Rahmen (optional):</label>
+                <select id="mgrSelectTargetZone" style="padding: 8px; font-size: 12px;">
+                    <option value="">-- Frei auf Canvas (Kein Rahmen) --</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-sec" onclick="closeModal('mgrAddBlockModal')">Abbrechen</button>
+                <button type="button" class="btn-prim" onclick="confirmAddExistingBlockToManager()">Auf Board platzieren</button>
+            </div>
+        </div>
     </div>
 
     <!-- Dialog-Modal (z-index 3500) -->
@@ -364,14 +407,14 @@
                 </div>
 
                 <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: UI Modals (Retro-Log Button für Rahmen)
-    ERSETZEN IN: index.html (Im editZoneModal direkt vor .modal-actions)
-    Zeitstempel: 2026-09-01 17:55:00 CEST
-    Breadcrumb: [2026-09-01 17:55:00 CEST] Button für rückwirkende Zonen-Zeiteinträge ergänzt.
-    =============================================================================
-    -->
+                =============================================================================
+                Projekt: CAD Time Manager
+                Domain: UI Modals (Retro-Log Button für Rahmen)
+                ERSETZEN IN: index.html (Im editZoneModal direkt vor .modal-actions)
+                Zeitstempel: 2026-09-01 17:55:00 CEST
+                Breadcrumb: [2026-09-01 17:55:00 CEST] Button für rückwirkende Zonen-Zeiteinträge ergänzt.
+                =============================================================================
+                -->
                 <div id="retroLogZoneAdminBtnContainer" style="margin-top: 10px;">
                     <button type="button" class="btn-sec" style="width: 100%; border: 1px dashed #2b6cb0; color: #2b6cb0;" onclick="openZoneRetroLogModal()">+ Rückwirkenden Zeiteintrag hinzufügen</button>
                 </div>
@@ -389,14 +432,14 @@
         <div class="modal-content">
             <div class="modal-header">Rückwirkende Zeiterfassung (Erweiterte Optionen)</div>
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: UI Modals (Hidden-Fields für Retro-Logs)
-    ERSETZEN IN: index.html (Im retroLogModal innerhalb von <form id="retroLogForm">)
-    Zeitstempel: 2026-09-01 17:55:00 CEST
-    Breadcrumb: [2026-09-01 17:55:00 CEST] retroLogZoneId ergänzt und Label dynamisch gehalten.
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: UI Modals (Hidden-Fields für Retro-Logs)
+            ERSETZEN IN: index.html (Im retroLogModal innerhalb von <form id="retroLogForm">)
+            Zeitstempel: 2026-09-01 17:55:00 CEST
+            Breadcrumb: [2026-09-01 17:55:00 CEST] retroLogZoneId ergänzt und Label dynamisch gehalten.
+            =============================================================================
+            -->
             <form id="retroLogForm">
                 <input type="hidden" id="retroLogNodeId" />
                 <input type="hidden" id="retroLogZoneId" />
@@ -420,14 +463,14 @@
                     </select>
                 </div>
                 <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: UI Modals (Retro-Log Zeitfelder mit Wheel-Handler)
-    ERSETZEN IN: index.html (Im retroLogModal -> Bereich .time-inputs-row)
-    Zeitstempel: 2026-09-01 18:05:00 CEST
-    Breadcrumb: [2026-09-01 18:05:00 CEST] input-hours/input-mins und onwheel ergänzt.
-    =============================================================================
-    -->
+                =============================================================================
+                Projekt: CAD Time Manager
+                Domain: UI Modals (Retro-Log Zeitfelder mit Wheel-Handler)
+                ERSETZEN IN: index.html (Im retroLogModal -> Bereich .time-inputs-row)
+                Zeitstempel: 2026-09-01 18:05:00 CEST
+                Breadcrumb: [2026-09-01 18:05:00 CEST] input-hours/input-mins und onwheel ergänzt.
+                =============================================================================
+                -->
                 <div class="form-group">
                     <label>Dauer (Stunden & Minuten):</label>
                     <div class="time-inputs-row">
@@ -555,14 +598,14 @@
                 <div class="sidebar-section-title">Aktives Projekt</div>
 
                 <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Sidebar (Kompakter & ausklappbarer Budget-Verbrauch mit Vergabe-Quote)
-    ERSETZEN IN: index.html (Im #sidebar -> Bereich "sidebar-stat" für Budget)
-    Zeitstempel: 2026-09-17 20:55:00 CEST
-    Breadcrumb: [2026-09-17 20:55:00 CEST] Kompakte Leiste mit Vergabe-Stunden und Akkordeon-Detailansicht
-    =============================================================================
-    -->
+                =============================================================================
+                Projekt: CAD Time Manager
+                Domain: Sidebar (Kompakter & ausklappbarer Budget-Verbrauch mit Vergabe-Quote)
+                ERSETZEN IN: index.html (Im #sidebar -> Bereich "sidebar-stat" für Budget)
+                Zeitstempel: 2026-09-17 20:55:00 CEST
+                Breadcrumb: [2026-09-17 20:55:00 CEST] Kompakte Leiste mit Vergabe-Stunden und Akkordeon-Detailansicht
+                =============================================================================
+                -->
                 <div class="sidebar-stat" id="sbBudgetStatContainer">
                     <div class="sidebar-stat-label">
                         <span>Projekt-Budgets</span>
@@ -642,9 +685,27 @@
             </div>
         </div>
 
+
         <!-- Canvas Bereich -->
         <div id="viewport">
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
+
+            <!--
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport (Canvas-Modus Toggle: Konstruktion vs. Manager-Cockpit)
+            EINGEFÜGT IN: index.html (Im #viewport direkt nach mobileMenuBtn)
+            Zeitstempel: 2026-09-17 21:05:00 CEST
+            Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
+            =============================================================================
+            -->
+            <div class="canvas-mode-switcher-container">
+                <div class="canvas-mode-switcher">
+                    <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 CAD-Konstruktion</button>
+                    <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Manager-Cockpit</button>
+                </div>
+                <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="autoArrangeManagerCanvas()" title="Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen">🗂️ Nach Farbe & Name sortieren</button>
+            </div>
 
             <button id="newFileBtn" class="top-right-btn" style="right: 260px;" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
             <button id="saveFileBtn" class="top-right-btn" style="right: 212px;" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>

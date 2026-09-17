@@ -3528,3 +3528,291 @@ window.addEventListener('keydown', (e) => {
         }
     }
 }, true); // 'true' = Capture-Phase: feuert vor eventuellen Input-Blockaden
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Manager-Canvas Switcher & Sortier-Engine)
+* HINZUFÜGEN IN: ui.js (Am Ende der Datei)
+* Zeitstempel: 2026-09-17 21:05:00 CEST
+* Breadcrumbs:
+*   - [2026-09-17 21:05:00 CEST]: switchCanvasMode toggelt zwischen Konstruktions-
+*     und Management-Ansicht. autoArrangeManagerCanvas ordnet alle Blöcke nach
+*     Farben in Spalten und alphabetisch nach Namen an.
+* =============================================================================
+*/
+
+window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
+
+window.switchCanvasMode = function (mode) {
+    window.activeCanvasMode = mode;
+    localStorage.setItem('cad_tm_canvas_mode', mode);
+
+    const btnMain = document.getElementById('btnModeMain');
+    const btnManager = document.getElementById('btnModeManager');
+    const btnSort = document.getElementById('btnAutoSortManager');
+
+    if (btnMain && btnManager) {
+        btnMain.classList.toggle('active', mode === 'main');
+        btnManager.classList.toggle('active', mode === 'manager');
+    }
+
+    if (btnSort) {
+        btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
+    }
+
+    showToast(mode === 'manager' ? 'Manager-Cockpit aktiviert (Nur-Lese-Übersicht)' : 'CAD-Konstruktionsplan aktiv', 'info');
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+};
+
+// Automatisches Anordnen aller Blöcke auf dem Manager-Canvas nach Farbe & Name
+window.autoArrangeManagerCanvas = function () {
+    const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
+    if (nodes.length === 0) return;
+
+    // Farb-Reihenfolge definieren
+    const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
+
+    // Gruppierung nach Farbe
+    const groups = {};
+    nodes.forEach(n => {
+        const c = (n.color_hex || '#2b6cb0').toLowerCase();
+        if (!groups[c]) groups[c] = [];
+        groups[c].push(n);
+    });
+
+    // Innerhalb jeder Farbgruppe alphabetisch nach Name sortieren
+    Object.keys(groups).forEach(c => {
+        groups[c].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    });
+
+    // Sortierte Farben (nach COLOR_PRESETS Reihenfolge)
+    const sortedColors = Object.keys(groups).sort((a, b) => {
+        const idxA = colorOrder.indexOf(a);
+        const idxB = colorOrder.indexOf(b);
+        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+    });
+
+    const managerCoords = JSON.parse(localStorage.getItem(`cad_tm_mgr_coords_${activeProjectId}`) || '{}');
+
+    let startX = 60;
+    sortedColors.forEach(color => {
+        let startY = 80;
+        groups[color].forEach(node => {
+            managerCoords[node.id] = { x: startX, y: startY };
+            startY += 150; // Vertikaler Abstand
+        });
+        startX += 320; // Nächste Spalte
+    });
+
+    localStorage.setItem(`cad_tm_mgr_coords_${activeProjectId}`, JSON.stringify(managerCoords));
+    showToast('Bauteile im Manager-Cockpit nach Farbe & Name ausgerichtet', 'success');
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+};
+
+// Modus-Buttons beim Start initialisieren
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (window.activeCanvasMode === 'manager') {
+            window.switchCanvasMode('manager');
+        }
+    }, 300);
+});
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Manager-Canvas State & Klassifizierungs-Engine)
+* HINZUFÜGEN IN: ui.js (Am Ende der Datei)
+* Zeitstempel: 2026-09-17 21:15:00 CEST
+* Breadcrumbs:
+*   - [2026-09-17 21:15:00 CEST]: Eigenständige Manager-Datenhaltung (Zonen & Platzierungen)
+*     im LocalStorage/Projekt-Scope, Block-Auswahl-Modal und Klassifizierungs-Logik.
+* =============================================================================
+*/
+
+window.activeCanvasMode = localStorage.getItem('cad_tm_canvas_mode') || 'main';
+
+// Lädt den Manager-Zustand für das aktive Projekt
+window.getManagerLayout = function () {
+    const key = `cad_tm_mgr_layout_${activeProjectId}`;
+    let layout = JSON.parse(localStorage.getItem(key) || 'null');
+
+    // Initialisierung beim ersten Start: Alle existierenden Blöcke bereitstellen
+    if (!layout || !layout.zones) {
+        layout = {
+            zones: [
+                { id: 'mz_1', title: 'Förderband 01 (GB 1200)', doc_number: 'FB-01', color_hex: '#2563eb', pos_x: 60, pos_y: 80, width: 620, height: 440 },
+                { id: 'mz_2', title: 'Förderband 02 (GB 1600)', doc_number: 'FB-02', color_hex: '#16a34a', pos_x: 720, pos_y: 80, width: 620, height: 440 }
+            ],
+            placements: {}
+        };
+
+        // Bestehende Blöcke initial aufnehmen
+        let curX = 90, curY = 140;
+        (currentNodes || []).filter(n => n.block_type !== 'note').forEach((n, idx) => {
+            const targetZId = idx < 2 ? 'mz_1' : (idx < 4 ? 'mz_2' : null);
+            layout.placements[n.id] = {
+                pos_x: targetZId ? (targetZId === 'mz_1' ? curX : curX + 660) : 1380,
+                pos_y: curY,
+                zone_id: targetZId
+            };
+            curY += (idx % 2 === 1) ? 140 : 0;
+            if (curY > 380) curY = 140;
+        });
+
+        localStorage.setItem(key, JSON.stringify(layout));
+    }
+    return layout;
+};
+
+window.saveManagerLayout = function (layout) {
+    const key = `cad_tm_mgr_layout_${activeProjectId}`;
+    localStorage.setItem(key, JSON.stringify(layout));
+};
+
+window.switchCanvasMode = function (mode) {
+    window.activeCanvasMode = mode;
+    localStorage.setItem('cad_tm_canvas_mode', mode);
+
+    const btnMain = document.getElementById('btnModeMain');
+    const btnManager = document.getElementById('btnModeManager');
+    const btnSort = document.getElementById('btnAutoSortManager');
+
+    if (btnMain && btnManager) {
+        btnMain.classList.toggle('active', mode === 'main');
+        btnManager.classList.toggle('active', mode === 'manager');
+    }
+
+    if (btnSort) {
+        btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
+    }
+
+    showToast(mode === 'manager' ? 'Manager-Cockpit aktiv (Auswertung & Klassifizierung)' : 'CAD-Konstruktionsplan aktiv', 'info');
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+};
+
+// Öffnet Modal: Vorhandenen Block platzieren
+let pendingMgrPlaceCoords = { x: 100, y: 100 };
+window.openAddExistingBlockModal = function (x, y) {
+    pendingMgrPlaceCoords = { x, y };
+    const selNode = document.getElementById('mgrSelectExistingNode');
+    const selZone = document.getElementById('mgrSelectTargetZone');
+    const layout = getManagerLayout();
+
+    if (!selNode || !selZone) return;
+    selNode.innerHTML = '';
+    selZone.innerHTML = '<option value="">-- Frei auf Canvas (Kein Rahmen) --</option>';
+
+    // Alle vorhandenen Blöcke des Projekts
+    (currentNodes || []).filter(n => n.block_type !== 'note').forEach(n => {
+        const doc = n.doc_number ? `[${n.doc_number}] ` : '';
+        const opt = new Option(`${doc}${n.name}`, n.id);
+        selNode.appendChild(opt);
+    });
+
+    // Alle aktuellen Manager-Zonen
+    layout.zones.forEach(z => {
+        const doc = z.doc_number ? `[${z.doc_number}] ` : '';
+        selZone.appendChild(new Option(`${doc}${z.title}`, z.id));
+    });
+
+    openModal('mgrAddBlockModal');
+};
+
+window.confirmAddExistingBlockToManager = function () {
+    const selNode = document.getElementById('mgrSelectExistingNode');
+    const selZone = document.getElementById('mgrSelectTargetZone');
+    if (!selNode || !selNode.value) return;
+
+    const nodeId = selNode.value;
+    const zoneId = selZone.value || null;
+    const layout = getManagerLayout();
+
+    layout.placements[nodeId] = {
+        pos_x: Math.round(pendingMgrPlaceCoords.x),
+        pos_y: Math.round(pendingMgrPlaceCoords.y),
+        zone_id: zoneId
+    };
+
+    saveManagerLayout(layout);
+    closeModal('mgrAddBlockModal');
+    showToast('Block auf Manager-Board platziert', 'success');
+    renderCanvas();
+};
+
+// Manager-Rahmen anlegen
+window.handleCreateManagerZone = async function (x, y) {
+    const res = await customPromptDual(
+        'Manager-Rahmen anlegen',
+        'Klassifizierungs-Rahmen für Manager-Auswertung erstellen:',
+        'Rahmen-Bezeichnung:',
+        'Förderband ',
+        'DOC- / System-Nr (z.B. FB-03):',
+        ''
+    );
+    if (!res || !res.val1) return;
+
+    const layout = getManagerLayout();
+    const newZone = {
+        id: 'mz_' + Date.now(),
+        title: res.val1,
+        doc_number: res.val2 || '',
+        color_hex: '#2b6cb0',
+        pos_x: Math.round(x),
+        pos_y: Math.round(y),
+        width: 620,
+        height: 440
+    };
+
+    layout.zones.push(newZone);
+    saveManagerLayout(layout);
+    showToast(`Manager-Rahmen "${res.val1}" erstellt`, 'success');
+    renderCanvas();
+};
+
+// Automatisches Anordnen im Manager-Canvas
+window.autoArrangeManagerCanvas = function () {
+    const layout = getManagerLayout();
+    const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
+    if (nodes.length === 0) return;
+
+    const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
+    const groups = {};
+    nodes.forEach(n => {
+        const c = (n.color_hex || '#2b6cb0').toLowerCase();
+        if (!groups[c]) groups[c] = [];
+        groups[c].push(n);
+    });
+
+    Object.keys(groups).forEach(c => {
+        groups[c].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    });
+
+    const sortedColors = Object.keys(groups).sort((a, b) => {
+        const idxA = colorOrder.indexOf(a);
+        const idxB = colorOrder.indexOf(b);
+        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+    });
+
+    let startX = 60;
+    sortedColors.forEach(color => {
+        let startY = 80;
+        groups[color].forEach(node => {
+            layout.placements[node.id] = { pos_x: startX, pos_y: startY, zone_id: null };
+            startY += 150;
+        });
+        startX += 320;
+    });
+
+    saveManagerLayout(layout);
+    showToast('Bauteile im Manager-Cockpit nach Farbe & Name ausgerichtet', 'success');
+    renderCanvas();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+};
