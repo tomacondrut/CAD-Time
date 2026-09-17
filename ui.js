@@ -1395,35 +1395,36 @@ window.handleDeleteLog = async function (logId) {
     }
 };
 
-const log = currentTimeLogs.find(l => l.id === logId);
-if (!log) return;
+window.approveLog = async function (logId) {
+    const log = currentTimeLogs.find(l => l.id === logId);
+    if (!log) return;
 
-await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
+    await db.from('time_logs').update({ status: 'approved' }).eq('id', logId);
 
-// Wenn es eine Fertigmeldung ist: Status auf 'completed' UND Fortschritte auf 100% setzen
-if (log.task_type === 'completion') {
-    const targetNode = currentNodes.find(n => n.id === log.node_id);
-    const updatePayload = {
-        completion_status: 'completed',
-        progress_design: 100,
-        progress_drafting: 100
-    };
+    // Wenn es eine Fertigmeldung ist: Status auf 'completed' UND Fortschritte auf 100% setzen
+    if (log.task_type === 'completion') {
+        const targetNode = currentNodes.find(n => n.id === log.node_id);
+        const updatePayload = {
+            completion_status: 'completed',
+            progress_design: 100,
+            progress_drafting: 100
+        };
 
-    if (targetNode && targetNode.linked_id) {
-        const relatedNodes = currentNodes.filter(n => n.linked_id === targetNode.linked_id);
-        const updates = relatedNodes.map(rn => {
-            Object.assign(rn, updatePayload);
-            return db.from('project_nodes').update(updatePayload).eq('id', rn.id);
-        });
-        await Promise.all(updates);
-    } else {
-        if (targetNode) Object.assign(targetNode, updatePayload);
-        await db.from('project_nodes').update(updatePayload).eq('id', log.node_id);
+        if (targetNode && targetNode.linked_id) {
+            const relatedNodes = currentNodes.filter(n => n.linked_id === targetNode.linked_id);
+            const updates = relatedNodes.map(rn => {
+                Object.assign(rn, updatePayload);
+                return db.from('project_nodes').update(updatePayload).eq('id', rn.id);
+            });
+            await Promise.all(updates);
+        } else {
+            if (targetNode) Object.assign(targetNode, updatePayload);
+            await db.from('project_nodes').update(updatePayload).eq('id', log.node_id);
+        }
     }
-}
 
-showToast('Freigabe erteilt (Status: Erledigt 100%)', 'success');
-fetchCanvasData();
+    showToast('Freigabe erteilt (Status: Erledigt 100%)', 'success');
+    fetchCanvasData();
 };
 
 // =============================================================================
