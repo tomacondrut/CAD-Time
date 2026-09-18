@@ -111,6 +111,19 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     Scroll-Filter auf echte Tabellen (.inline-logs-container, .log-table, .zone-body) reduziert.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, Zoom & Events)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-18 07:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 23:15:00 CEST]: Zoom Event-Swallowing behoben.
+ *   - [2026-09-18 07:15:00 CEST]: BUGFIX: e.preventDefault() beim Mousedown 
+ *     wieder hinzugefügt, um das native "Verboten"-Zeichen (HTML5 Drag/Select) 
+ *     beim Pannen auf dem leeren Hintergrund zu blockieren.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -136,11 +149,14 @@ function initNativeCanvasEngine() {
 
         const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
+        // Wenn interaktives Element: Nur Pannen erlauben bei Mittelklick(1), Rechtsklick(2) oder Alt+Linksklick
         if (isInteractive) {
             if (e.button === 0 && !e.altKey) return;
         }
 
+        // Pannen auslösen
         if (e.button === 0 || e.button === 1 || e.button === 2) {
+            e.preventDefault(); // ZWINGEND ERFORDERLICH: Blockiert das "Verboten"-Zeichen!
             startPan(e.clientX, e.clientY);
         }
     });
@@ -196,8 +212,7 @@ function initNativeCanvasEngine() {
     // ZOOMING (Multiplikativ & Maus-zentriert)
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        // BUGFIX: Normales Scrollen NUR noch in echten Scroll-Containern zulassen!
-        // .assembly-body und .note-card entfernt, damit der Zoom greift.
+        // Normales Scrollen in echten Scroll-Containern zulassen
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
             return;
         }
