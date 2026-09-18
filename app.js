@@ -32,30 +32,38 @@ function initApp() {
 
     // Kontextmenü bei Klick irgendwo schließen
     // Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
+    // Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
     window.addEventListener('click', (e) => {
+        // 1. Kontextmenü schließen
         const menu = document.getElementById('canvasContextMenu');
         if (menu && !e.target.closest('#canvasContextMenu')) {
             menu.style.display = 'none';
         }
 
-        // Prüfen, ob in einen offenen Log-Bereich oder auf einen Toggle-Button geklickt wurde
-        const isInsideZoneBody = e.target.closest('.zone-body');
-        const isInsideAssemblyBody = e.target.closest('.assembly-body');
-        const isToggleBtn = e.target.closest('.btn-toggle-zone-times') || e.target.closest('.btn-expand-toggle');
+        // 2. Klick in einem Modal ignorieren
+        if (e.target.closest('.modal-content')) return;
 
-        if (!isInsideZoneBody && !isInsideAssemblyBody && !isToggleBtn) {
-            let needsRender = false;
-            if (window.expandedZones && window.expandedZones.size > 0) {
-                window.expandedZones.clear();
-                needsRender = true;
-            }
-            if (window.expandedNodes && window.expandedNodes.size > 0) {
-                window.expandedNodes.clear();
-                needsRender = true;
-            }
-            if (needsRender && typeof renderCanvas === 'function') {
+        // 3. Toggle-Buttons regeln ihr Öffnen/Schließen selbst
+        if (e.target.closest('.btn-toggle-zone-times') || e.target.closest('.btn-expand-toggle')) return;
+
+        // 4. Klicks innerhalb von Formularen/Listen nicht abbrechen
+        if (e.target.closest('.zone-body') || e.target.closest('.assembly-body')) return;
+
+        // 5. Bei Klick auf leeren Canvas oder andere Blöcke -> Zeiten einklappen
+        let needsClose = false;
+        if (window.expandedZones && window.expandedZones.size > 0) {
+            window.expandedZones.clear();
+            needsClose = true;
+        }
+        if (window.expandedNodes && window.expandedNodes.size > 0) {
+            window.expandedNodes.clear();
+            needsClose = true;
+        }
+
+        if (needsClose && typeof renderCanvas === 'function') {
+            setTimeout(() => {
                 renderCanvas();
-            }
+            }, 10);
         }
     }, true);
 

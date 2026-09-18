@@ -3538,6 +3538,18 @@ function renderStructurePrintSheet(container, proj, showTimes) {
 *     wenn der Fokus in einem Textfeld oder auf einem Range-Slider liegt.
 * =============================================================================
 */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Globaler ESC-Key Modal & Dialog Closer)
+ * ERSETZEN IN: ui.js (Am Ende der Datei)
+ * Zeitstempel: 2026-09-18 08:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 20:20:00 CEST]: Capture-Phase Keydown-Listener für 'Escape'.
+ *   - [2026-09-18 08:00:00 CEST]: Escape-Taste schließt nun auch geöffnete 
+ *     Zonen-Logs und Block-Logs, sofern keine Modals offen sind.
+ * =============================================================================
+ */
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' || e.key === 'Esc') {
         // 1. Geöffneten Bestätigungs- / Prompt-Dialog abbrechen
@@ -3558,11 +3570,28 @@ window.addEventListener('keydown', (e) => {
         if (openModals.length > 0) {
             e.preventDefault();
             e.stopPropagation();
-            // Das oberste geöffnete Modal schließen (äquivalent zum Klick auf "Abbrechen")
+            // Das oberste geöffnete Modal schließen
             const topModal = openModals[openModals.length - 1];
             if (typeof closeModal === 'function') {
                 closeModal(topModal.id);
             }
+            return;
+        }
+
+        // 3. Zonen-Logs und Block-Logs einklappen, wenn keine Modals offen sind
+        let needsRender = false;
+        if (window.expandedZones && window.expandedZones.size > 0) {
+            window.expandedZones.clear();
+            needsRender = true;
+        }
+        if (window.expandedNodes && window.expandedNodes.size > 0) {
+            window.expandedNodes.clear();
+            needsRender = true;
+        }
+
+        if (needsRender) {
+            // Keine stopPropagation hier, da canvas.js den ESC parallel braucht (Linien abbrechen)
+            if (typeof renderCanvas === 'function') renderCanvas();
         }
     }
 }, true); // 'true' = Capture-Phase: feuert vor eventuellen Input-Blockaden
@@ -3766,13 +3795,82 @@ window.deleteManagerZone = async function (zoneId) {
 };
 
 // Automatisches Anordnen im Board
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
+ * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
+ * Zeitstempel: 2026-09-18 08:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:05:00 CEST]: Initiale Spalten-Sortierung nach Farbe & Name.
+ *   - [2026-09-18 08:15:00 CEST]: Toggle-Logik implementiert: Legt vor dem
+ *     Sortieren einen Snapshot (managerPreSortPlacements) an. Klickt man ein
+ *     zweites Mal, springen alle Bauteile auf ihre ursprünglichen Koordinaten zurück.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
+ * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
+ * Zeitstempel: 2026-09-18 09:00:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-18 08:15:00 CEST]: Initiale Toggle-Logik mit Snapshot.
+ *   - [2026-09-18 09:00:00 CEST]: BUGFIX: Deep-Clone für den Snapshot repariert.
+ *     Sidebar wird nach dem Wiederherstellen ("Zurückspringen") explizit neu 
+ *     gezeichnet, damit die Komponenten-Liste synchron bleibt.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
+ * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
+ * Zeitstempel: 2026-09-18 09:00:00 CEST
+ * =============================================================================
+ */
+
+window.managerPreSortPlacements = null;
+
 window.autoArrangeManagerCanvas = function () {
+    const btnSort = document.getElementById('btnAutoSortManager');
     const layout = getManagerLayout();
+
+    // 1. WIEDERHERSTELLEN (Zweiter Klick)
+    if (window.managerPreSortPlacements) {
+        layout.placements = JSON.parse(JSON.stringify(window.managerPreSortPlacements));
+        window.managerPreSortPlacements = null;
+
+        if (btnSort) {
+            btnSort.textContent = '🗂️ Nach Farbe & Name sortieren';
+            btnSort.title = 'Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen';
+            btnSort.style.color = '';
+            btnSort.style.borderColor = '';
+        }
+
+        saveManagerLayout(layout);
+        showToast('Vorherige Anordnung wiederhergestellt', 'info');
+
+        renderCanvas();
+        if (typeof renderSidebarZones === 'function') renderSidebarZones();
+
+        if (typeof window.centerViewOnVisible === 'function') {
+            setTimeout(() => window.centerViewOnVisible(), 100);
+        }
+        return;
+    }
+
+    // 2. SORTIEREN & SNAPSHOT SICHERN (Erster Klick)
     const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
     if (nodes.length === 0) return;
 
+    window.managerPreSortPlacements = JSON.parse(JSON.stringify(layout.placements || {}));
+
     const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
     const groups = {};
+
     nodes.forEach(n => {
         const c = (n.color_hex || '#2b6cb0').toLowerCase();
         if (!groups[c]) groups[c] = [];
@@ -3799,10 +3897,22 @@ window.autoArrangeManagerCanvas = function () {
         startX += 320;
     });
 
+    if (btnSort) {
+        btnSort.textContent = '↺ Vorherige Anordnung';
+        btnSort.title = 'Klicken, um die Anordnung vor dem Sortieren wiederherzustellen';
+        btnSort.style.color = '#c53030';
+        btnSort.style.borderColor = '#feb2b2';
+    }
+
     saveManagerLayout(layout);
-    showToast('Bauteile nach Farbe & Name ausgerichtet', 'success');
+    showToast('Bauteile nach Farbe & Name sortiert', 'success');
+
     renderCanvas();
-    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
+
+    if (typeof window.centerViewOnVisible === 'function') {
+        setTimeout(() => window.centerViewOnVisible(), 100);
+    }
 };
 
 // Modal zur Block-Platzierung
