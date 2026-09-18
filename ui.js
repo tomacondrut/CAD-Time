@@ -1400,6 +1400,7 @@ window.handleLog = async function (e, nodeId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+    const finalStatus = isAdmin ? 'approved' : 'pending';
 
     const { error } = await db.from('time_logs').insert([{
         project_id: activeProjectId,
@@ -1408,7 +1409,7 @@ window.handleLog = async function (e, nodeId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: 'pending'
+        status: finalStatus
     }]);
 
     if (error) {
@@ -1419,7 +1420,14 @@ window.handleLog = async function (e, nodeId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-    showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
+
+    if (isAdmin) {
+        showToast(`${hours}h ${mins}m direkt verbucht`, 'success');
+    } else {
+        showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
+    }
+
+    if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
 window.handleRequestCompletion = async function (nodeId) {
@@ -1428,16 +1436,25 @@ window.handleRequestCompletion = async function (nodeId) {
         return;
     }
 
-    const confirmed = await customConfirm('Fertigstellung melden', 'Möchtest du diesen Block als "Erledigt" zur Freigabe einreichen?');
+    const confirmTitle = isAdmin ? 'Direkt als Erledigt markieren' : 'Fertigstellung melden';
+    const confirmMsg = isAdmin
+        ? 'Möchtest du diesen Block direkt als "Erledigt" (100%) markieren?'
+        : 'Möchtest du diesen Block als "Erledigt" zur Freigabe einreichen?';
+
+    const confirmed = await customConfirm(confirmTitle, confirmMsg);
+
     if (confirmed) {
+        const finalStatus = isAdmin ? 'approved' : 'pending';
+        const finalNodeStatus = isAdmin ? 'completed' : 'pending_approval';
+
         const { error } = await db.from('time_logs').insert([{
             project_id: activeProjectId,
             node_id: nodeId,
             user_code: activeUserCode,
             task_type: 'completion',
             hours: 0,
-            note: 'Fertigstellung beantragt',
-            status: 'pending'
+            note: isAdmin ? 'Direkt als Erledigt markiert' : 'Fertigstellung beantragt',
+            status: finalStatus
         }]);
 
         if (error) {
@@ -1445,9 +1462,23 @@ window.handleRequestCompletion = async function (nodeId) {
             return;
         }
 
-        await db.from('project_nodes').update({ completion_status: 'pending_approval' }).eq('id', nodeId);
+        const updatePayload = { completion_status: finalNodeStatus };
+        if (isAdmin) {
+            updatePayload.progress_design = 100;
+            updatePayload.progress_drafting = 100;
+        }
 
-        showToast('Fertigstellung zur Freigabe eingereicht', 'success');
+        // Instanz-Synchronisation für Master/Referenzen
+        const targetNode = currentNodes.find(n => n.id === nodeId);
+        if (targetNode && targetNode.linked_id) {
+            const relatedNodes = currentNodes.filter(n => n.linked_id === targetNode.linked_id);
+            const updates = relatedNodes.map(rn => db.from('project_nodes').update(updatePayload).eq('id', rn.id));
+            await Promise.all(updates);
+        } else {
+            await db.from('project_nodes').update(updatePayload).eq('id', nodeId);
+        }
+
+        showToast(isAdmin ? 'Block als Erledigt markiert (100%)' : 'Fertigstellung zur Freigabe eingereicht', 'success');
         fetchCanvasData();
     }
 };
@@ -2365,7 +2396,7 @@ window.toggleZoneLogs = function (e, zoneId) {
  *     und verständliche Fehlerbehandlung bei fehlender Schema-Spalte.
  * =============================================================================
  */
-window.handleZoneLog = async function(e, zoneId) {
+window.handleZoneLog = async function (e, zoneId) {
     e.preventDefault();
     const form = e.target;
     const taskType = form.elements[1].value;
@@ -2384,6 +2415,7 @@ window.handleZoneLog = async function(e, zoneId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+    const finalStatus = isAdmin ? 'approved' : 'pending';
 
     const payload = {
         project_id: activeProjectId,
@@ -2391,7 +2423,7 @@ window.handleZoneLog = async function(e, zoneId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: 'pending',
+        status: finalStatus,
         zone_id: zoneId,
         node_id: null
     };
@@ -2411,7 +2443,13 @@ window.handleZoneLog = async function(e, zoneId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-    showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
+
+    if (isAdmin) {
+        showToast(`${hours}h ${mins}m für Kasten direkt verbucht`, 'success');
+    } else {
+        showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
+    }
+
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
