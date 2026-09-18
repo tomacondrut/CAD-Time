@@ -183,11 +183,17 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
  *     Komponenten-Pool um (Sortierung nach Farbe & Name, Klick/Drag zum Platzieren).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Sidebar Rendering (Dual-Mode: CAD-Zonen vs. Manager-Komponenten-Pool)
+ * ERSETZEN IN: app.js (Gesamte Funktion renderSidebarZones)
+ * =============================================================================
+ */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
-    // Den Titel der Sidebar-Sektion dynamisch anpassen
     const sectionTitleEl = container.previousElementSibling;
     const isMgr = (window.activeCanvasMode === 'manager');
 
@@ -207,7 +213,6 @@ window.renderSidebarZones = function () {
             return;
         }
 
-        // Sortierung nach Farbe (gemäß COLOR_PRESETS) und sekundär nach Name
         const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
         const sortedNodes = [...rawNodes].sort((a, b) => {
             const colA = (a.color_hex || '#2b6cb0').toLowerCase();
@@ -222,9 +227,19 @@ window.renderSidebarZones = function () {
         });
 
         const fragment = document.createDocumentFragment();
+        const placedNodes = [];
+        const hiddenNodes = [];
 
+        // In auf dem Board platzierte und ausgeblendete Blöcke splitten
         sortedNodes.forEach(node => {
-            const isPlaced = !!(mgrLayout.placements && mgrLayout.placements[node.id]);
+            if (mgrLayout.placements && mgrLayout.placements[node.id]) {
+                placedNodes.push(node);
+            } else {
+                hiddenNodes.push(node);
+            }
+        });
+
+        const createItemHtml = (node, isPlaced) => {
             const nodeColor = node.color_hex || '#2b6cb0';
             const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
             const docText = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
@@ -267,14 +282,47 @@ window.renderSidebarZones = function () {
                 </div>
             `;
 
-            // HTML5 Drag & Drop zum Ziehen aus der Sidebar direkt auf den Manager-Canvas
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('text/plain', node.id);
                 e.dataTransfer.effectAllowed = 'copyMove';
             });
 
-            fragment.appendChild(item);
-        });
+            return item;
+        };
+
+        // 1. Platzierte Elemente direkt rendern
+        placedNodes.forEach(node => fragment.appendChild(createItemHtml(node, true)));
+
+        // 2. Ausgeblendete Elemente im Akkordeon-Unterordner rendern
+        if (hiddenNodes.length > 0) {
+            const isOpen = window.managerHiddenPoolOpen === true;
+            const hiddenHeader = document.createElement('div');
+            hiddenHeader.className = 'sidebar-section-title';
+            hiddenHeader.style.cursor = 'pointer';
+            hiddenHeader.style.display = 'flex';
+            hiddenHeader.style.justifyContent = 'space-between';
+            hiddenHeader.style.alignItems = 'center';
+            hiddenHeader.style.marginTop = '15px';
+            hiddenHeader.style.paddingTop = '10px';
+            hiddenHeader.style.borderTop = '1px solid #4a5568';
+            hiddenHeader.innerHTML = `<span>Ausgeblendete Instanzen (${hiddenNodes.length})</span><span style="font-size: 10px;">${isOpen ? '▼' : '▶'}</span>`;
+
+            hiddenHeader.onclick = () => {
+                window.managerHiddenPoolOpen = !window.managerHiddenPoolOpen;
+                if (typeof renderSidebarZones === 'function') renderSidebarZones();
+            };
+            fragment.appendChild(hiddenHeader);
+
+            if (isOpen) {
+                const hiddenContainer = document.createElement('div');
+                hiddenContainer.style.display = 'flex';
+                hiddenContainer.style.flexDirection = 'column';
+                hiddenContainer.style.gap = '2px';
+                hiddenContainer.style.marginTop = '6px';
+                hiddenNodes.forEach(node => hiddenContainer.appendChild(createItemHtml(node, false)));
+                fragment.appendChild(hiddenContainer);
+            }
+        }
 
         container.innerHTML = '';
         container.appendChild(fragment);
@@ -296,7 +344,6 @@ window.renderSidebarZones = function () {
     }
 
     const fragment = document.createDocumentFragment();
-
     const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
     const canReorderZones = isAdmin || isLocalProject;
 

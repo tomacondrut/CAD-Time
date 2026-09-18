@@ -295,6 +295,7 @@ function initNativeCanvasEngine() {
 
 
 // Tastatur-Shortcuts (Copy/Paste, Escape)
+// Tastatur-Shortcuts (Copy/Paste, Escape, Delete)
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -319,6 +320,58 @@ window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         if (window.copiedNodeIds && window.copiedNodeIds.length > 0) {
             window.handlePasteNodes();
+        }
+    }
+
+    // Lösch-Logik (Delete / Backspace) exklusiv für das Manager-Board
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (window.activeCanvasMode === 'manager' && window.selectedNodeIds && window.selectedNodeIds.size > 0) {
+            const layout = typeof getManagerLayout === 'function' ? getManagerLayout() : null;
+            if (!layout) return;
+
+            let needsSave = false;
+            let nodesToDelete = [];
+            let hiddenCount = 0;
+
+            window.selectedNodeIds.forEach(nodeId => {
+                const node = currentNodes.find(n => n.id === nodeId);
+                if (!node) return;
+
+                // Identifizieren ob es der Master (ursprünglicher CAD-Block) oder eine Copy/Paste-Referenz ist
+                const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
+                related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                const isMaster = related.length === 0 || related[0].id === node.id;
+
+                if (!isMaster) {
+                    // Erstellte Referenz -> direkt komplett aus DB löschen
+                    nodesToDelete.push(node.id);
+                    currentNodes = currentNodes.filter(n => n.id !== node.id); // Optimistisches UI-Update
+                } else {
+                    // Aus dem Canvas übernommene Instanz -> nur vom Board ausblenden
+                    hiddenCount++;
+                }
+
+                if (layout.placements[node.id]) {
+                    delete layout.placements[node.id];
+                    needsSave = true;
+                }
+            });
+
+            if (nodesToDelete.length > 0) {
+                Promise.all(nodesToDelete.map(id => db.from('project_nodes').delete().eq('id', id))).then(() => {
+                    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+                });
+                showToast(`${nodesToDelete.length} Referenz(en) komplett gelöscht`, 'success');
+            } else if (hiddenCount > 0) {
+                showToast(`${hiddenCount} Instanz(en) vom Board ausgeblendet`, 'info');
+            }
+
+            if (needsSave && typeof saveManagerLayout === 'function') {
+                saveManagerLayout(layout);
+                renderCanvas();
+                if (typeof renderSidebarZones === 'function') renderSidebarZones();
+            }
+            window.selectedNodeIds.clear();
         }
     }
 });
@@ -2472,6 +2525,57 @@ window.adjustCanvasBounds = function () {
 // =============================================================================
 // KONTEXTMENÜ-AKTIONEN & COPY/PASTE
 // =============================================================================
+
+window.updateContextMenuVisibility = function (nodeId, zoneId) {
+    const isMgr = (window.activeCanvasMode === 'manager');
+
+    // Elemente des Haupt-Canvas
+    const elBlock = document.getElementById('ctxMenuAddBlock');
+    const elZone = document.getElementById('ctxMenuAddZone');
+    const elNote = document.getElementById('ctxMenuAddNote');
+    const elHandles = document.getElementById('ctxMenuToggleHandles');
+    const elDup = document.getElementById('ctxMenuDuplicateNode');
+    const elDel = document.getElementById('ctxMenuDeleteNode');
+
+    // Elemente des Manager-Cockpits
+    const mgrAddEx = document.getElementById('ctxMenuMgrAddExisting');
+    const mgrAddZone = document.getElementById('ctxMenuMgrAddZone');
+    const mgrRem = document.getElementById('ctxMenuMgrRemoveNode');
+    const mgrDelZone = document.getElementById('ctxMenuMgrDeleteZone');
+
+    // Haupt-Canvas Items im Manager Modus strikt sperren / ausblenden
+    if (elBlock) elBlock.style.display = isMgr ? 'none' : 'flex';
+    if (elZone) elZone.style.display = isMgr ? 'none' : 'flex';
+    if (elNote) elNote.style.display = isMgr ? 'none' : 'flex';
+    if (elHandles) elHandles.style.display = isMgr ? 'none' : 'flex';
+
+    // Duplizieren geht in beiden Modi (sofern ein Block ausgewählt ist)
+    if (elDup) elDup.style.display = nodeId ? 'flex' : 'none';
+
+    // Löschen (CAD Modus exklusiv)
+    if (elDel) elDel.style.display = (!isMgr && nodeId) ? 'flex' : 'none';
+
+    // Manager Aktionen steuern
+    if (mgrAddEx) mgrAddEx.style.display = (isMgr && !nodeId) ? 'flex' : 'none';
+    if (mgrAddZone) mgrAddZone.style.display = (isMgr && !nodeId) ? 'flex' : 'none';
+    if (mgrDelZone) mgrDelZone.style.display = (isMgr && zoneId && !nodeId) ? 'flex' : 'none';
+
+    if (mgrRem) {
+        mgrRem.style.display = (isMgr && nodeId) ? 'flex' : 'none';
+
+        // Button-Text dynamisch auf Ausblenden oder Löschen setzen
+        if (isMgr && nodeId) {
+            const node = currentNodes.find(n => n.id === nodeId);
+            if (node) {
+                const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
+                related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                const isMaster = related.length === 0 || related[0].id === node.id;
+                mgrRem.innerHTML = isMaster ? '✕ Vom Board ausblenden' : '✕ Referenz löschen';
+            }
+        }
+    }
+};
+
 window.handleContextMenuAction = async function (type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
@@ -2489,10 +2593,28 @@ window.handleContextMenuAction = async function (type) {
     if (type === 'mgr_remove_node' && contextTargetNodeId) {
         if (typeof getManagerLayout !== 'function' || typeof saveManagerLayout !== 'function') return;
         const layout = getManagerLayout();
+        const node = currentNodes.find(n => n.id === contextTargetNodeId);
+
+        if (node) {
+            const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
+            related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            const isMaster = related.length === 0 || related[0].id === node.id;
+
+            // Referenzen werden aus der DB geworfen, Master lediglich vom Layout ausgeblendet
+            if (!isMaster) {
+                db.from('project_nodes').delete().eq('id', node.id).then(() => {
+                    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+                });
+                showToast('Referenz gelöscht', 'success');
+            } else {
+                showToast('Vom Manager-Board ausgeblendet', 'info');
+            }
+        }
+
         delete layout.placements[contextTargetNodeId];
         saveManagerLayout(layout);
-        showToast('Vom Manager-Board entfernt', 'info');
         renderCanvas();
+        if (typeof renderSidebarZones === 'function') renderSidebarZones();
         return;
     }
 
@@ -2586,7 +2708,7 @@ window.handleContextMenuAction = async function (type) {
             if (typeof saveManagerLayout === 'function') await saveManagerLayout(layout);
         }
 
-        showToast(`Verknüpfte Instanz von "${originalNode.name}" erstellt`, 'success');
+        showToast(`Verknüpfte Referenz von "${originalNode.name}" erstellt`, 'success');
         if (typeof fetchCanvasData === 'function') await fetchCanvasData();
         return;
     }
@@ -2713,4 +2835,53 @@ window.handlePasteNodes = async function () {
 
     showToast(`${window.copiedNodeIds.length} Instanz(en) eingefügt`, 'success');
     if (typeof fetchCanvasData === 'function') await fetchCanvasData();
+};
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Haupt-Canvas Zonen-Sperre)
+* HINZUFÜGEN IN: canvas.js (Am Ende der Datei)
+* Zeitstempel: 2026-09-18 08:40:00 CEST
+* Breadcrumbs:
+*   - [2026-09-18 08:40:00 CEST]: Fehlende toggleZoneLock Funktion für den 
+*     Haupt-Canvas (Konstruktionsplan) hinzugefügt, inkl. Rechteprüfung & DB-Update.
+* =============================================================================
+*/
+window.toggleZoneLock = async function (e, zoneId) {
+    if (e) e.stopPropagation();
+
+    const zone = (currentZones || []).find(z => z.id === zoneId);
+    if (!zone) return;
+
+    // Rechteprüfung: Nur Admin oder Ersteller
+    const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : '';
+    const isAdminUser = typeof isAdmin !== 'undefined' ? isAdmin : false;
+
+    if (!isAdminUser && uCode !== zone.created_by) {
+        showToast('Nur Admins oder der Ersteller können diesen Rahmen sperren.', 'error');
+        return;
+    }
+
+    // Toggle Status
+    const newState = !zone.is_locked;
+    zone.is_locked = newState; // Optimistisches Update für sofortiges Feedback
+
+    // DB Update im Hintergrund ausführen
+    if (typeof db !== 'undefined') {
+        db.from('project_zones').update({ is_locked: newState }).eq('id', zoneId).then(({ error }) => {
+            if (error) {
+                console.error("Fehler beim Sperren der Zone:", error);
+                showToast('Fehler beim Speichern der Sperre', 'error');
+                // Revert bei Fehler
+                zone.is_locked = !newState;
+                if (typeof renderCanvas === 'function') renderCanvas();
+            }
+        });
+    }
+
+    showToast(`Rahmen ${newState ? 'gesperrt (Pan-Modus aktiv)' : 'entsperrt'}`, 'info');
+
+    // Canvas sofort neu zeichnen, um das Schloss-Icon und Panning-Verhalten zu aktualisieren
+    if (typeof renderCanvas === 'function') renderCanvas();
 };
