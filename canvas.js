@@ -124,6 +124,19 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     beim Pannen auf dem leeren Hintergrund zu blockieren.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, Zoom & Events)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-18 07:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-18 07:15:00 CEST]: Native Browser-Gesten blockiert.
+ *   - [2026-09-18 07:45:00 CEST]: Panning-Ausnahme für gesperrte Rahmen: 
+ *     Ist ein Bereich gesperrt (🔒), kann nun auch mit einem Linksklick direkt 
+ *     in seinen Header-Bereich (Titel-Leiste) gegriffen und gepannt werden.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -141,13 +154,30 @@ function initNativeCanvasEngine() {
         viewport.style.cursor = 'grabbing';
     };
 
+    // Hilfsfunktion: Prüft, ob das Element für Drag/Klick reserviert ist oder gepannt werden darf
+    const getInteractiveTarget = (e) => {
+        let el = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+
+        // Ausnahme: Wenn es der Header eines GESPERRTEN Rahmens ist
+        if (el && el.classList.contains('project-zone-header')) {
+            const zone = el.closest('.project-zone');
+            if (zone && zone.classList.contains('zone-locked')) {
+                // ...und wir nicht genau auf die Buttons (z.B. Entsperren, Edit) geklickt haben
+                if (!e.target.closest('.zone-actions, button, input, select')) {
+                    el = null; // Interaktivität aufheben -> Panning mit Links erlauben!
+                }
+            }
+        }
+        return el;
+    };
+
     // ---------------------------------------------------------
     // PANNING (Desktop)
     // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+        const isInteractive = getInteractiveTarget(e);
 
         // Wenn interaktives Element: Nur Pannen erlauben bei Mittelklick(1), Rechtsklick(2) oder Alt+Linksklick
         if (isInteractive) {
@@ -156,7 +186,7 @@ function initNativeCanvasEngine() {
 
         // Pannen auslösen
         if (e.button === 0 || e.button === 1 || e.button === 2) {
-            e.preventDefault(); // ZWINGEND ERFORDERLICH: Blockiert das "Verboten"-Zeichen!
+            e.preventDefault(); // Blockiert das "Verboten"-Zeichen!
             startPan(e.clientX, e.clientY);
         }
     });
@@ -167,7 +197,7 @@ function initNativeCanvasEngine() {
     viewport.addEventListener('touchstart', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+        const isInteractive = getInteractiveTarget(e);
         if (isInteractive) return;
 
         if (e.touches.length === 1) {
@@ -212,7 +242,6 @@ function initNativeCanvasEngine() {
     // ZOOMING (Multiplikativ & Maus-zentriert)
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        // Normales Scrollen in echten Scroll-Containern zulassen
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
             return;
         }

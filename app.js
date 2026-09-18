@@ -31,10 +31,33 @@ function initApp() {
     }
 
     // Kontextmenü bei Klick irgendwo schließen
-    window.addEventListener('click', () => {
+    // Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
+    window.addEventListener('click', (e) => {
         const menu = document.getElementById('canvasContextMenu');
-        if (menu) menu.style.display = 'none';
-    });
+        if (menu && !e.target.closest('#canvasContextMenu')) {
+            menu.style.display = 'none';
+        }
+
+        // Prüfen, ob in einen offenen Log-Bereich oder auf einen Toggle-Button geklickt wurde
+        const isInsideZoneBody = e.target.closest('.zone-body');
+        const isInsideAssemblyBody = e.target.closest('.assembly-body');
+        const isToggleBtn = e.target.closest('.btn-toggle-zone-times') || e.target.closest('.btn-expand-toggle');
+
+        if (!isInsideZoneBody && !isInsideAssemblyBody && !isToggleBtn) {
+            let needsRender = false;
+            if (window.expandedZones && window.expandedZones.size > 0) {
+                window.expandedZones.clear();
+                needsRender = true;
+            }
+            if (window.expandedNodes && window.expandedNodes.size > 0) {
+                window.expandedNodes.clear();
+                needsRender = true;
+            }
+            if (needsRender && typeof renderCanvas === 'function') {
+                renderCanvas();
+            }
+        }
+    }, true);
 
     // Event Listener für Formulare und Modals
     const addListenerIfEx = (id, event, handler) => {
