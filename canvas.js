@@ -293,12 +293,55 @@ function initNativeCanvasEngine() {
 }
 
 // Global Click um Kontextmenü zu schließen
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Event-Handling (Klick außerhalb schließt Zonen-Logs & Menüs)
+ * ERSETZEN IN: app.js (In der initApp Funktion, ca. Zeile 25)
+ * Zeitstempel: 2026-09-18 08:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-18 08:35:00 CEST]: Capture-Phase Klick-Listener hinzugefügt.
+ *     Schließt das Kontextmenü sowie alle ausgeklappten Zeiten-Bereiche.
+ *     Nutzung von setTimeout() verhindert das "Verschlucken" von Klicks auf Blöcke.
+ * =============================================================================
+ */
+// Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
 window.addEventListener('click', (e) => {
+    // 1. Kontextmenü schließen
     const menu = document.getElementById('canvasContextMenu');
     if (menu && !e.target.closest('#canvasContextMenu')) {
         menu.style.display = 'none';
     }
-});
+
+    // 2. Klick in einem Modal ignorieren wir für das Schließen der Canvas-Logs
+    if (e.target.closest('.modal-content')) return;
+
+    // 3. Wenn man auf einen Toggle-Button klickt, ist dieser selbst dafür zuständig
+    if (e.target.closest('.btn-toggle-zone-times') || e.target.closest('.btn-expand-toggle')) return;
+
+    // 4. Wenn man INNERHALB des offenen Logs klickt (Eingabefelder etc.), offen lassen
+    if (e.target.closest('.zone-body') || e.target.closest('.assembly-body')) return;
+
+    // 5. In allen anderen Fällen (Klick auf leeren Canvas, anderen Block, etc.) -> Logs schließen
+    let needsClose = false;
+    if (window.expandedZones && window.expandedZones.size > 0) {
+        window.expandedZones.clear();
+        needsClose = true;
+    }
+    if (window.expandedNodes && window.expandedNodes.size > 0) {
+        window.expandedNodes.clear();
+        needsClose = true;
+    }
+
+    if (needsClose && typeof renderCanvas === 'function') {
+        // WICHTIG: Verzögert ausführen!
+        // Sonst wird das DOM-Element sofort gelöscht und der normale 
+        // Klick-Event (z.B. Block-Selektion oder Drag-Start) bricht ab.
+        setTimeout(() => {
+            renderCanvas();
+        }, 10);
+    }
+}, true);
 
 // Tastatur-Shortcuts (Copy/Paste, Escape)
 window.addEventListener('keydown', (e) => {
