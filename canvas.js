@@ -410,10 +410,49 @@ window.toggleSubtreeCollapse = function (e, nodeId) {
     if (typeof renderCanvas === 'function') renderCanvas();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Exklusives Log-Ausklappen pro Rahmen)
+ * ERSETZEN IN: canvas.js (Funktion window.toggleInlineLogs)
+ * Zeitstempel: 2026-09-26 14:40:00 CEST
+ * Breadcrumb: [2026-09-26] Pro Rahmen darf strikt nur ein Block (oder das Rahmen-Log)
+ * ausgeklappt sein. Öffnen eines Blocks schließt automatisch Geschwister im selben Rahmen.
+ * =============================================================================
+ */
 window.toggleInlineLogs = function (nodeId) {
     if (!window.expandedNodes) window.expandedNodes = new Set();
-    if (window.expandedNodes.has(nodeId)) window.expandedNodes.delete(nodeId);
-    else window.expandedNodes.add(nodeId);
+    if (!window.expandedZones) window.expandedZones = new Set();
+
+    const isCurrentlyOpen = window.expandedNodes.has(nodeId);
+
+    if (isCurrentlyOpen) {
+        window.expandedNodes.delete(nodeId);
+    } else {
+        const node = (currentNodes || []).find(n => n.id === nodeId);
+        const targetZoneId = node ? node.zone_id : null;
+
+        if (targetZoneId) {
+            // 1. Rahmen-eigenes Log schließen
+            window.expandedZones.delete(targetZoneId);
+            // 2. Andere Blöcke im selben Rahmen schließen
+            (currentNodes || []).forEach(n => {
+                if (n.zone_id === targetZoneId && n.id !== nodeId) {
+                    window.expandedNodes.delete(n.id);
+                }
+            });
+        } else {
+            // Für freie Blöcke ohne Rahmen: andere freie Blöcke schließen
+            (currentNodes || []).forEach(n => {
+                if (!n.zone_id && n.id !== nodeId) {
+                    window.expandedNodes.delete(n.id);
+                }
+            });
+        }
+
+        window.expandedNodes.add(nodeId);
+    }
+
     renderCanvas();
 };
 
@@ -675,59 +714,11 @@ function renderCanvas() {
                 let totalWeightedScore = 0;
                 let totalWeights = 0;
 
-                containedBlocks.forEach(bn => {
-                    const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
-                    const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
-                    const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
-                    const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
-                    const bTotalProg = (pD * 0.5) + (pDr * 0.5);
+                // Listen zur Erfassung betroffener Blöcke für die Info-Popovers
 
-                    const bD = parseFloat(masterObj.budget_design_hours) || 0;
-                    const bDr = parseFloat(masterObj.budget_drafting_hours) || 0;
-                    const bWeight = (bD + bDr) || 1;
-
-                    totalWeightedScore += (bTotalProg * bWeight);
-                    totalWeights += bWeight;
-                });
-
-                const zoneProgress = totalWeights > 0 ? Math.round(totalWeightedScore / totalWeights) : 0;
-                const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
-
-                let zoneBudD = 0, zoneBudDr = 0, zoneSpentD = 0, zoneSpentDr = 0;
-                const countedBudgetKeys = new Set();
-
-                containedBlocks.forEach(bn => {
-                    const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
-                    const uniqueKey = masterObj.linked_id || masterObj.id;
-
-                    if (!countedBudgetKeys.has(uniqueKey)) {
-                        countedBudgetKeys.add(uniqueKey);
-                        zoneBudD += parseFloat(masterObj.budget_design_hours) || 0;
-                        zoneBudDr += parseFloat(masterObj.budget_drafting_hours) || 0;
-
-                        const relatedIds = masterObj.linked_id
-                            ? currentNodes.filter(x => x.linked_id === masterObj.linked_id).map(x => x.id)
-                            : [masterObj.id];
-
-                        (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => relatedIds.includes(l.node_id)).forEach(l => {
-                            if (l.task_type === 'design') zoneSpentD += parseFloat(l.hours) || 0;
-                            if (l.task_type === 'drafting') zoneSpentDr += parseFloat(l.hours) || 0;
-                        });
-                    }
-                });
-
-                const zoneTotBud = zoneBudD + zoneBudDr;
-                const zoneTotSpent = zoneSpentD + zoneSpentDr;
-                const zonePufferExact = zoneTotBud - zoneTotSpent;
-                const hasZoneOverhang = zonePufferExact < -0.01;
-                const pufferColor = hasZoneOverhang ? '#e53e3e' : '#38a169';
-                const pufferText = hasZoneOverhang
-                    ? `Überhang: -${typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.abs(zonePufferExact)) : Math.abs(zonePufferExact).toFixed(1) + 'h'}`
-                    : `Puffer: +${typeof formatHoursToHM === 'function' ? formatHoursToHM(zonePufferExact) : zonePufferExact.toFixed(1) + 'h'}`;
-
-                let countDone = 0;
-                let countWarning = 0;
-                let countReady2D = 0;
+                const listDone = [];
+                const listWarning = [];
+                const listReady2D = [];
 
                 containedBlocks.forEach(bn => {
                     const mObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
@@ -743,14 +734,82 @@ function renderCanvas() {
                     });
                     const bBud = (parseFloat(mObj.budget_design_hours) || 0) + (parseFloat(mObj.budget_drafting_hours) || 0);
 
+                    const docStr = mObj.doc_number || (mObj.article_number ? `ART-${mObj.article_number}` : '');
+                    const blockDisplayName = docStr ? `[${docStr}] ${mObj.name}` : mObj.name;
+
                     if (isDone || bTotProg === 100) {
-                        countDone++;
-                        if (bBud > 0 && bSpent > bBud) countWarning++;
+                        listDone.push({ id: bn.id, name: blockDisplayName, meta: '100%' });
+                        if (bBud > 0 && bSpent > bBud) {
+                            const over = bSpent - bBud;
+                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `-${typeof formatHoursToHM === 'function' ? formatHoursToHM(over) : over.toFixed(1) + 'h'}` });
+                        }
                     } else {
-                        if (pD >= 85 && pDr === 0) countReady2D++;
-                        if (bBud > 0 && bSpent > bBud) countWarning++;
+                        if (pD >= 85 && pDr === 0) {
+                            listReady2D.push({ id: bn.id, name: blockDisplayName, meta: `CAD ${pD}%` });
+                        }
+                        if (bBud > 0 && bSpent > bBud) {
+                            const over = bSpent - bBud;
+                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `-${typeof formatHoursToHM === 'function' ? formatHoursToHM(over) : over.toFixed(1) + 'h'}` });
+                        } else if (bBud > 0 && (bSpent / bBud) > ((bTotProg + 25) / 100)) {
+                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `Verzug (${bTotProg}%)` });
+                        } else if (bTotProg === 0 && bSpent >= 1) {
+                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `${typeof formatHoursToHM === 'function' ? formatHoursToHM(bSpent) : bSpent + 'h'} (0%)` });
+                        }
                     }
                 });
+
+                // HTML-Generierung der Infoboxen
+                const buildPopoverListHtml = (items) => {
+                    if (!items || items.length === 0) {
+                        return '<div style="font-size:10px; color:#a0aec0; font-style:italic; padding:2px 0;">Keine Baugruppen in dieser Kategorie.</div>';
+                    }
+                    let html = '<ul class="mgr-popover-list">';
+                    items.forEach(it => {
+                        html += `
+                            <li onclick="event.stopPropagation(); window.centerOnManagerBlock('${it.id}')" title="Kamera auf Bauteil zentrieren">
+                                <span class="p-name">${escapeHtml(it.name)}</span>
+                                <span class="p-meta">${escapeHtml(it.meta)}</span>
+                            </li>
+                        `;
+                    });
+                    html += '</ul>';
+                    return html;
+                };
+
+                const doneBadgeHtml = `
+                    <span class="mgr-status-badge">
+                        <strong style="color: #22543d;">${listDone.length} ✅</strong>
+                        <div class="mgr-status-popover">
+                            <div class="mgr-popover-title" style="color: #68d391;">✅ Erledigt (${listDone.length})</div>
+                            <div class="mgr-popover-desc">Baugruppen sind zu 100% fertiggestellt (CAD & Zeichnung abgeschlossen). Klick zentriert Bauteil.</div>
+                            ${buildPopoverListHtml(listDone)}
+                        </div>
+                    </span>
+                `;
+
+                const warnColor = listWarning.length > 0 ? '#e53e3e' : '#a0aec0';
+                const warningBadgeHtml = `
+                    <span class="mgr-status-badge">
+                        <strong style="color: ${warnColor};">${listWarning.length} ⚠️</strong>
+                        <div class="mgr-status-popover">
+                            <div class="mgr-popover-title" style="color: #fc8181;">⚠️ Kritisch / Überhang (${listWarning.length})</div>
+                            <div class="mgr-popover-desc">Budget überschritten oder Aufwand weicht stark vom Fertigstellungsgrad ab. Klick zentriert Bauteil.</div>
+                            ${buildPopoverListHtml(listWarning)}
+                        </div>
+                    </span>
+                `;
+
+                const ready2DColor = listReady2D.length > 0 ? '#2b6cb0' : '#a0aec0';
+                const ready2DBadgeHtml = `
+                    <span class="mgr-status-badge">
+                        <strong style="color: ${ready2DColor};">${listReady2D.length} 📄</strong>
+                        <div class="mgr-status-popover">
+                            <div class="mgr-popover-title" style="color: #63b3ed;">📄 Bereit für 2D (${listReady2D.length})</div>
+                            <div class="mgr-popover-desc">CAD bei ≥ 85% – Modell bereit zur Zeichnungsableitung. Klick zentriert Bauteil.</div>
+                            ${buildPopoverListHtml(listReady2D)}
+                        </div>
+                    </span>
+                `;
 
                 const zdPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0') : '';
                 const zdrPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169') : '';
@@ -764,13 +823,15 @@ function renderCanvas() {
                         <span class="zone-progress-label">${zoneProgress}%</span>
                     </div>
                   </div>
-                  <div class="project-zone-header no-pan" style="padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: ${isLocked ? 'default' : 'move'};">
-                    <div style="display: flex; flex-direction: column; gap: 2px; max-width: 48%; overflow: hidden;">
+                  <div class="project-zone-header no-pan" style="padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: ${isLocked ? 'default' : 'move'}; overflow: visible;">
+                    <div style="display: flex; flex-direction: column; gap: 2px; max-width: 52%; overflow: visible; position: relative;">
                       <span style="font-weight: bold; font-size: 13px; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(zone.title)}">📁 ${escapeHtml(zone.title)}</span>
-                      <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap;">
+                      <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap; overflow: visible;">
                         <span style="color: ${pufferColor}; font-weight: bold; font-family: monospace;">${pufferText}</span>
                         <span style="color: #cbd5e0;">|</span>
-                        <span style="color: #718096;">${containedBlocks.length} Blöcke (${countDone} ✅${countWarning > 0 ? ` · <strong style="color:#e53e3e;">${countWarning} ⚠️</strong>` : ''}${countReady2D > 0 ? ` · <strong style="color:#2b6cb0;">${countReady2D} 📄</strong>` : ''})</span>
+                        <span style="color: #718096; display: inline-flex; align-items: center; gap: 3px;">
+                            ${containedBlocks.length} Blöcke (${doneBadgeHtml} · ${warningBadgeHtml} · ${ready2DBadgeHtml})
+                        </span>
                       </div>
                     </div>
                     <div style="display: flex; gap: 12px; align-items: center;">
@@ -801,7 +862,7 @@ function renderCanvas() {
 
                     const startMgrZoneDrag = (e) => {
                         if (e.type === 'mousedown' && e.button !== 0) return;
-                        if (e.target.closest('.zone-actions, button, input, select')) return;
+                        if (e.target.closest('.zone-actions, button, input, select, .mgr-status-badge, .mgr-status-popover')) return;
                         if (e.type === 'touchstart' && e.touches.length > 1) return;
                         if (e.type === 'mousedown') e.preventDefault();
                         if (e.cancelable) e.stopPropagation();

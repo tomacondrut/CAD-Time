@@ -2703,3 +2703,119 @@ body.assigning-live-time {
     border-color: #2b6cb0 !important;
     box-shadow: 0 0 10px rgba(43, 108, 176, 0.5) !important;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Manager-Rahmen Status-Badges & Info-Popovers)
+ * Zeitstempel: 2026-09-26 14:40:00 CEST
+ * Breadcrumb: [2026-09-26] .mgr-status-badge und .mgr-status-popover ergänzt:
+ * Zeigt beim Hovern über die Zähler-Icons eine Detailbox mit Status-Erklärung
+ * und einer anklickbaren Liste aller betroffenen Baugruppen.
+ * =============================================================================
+ */
+.mgr-status-badge {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 4px;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+    .mgr-status-badge:hover {
+        background: rgba(0, 0, 0, 0.08);
+        z-index: 3000;
+    }
+
+.mgr-status-popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 270px;
+    background: #1a202c;
+    color: #edf2f7;
+    padding: 8px 10px;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    border: 1px solid #4a5568;
+    font-size: 11px;
+    line-height: 1.35;
+    z-index: 5000;
+    white-space: normal;
+    font-weight: normal;
+    text-align: left;
+    pointer-events: auto;
+}
+
+.mgr-status-badge:hover .mgr-status-popover {
+    display: block;
+}
+
+.mgr-popover-title {
+    font-weight: 700;
+    font-size: 11px;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mgr-popover-desc {
+    font-size: 10px;
+    color: #a0aec0;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mgr-popover-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 130px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+    .mgr-popover-list li {
+        padding: 3px 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+        font-size: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: background 0.12s ease;
+    }
+
+        .mgr-popover-list li:hover {
+            background: rgba(49, 130, 206, 0.25);
+        }
+
+        .mgr-popover-list li .p-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #e2e8f0;
+        }
+
+        .mgr-popover-list li .p-meta {
+            font-family: monospace;
+            font-size: 9px;
+            color: #cbd5e0;
+            flex-shrink: 0;
+        }
+
+/* Hebt den gesamten Rahmen über alle Bauteil-Karten, sobald ein Info-Popover aktiv ist */
+.project-zone:has(.mgr-status-badge:hover) {
+    z-index: 4000 !important;
+}

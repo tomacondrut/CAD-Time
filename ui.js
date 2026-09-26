@@ -2452,6 +2452,20 @@ window.toggleHandles = function () {
  *     Event-Bubbling zuverlässig zu stoppen und sofort neu zu zeichnen.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Exklusives Log-Ausklappen pro Rahmen)
+ * ERSETZEN IN: ui.js (Funktion toggleZoneLogs)
+ * Zeitstempel: 2026-09-26 14:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 20:53:00 CEST]: Globale Exklusivität.
+ *   - [2026-09-26 14:40:00 CEST]: Rahmen-lokale Exklusivität: Beim Öffnen der 
+ *     Rahmen-Zeiten werden alle Blöcke DIESES Rahmens eingeklappt; Logs anderer
+ *     Rahmen bleiben unbeeinflusst.
+ * =============================================================================
+ */
+
 window.toggleZoneLogs = function (e, zoneId) {
     if (e) {
         e.preventDefault();
@@ -2463,10 +2477,15 @@ window.toggleZoneLogs = function (e, zoneId) {
 
     const isCurrentlyOpen = window.expandedZones.has(zoneId);
 
-    window.expandedZones.clear();
-    window.expandedNodes.clear();
-
-    if (!isCurrentlyOpen) {
+    if (isCurrentlyOpen) {
+        window.expandedZones.delete(zoneId);
+    } else {
+        // Schließt nur die Blöcke DIESES Rahmens, lässt andere Rahmen unberührt
+        (currentNodes || []).forEach(n => {
+            if (n.zone_id === zoneId) {
+                window.expandedNodes.delete(n.id);
+            }
+        });
         window.expandedZones.add(zoneId);
     }
 
