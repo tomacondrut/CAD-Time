@@ -111,32 +111,6 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     Scroll-Filter auf echte Tabellen (.inline-logs-container, .log-table, .zone-body) reduziert.
  * =============================================================================
  */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, Zoom & Events)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-18 07:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 23:15:00 CEST]: Zoom Event-Swallowing behoben.
- *   - [2026-09-18 07:15:00 CEST]: BUGFIX: e.preventDefault() beim Mousedown 
- *     wieder hinzugefügt, um das native "Verboten"-Zeichen (HTML5 Drag/Select) 
- *     beim Pannen auf dem leeren Hintergrund zu blockieren.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, Zoom & Events)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-18 07:45:00 CEST
- * Breadcrumbs:
- *   - [2026-09-18 07:15:00 CEST]: Native Browser-Gesten blockiert.
- *   - [2026-09-18 07:45:00 CEST]: Panning-Ausnahme für gesperrte Rahmen: 
- *     Ist ein Bereich gesperrt (🔒), kann nun auch mit einem Linksklick direkt 
- *     in seinen Header-Bereich (Titel-Leiste) gegriffen und gepannt werden.
- * =============================================================================
- */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -154,39 +128,19 @@ function initNativeCanvasEngine() {
         viewport.style.cursor = 'grabbing';
     };
 
-    // Hilfsfunktion: Prüft, ob das Element für Drag/Klick reserviert ist oder gepannt werden darf
-    const getInteractiveTarget = (e) => {
-        let el = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
-
-        // Ausnahme: Wenn es der Header eines GESPERRTEN Rahmens ist
-        if (el && el.classList.contains('project-zone-header')) {
-            const zone = el.closest('.project-zone');
-            if (zone && zone.classList.contains('zone-locked')) {
-                // ...und wir nicht genau auf die Buttons (z.B. Entsperren, Edit) geklickt haben
-                if (!e.target.closest('.zone-actions, button, input, select')) {
-                    el = null; // Interaktivität aufheben -> Panning mit Links erlauben!
-                }
-            }
-        }
-        return el;
-    };
-
     // ---------------------------------------------------------
     // PANNING (Desktop)
     // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = getInteractiveTarget(e);
+        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
-        // Wenn interaktives Element: Nur Pannen erlauben bei Mittelklick(1), Rechtsklick(2) oder Alt+Linksklick
         if (isInteractive) {
             if (e.button === 0 && !e.altKey) return;
         }
 
-        // Pannen auslösen
         if (e.button === 0 || e.button === 1 || e.button === 2) {
-            e.preventDefault(); // Blockiert das "Verboten"-Zeichen!
             startPan(e.clientX, e.clientY);
         }
     });
@@ -197,7 +151,7 @@ function initNativeCanvasEngine() {
     viewport.addEventListener('touchstart', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = getInteractiveTarget(e);
+        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
         if (isInteractive) return;
 
         if (e.touches.length === 1) {
@@ -242,6 +196,8 @@ function initNativeCanvasEngine() {
     // ZOOMING (Multiplikativ & Maus-zentriert)
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
+        // BUGFIX: Normales Scrollen NUR noch in echten Scroll-Containern zulassen!
+        // .assembly-body und .note-card entfernt, damit der Zoom greift.
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
             return;
         }
@@ -292,10 +248,15 @@ function initNativeCanvasEngine() {
     });
 }
 
-
+// Global Click um Kontextmenü zu schließen
+window.addEventListener('click', (e) => {
+    const menu = document.getElementById('canvasContextMenu');
+    if (menu && !e.target.closest('#canvasContextMenu')) {
+        menu.style.display = 'none';
+    }
+});
 
 // Tastatur-Shortcuts (Copy/Paste, Escape)
-// Tastatur-Shortcuts (Copy/Paste, Escape, Delete)
 window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -320,58 +281,6 @@ window.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         if (window.copiedNodeIds && window.copiedNodeIds.length > 0) {
             window.handlePasteNodes();
-        }
-    }
-
-    // Lösch-Logik (Delete / Backspace) exklusiv für das Manager-Board
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (window.activeCanvasMode === 'manager' && window.selectedNodeIds && window.selectedNodeIds.size > 0) {
-            const layout = typeof getManagerLayout === 'function' ? getManagerLayout() : null;
-            if (!layout) return;
-
-            let needsSave = false;
-            let nodesToDelete = [];
-            let hiddenCount = 0;
-
-            window.selectedNodeIds.forEach(nodeId => {
-                const node = currentNodes.find(n => n.id === nodeId);
-                if (!node) return;
-
-                // Identifizieren ob es der Master (ursprünglicher CAD-Block) oder eine Copy/Paste-Referenz ist
-                const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
-                related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-                const isMaster = related.length === 0 || related[0].id === node.id;
-
-                if (!isMaster) {
-                    // Erstellte Referenz -> direkt komplett aus DB löschen
-                    nodesToDelete.push(node.id);
-                    currentNodes = currentNodes.filter(n => n.id !== node.id); // Optimistisches UI-Update
-                } else {
-                    // Aus dem Canvas übernommene Instanz -> nur vom Board ausblenden
-                    hiddenCount++;
-                }
-
-                if (layout.placements[node.id]) {
-                    delete layout.placements[node.id];
-                    needsSave = true;
-                }
-            });
-
-            if (nodesToDelete.length > 0) {
-                Promise.all(nodesToDelete.map(id => db.from('project_nodes').delete().eq('id', id))).then(() => {
-                    if (typeof fetchCanvasData === 'function') fetchCanvasData();
-                });
-                showToast(`${nodesToDelete.length} Referenz(en) komplett gelöscht`, 'success');
-            } else if (hiddenCount > 0) {
-                showToast(`${hiddenCount} Instanz(en) vom Board ausgeblendet`, 'info');
-            }
-
-            if (needsSave && typeof saveManagerLayout === 'function') {
-                saveManagerLayout(layout);
-                renderCanvas();
-                if (typeof renderSidebarZones === 'function') renderSidebarZones();
-            }
-            window.selectedNodeIds.clear();
         }
     }
 });
@@ -730,7 +639,16 @@ function renderCanvas() {
             const zoneProgress = totalWeights > 0 ? Math.round(totalWeightedScore / totalWeights) : 0;
             const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
 
-            // Budget Soll/Ist: Dedupliziert (Referenzen zählen nur einmal)
+            // =================================================================
+            // Projekt: CAD Time Manager
+            // Domain: Canvas Engine (Manager-Zonen: Restpuffer & Baugruppenzähler)
+            // ERSETZEN IN: canvas.js (In renderCanvas() -> isManagerMode Zonenblock)
+            // Zeitstempel: 2026-09-26 09:40:00 CEST
+            // Breadcrumbs:
+            //   - [2026-09-17 22:45:00 CEST]: Dedupliziertes Budget für Rahmen.
+            //   - [2026-09-26 09:40:00 CEST]: Restpuffer (+/- Stunden) und Mini-Zähler
+            //     (Erledigt, Überhang, 2D bereit) im Zonen-Header ergänzt.
+            // =================================================================
             let zoneBudD = 0, zoneBudDr = 0, zoneSpentD = 0, zoneSpentDr = 0;
             const countedBudgetKeys = new Set();
 
@@ -754,6 +672,45 @@ function renderCanvas() {
                 }
             });
 
+            // Restaufwand / Puffer-Berechnung
+            const zoneTotBud = zoneBudD + zoneBudDr;
+            const zoneTotSpent = zoneSpentD + zoneSpentDr;
+            const zonePuffer = parseFloat((zoneTotBud - zoneTotSpent).toFixed(1));
+            const hasZoneOverhang = zonePuffer < 0;
+            const pufferColor = hasZoneOverhang ? '#e53e3e' : '#38a169';
+            const pufferText = hasZoneOverhang
+                ? `Überhang: -${typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.abs(zonePuffer)) : Math.abs(zonePuffer) + 'h'}`
+                : `Puffer: +${typeof formatHoursToHM === 'function' ? formatHoursToHM(zonePuffer) : zonePuffer + 'h'}`;
+
+            // Baugruppen-Zähler nach Zustand
+            let countDone = 0;
+            let countWarning = 0;
+            let countReady2D = 0;
+
+            containedBlocks.forEach(bn => {
+                const mObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
+                const isDone = (mObj.completion_status === 'completed') || (bn.completion_status === 'completed');
+                const pD = isDone ? 100 : ((mObj.progress_design !== null && mObj.progress_design !== undefined) ? mObj.progress_design : 0);
+                const pDr = isDone ? 100 : ((mObj.progress_drafting !== null && mObj.progress_drafting !== undefined) ? mObj.progress_drafting : 0);
+                const bTotProg = (pD * 0.5) + (pDr * 0.5);
+
+                if (isDone || bTotProg === 100) {
+                    countDone++;
+                } else {
+                    if (pD >= 85 && pDr === 0) countReady2D++;
+
+                    const rIds = mObj.linked_id ? currentNodes.filter(x => x.linked_id === mObj.linked_id).map(x => x.id) : [mObj.id];
+                    let bSpent = 0;
+                    (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => rIds.includes(l.node_id)).forEach(l => {
+                        bSpent += parseFloat(l.hours) || 0;
+                    });
+                    const bBud = (parseFloat(mObj.budget_design_hours) || 0) + (parseFloat(mObj.budget_drafting_hours) || 0);
+                    if (bBud > 0 && bSpent > bBud) {
+                        countWarning++;
+                    }
+                }
+            });
+
             const zdPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentD, zoneBudD, zone.color_hex || '#2b6cb0') : '';
             const zdrPieStyle = typeof generatePieStyle === 'function' ? generatePieStyle(zoneSpentDr, zoneBudDr, '#38a169') : '';
             const docLabel = zone.doc_number ? `<span class="badge-doc-text">${escapeHtml(zone.doc_number)}</span>` : '';
@@ -766,8 +723,15 @@ function renderCanvas() {
                     <span class="zone-progress-label">${zoneProgress}%</span>
                 </div>
               </div>
-              <div class="project-zone-header no-pan" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: ${isLocked ? 'default' : 'move'};">
-                <span style="font-weight: bold; font-size: 13px; color: #2d3748;">📁 ${escapeHtml(zone.title)}</span>
+              <div class="project-zone-header no-pan" style="padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; cursor: ${isLocked ? 'default' : 'move'};">
+                <div style="display: flex; flex-direction: column; gap: 2px; max-width: 48%; overflow: hidden;">
+                  <span style="font-weight: bold; font-size: 13px; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(zone.title)}">📁 ${escapeHtml(zone.title)}</span>
+                  <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap;">
+                    <span style="color: ${pufferColor}; font-weight: bold; font-family: monospace;">${pufferText}</span>
+                    <span style="color: #cbd5e0;">|</span>
+                    <span style="color: #718096;">${containedBlocks.length} Blöcke (${countDone} ✅${countWarning > 0 ? ` · <strong style="color:#e53e3e;">${countWarning} ⚠️</strong>` : ''}${countReady2D > 0 ? ` · <strong style="color:#2b6cb0;">${countReady2D} 📄</strong>` : ''})</span>
+                  </div>
+                </div>
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <div style="display:flex; align-items: center; gap: 4px;" title="CAD Summe (Dedupliziert)">
                         <div class="pie-chart" style="${zdPieStyle}; width: 20px; height: 20px;"><div class="pie-inner" style="width:12px; height:12px;"></div></div>
@@ -1715,8 +1679,17 @@ function renderCanvas() {
         }
 
         // ---------------------------------------------------------------------
-        // 2b. REGULÄRE BAUGRUPPEN / BAUTEILE (CAD & MANAGER)
-        // ---------------------------------------------------------------------
+        // =====================================================================
+        // Projekt: CAD Time Manager
+        // Domain: Canvas Engine (Manager-Karten: Drift-Pill, Handoff & Fokus)
+        // ERSETZEN IN: canvas.js (Abschnitt 2b: Manager-Karten-Rendering)
+        // Zeitstempel: 2026-09-26 09:40:00 CEST
+        // Breadcrumbs:
+        //   - [2026-09-17 22:45:00 CEST]: Basis Manager-Karte mit 50/50 Slidern.
+        //   - [2026-09-26 09:40:00 CEST]: Earned-Value Metrik (Drift-Pills), 
+        //     Handoff-Badges (Bereit für 2D), Bearbeiter-Badges im Header und
+        //     Unterstützung für den Fokus-Filter (Abdimmen unkritischer Blöcke).
+        // =====================================================================
         if (isManagerMode && (!mgrLayout || !mgrLayout.placements || !mgrLayout.placements[node.id])) {
             return;
         }
@@ -1750,6 +1723,56 @@ function renderCanvas() {
         const pDrafting = isBlockDone ? 100 : ((masterNode.progress_drafting !== null && masterNode.progress_drafting !== undefined) ? masterNode.progress_drafting : 0);
         const pTotal = Math.round((pDesign * 0.5) + (pDrafting * 0.5));
 
+        // ---------------------------------------------------------------------
+        // EARNED VALUE / DRIFT BERECHNUNG & HEALTH-PILL
+        // ---------------------------------------------------------------------
+        const totBudg = dBudg + drBudg;
+        const totSpent = dSpentAgg + drSpentAgg;
+        let driftHrs = 0;
+        let isCritical = false;
+        let healthPillHtml = '';
+
+        if (totBudg > 0) {
+            const expectedHrs = totBudg * (pTotal / 100);
+            driftHrs = parseFloat((expectedHrs - totSpent).toFixed(1));
+
+            if (isBlockDone || pTotal === 100) {
+                healthPillHtml = `<span class="mgr-health-pill green" title="Erfolgreich abgeschlossen">🟢 Fertig</span>`;
+            } else if (totSpent > totBudg || driftHrs <= -2) {
+                isCritical = true;
+                const overHrs = Math.abs(driftHrs);
+                const overStr = typeof formatHoursToHM === 'function' ? formatHoursToHM(overHrs) : `${overHrs}h`;
+                healthPillHtml = `<span class="mgr-health-pill red" title="Budget-Drift: ${totSpent.toFixed(1)}h verbraucht bei ${pTotal}% Fertigstellung">🔴 -${overStr} Überhang</span>`;
+            } else if (driftHrs < 0) {
+                isCritical = true;
+                const underHrs = Math.abs(driftHrs);
+                const underStr = typeof formatHoursToHM === 'function' ? formatHoursToHM(underHrs) : `${underHrs}h`;
+                healthPillHtml = `<span class="mgr-health-pill yellow" title="Leichter Budgetverzug">🟡 -${underStr}</span>`;
+            } else {
+                healthPillHtml = `<span class="mgr-health-pill green" title="Im Plan (+${driftHrs}h Puffer)">🟢 Im Plan</span>`;
+            }
+        } else {
+            healthPillHtml = `<span class="mgr-health-pill neutral" title="Kein Budget hinterlegt">⚪ Kein Budget</span>`;
+        }
+
+        // ---------------------------------------------------------------------
+        // WORKFLOW & HANDOFF BADGES (CAD -> 2D)
+        // ---------------------------------------------------------------------
+        let handoffBadgeHtml = '';
+        if (isBlockDone || (pDesign === 100 && pDrafting === 100)) {
+            handoffBadgeHtml = `<span class="mgr-handoff-badge done" title="Vollständig abgeschlossen">✅ 100%</span>`;
+        } else if (pDesign >= 85 && pDrafting === 0) {
+            isCritical = true; // Handlungsbedarf für Zeichnungsableitung
+            handoffBadgeHtml = `<span class="mgr-handoff-badge ready-2d" title="CAD bei ${pDesign}% – Modell bereit zur Zeichnungsableitung!">📄 Bereit für 2D</span>`;
+        } else if (pDrafting > 10 && pDesign < 50) {
+            isCritical = true;
+            handoffBadgeHtml = `<span class="mgr-handoff-badge warning-early" title="Achtung: Zeichnung bereits begonnen (${pDrafting}%), bevor Modell eingefroren ist (${pDesign}%)">⚠️ Frühe Zeichn.</span>`;
+        }
+
+        if (masterNode.completion_status === 'pending_approval') {
+            isCritical = true;
+        }
+
         const identifier = node.article_number || node.doc_number || '';
         let badgeHtml = '';
         if (identifier || pTotal > 0 || isBlockDone) {
@@ -1775,7 +1798,11 @@ function renderCanvas() {
         const isExpanded = window.expandedNodes && window.expandedNodes.has(node.id);
 
         const isUserAssigned = (node.assigned_design_user === uCode) || (node.assigned_drafting_user === uCode);
-        const isDimmed = !isManagerMode && window.personalFilterActive && !isUserAssigned;
+
+        // Filter-Dimmung: Fokus-Filter im Manager-Board vs. Persönlicher Filter im CAD-Modus
+        const isFocusDimmed = isManagerMode && window.managerFocusActive && !isCritical;
+        const isPersonalDimmed = !isManagerMode && window.personalFilterActive && !isUserAssigned;
+        const isDimmed = isManagerMode ? isFocusDimmed : isPersonalDimmed;
 
         const el = document.createElement('div');
         el.id = node.id;
@@ -1793,10 +1820,10 @@ function renderCanvas() {
 
         let assignedBadgesHtml = '';
         if (node.assigned_design_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:3px;" title="CAD: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}">3D <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#2b6cb0; margin-left:2px;" title="CAD: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}">3D <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_design_user) : node.assigned_design_user}</strong></span>`;
         }
         if (node.assigned_drafting_user) {
-            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:3px;" title="Zeichnung: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}">📄 <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}</strong></span>`;
+            assignedBadgesHtml += `<span class="author-badge" style="background:#38a169; margin-left:2px;" title="Zeichnung: ${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}">📄 <strong>${typeof escapeHtml === 'function' ? escapeHtml(node.assigned_drafting_user) : node.assigned_drafting_user}</strong></span>`;
         }
 
         const dStr = isMaster ? `${typeof formatHoursToHM === 'function' ? formatHoursToHM(dSpentAgg) : dSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(dBudg) : dBudg}` : `(${typeof formatHoursToHM === 'function' ? formatHoursToHM(dSpentAgg) : dSpentAgg} / ${typeof formatHoursToHM === 'function' ? formatHoursToHM(dBudg) : dBudg})`;
@@ -1855,12 +1882,23 @@ function renderCanvas() {
 
             el.innerHTML = `
               ${badgeHtml}
-              <div class="assembly-header" style="background: ${nodeColor}; display: flex; justify-content: space-between; align-items: center; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 6px 10px;">
-                <span style="overflow: hidden; text-overflow: ellipsis; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-weight: bold;" title="${escNodeName}">
-                  ${typeIconSvg} ${escNodeName}
-                </span>
-                <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
-                  ${linkedIconHtml}
+              <div class="assembly-header" style="background: ${nodeColor}; display: flex; flex-direction: column; gap: 4px; border-top-left-radius: 6px; border-top-right-radius: 6px; padding: 6px 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                  <span style="overflow: hidden; text-overflow: ellipsis; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; color: #fff; font-weight: bold;" title="${escNodeName}">
+                    ${typeIconSvg} ${escNodeName}
+                  </span>
+                  <div style="display:flex; align-items:center; gap:3px; flex-shrink:0;">
+                    ${linkedIconHtml}
+                  </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-top: 2px; border-top: 1px solid rgba(255,255,255,0.15);">
+                  <div style="display:flex; align-items:center; gap:3px; overflow:hidden;">
+                    ${assignedBadgesHtml || '<span style="font-size:9px; opacity:0.6; color:#fff;">Offen</span>'}
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                    ${handoffBadgeHtml}
+                    ${healthPillHtml}
+                  </div>
                 </div>
               </div>
               <div class="assembly-body" style="padding: 8px 10px;">
@@ -2525,57 +2563,6 @@ window.adjustCanvasBounds = function () {
 // =============================================================================
 // KONTEXTMENÜ-AKTIONEN & COPY/PASTE
 // =============================================================================
-
-window.updateContextMenuVisibility = function (nodeId, zoneId) {
-    const isMgr = (window.activeCanvasMode === 'manager');
-
-    // Elemente des Haupt-Canvas
-    const elBlock = document.getElementById('ctxMenuAddBlock');
-    const elZone = document.getElementById('ctxMenuAddZone');
-    const elNote = document.getElementById('ctxMenuAddNote');
-    const elHandles = document.getElementById('ctxMenuToggleHandles');
-    const elDup = document.getElementById('ctxMenuDuplicateNode');
-    const elDel = document.getElementById('ctxMenuDeleteNode');
-
-    // Elemente des Manager-Cockpits
-    const mgrAddEx = document.getElementById('ctxMenuMgrAddExisting');
-    const mgrAddZone = document.getElementById('ctxMenuMgrAddZone');
-    const mgrRem = document.getElementById('ctxMenuMgrRemoveNode');
-    const mgrDelZone = document.getElementById('ctxMenuMgrDeleteZone');
-
-    // Haupt-Canvas Items im Manager Modus strikt sperren / ausblenden
-    if (elBlock) elBlock.style.display = isMgr ? 'none' : 'flex';
-    if (elZone) elZone.style.display = isMgr ? 'none' : 'flex';
-    if (elNote) elNote.style.display = isMgr ? 'none' : 'flex';
-    if (elHandles) elHandles.style.display = isMgr ? 'none' : 'flex';
-
-    // Duplizieren geht in beiden Modi (sofern ein Block ausgewählt ist)
-    if (elDup) elDup.style.display = nodeId ? 'flex' : 'none';
-
-    // Löschen (CAD Modus exklusiv)
-    if (elDel) elDel.style.display = (!isMgr && nodeId) ? 'flex' : 'none';
-
-    // Manager Aktionen steuern
-    if (mgrAddEx) mgrAddEx.style.display = (isMgr && !nodeId) ? 'flex' : 'none';
-    if (mgrAddZone) mgrAddZone.style.display = (isMgr && !nodeId) ? 'flex' : 'none';
-    if (mgrDelZone) mgrDelZone.style.display = (isMgr && zoneId && !nodeId) ? 'flex' : 'none';
-
-    if (mgrRem) {
-        mgrRem.style.display = (isMgr && nodeId) ? 'flex' : 'none';
-
-        // Button-Text dynamisch auf Ausblenden oder Löschen setzen
-        if (isMgr && nodeId) {
-            const node = currentNodes.find(n => n.id === nodeId);
-            if (node) {
-                const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
-                related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-                const isMaster = related.length === 0 || related[0].id === node.id;
-                mgrRem.innerHTML = isMaster ? '✕ Vom Board ausblenden' : '✕ Referenz löschen';
-            }
-        }
-    }
-};
-
 window.handleContextMenuAction = async function (type) {
     const menu = document.getElementById('canvasContextMenu');
     if (menu) menu.style.display = 'none';
@@ -2593,28 +2580,10 @@ window.handleContextMenuAction = async function (type) {
     if (type === 'mgr_remove_node' && contextTargetNodeId) {
         if (typeof getManagerLayout !== 'function' || typeof saveManagerLayout !== 'function') return;
         const layout = getManagerLayout();
-        const node = currentNodes.find(n => n.id === contextTargetNodeId);
-
-        if (node) {
-            const related = node.linked_id ? currentNodes.filter(n => n.linked_id === node.linked_id) : [node];
-            related.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-            const isMaster = related.length === 0 || related[0].id === node.id;
-
-            // Referenzen werden aus der DB geworfen, Master lediglich vom Layout ausgeblendet
-            if (!isMaster) {
-                db.from('project_nodes').delete().eq('id', node.id).then(() => {
-                    if (typeof fetchCanvasData === 'function') fetchCanvasData();
-                });
-                showToast('Referenz gelöscht', 'success');
-            } else {
-                showToast('Vom Manager-Board ausgeblendet', 'info');
-            }
-        }
-
         delete layout.placements[contextTargetNodeId];
         saveManagerLayout(layout);
+        showToast('Vom Manager-Board entfernt', 'info');
         renderCanvas();
-        if (typeof renderSidebarZones === 'function') renderSidebarZones();
         return;
     }
 
@@ -2708,7 +2677,7 @@ window.handleContextMenuAction = async function (type) {
             if (typeof saveManagerLayout === 'function') await saveManagerLayout(layout);
         }
 
-        showToast(`Verknüpfte Referenz von "${originalNode.name}" erstellt`, 'success');
+        showToast(`Verknüpfte Instanz von "${originalNode.name}" erstellt`, 'success');
         if (typeof fetchCanvasData === 'function') await fetchCanvasData();
         return;
     }
@@ -2835,53 +2804,4 @@ window.handlePasteNodes = async function () {
 
     showToast(`${window.copiedNodeIds.length} Instanz(en) eingefügt`, 'success');
     if (typeof fetchCanvasData === 'function') await fetchCanvasData();
-};
-
-/**
-* =============================================================================
-* Projekt: CAD Time Manager
-* Domain: UI Controller (Haupt-Canvas Zonen-Sperre)
-* HINZUFÜGEN IN: canvas.js (Am Ende der Datei)
-* Zeitstempel: 2026-09-18 08:40:00 CEST
-* Breadcrumbs:
-*   - [2026-09-18 08:40:00 CEST]: Fehlende toggleZoneLock Funktion für den 
-*     Haupt-Canvas (Konstruktionsplan) hinzugefügt, inkl. Rechteprüfung & DB-Update.
-* =============================================================================
-*/
-window.toggleZoneLock = async function (e, zoneId) {
-    if (e) e.stopPropagation();
-
-    const zone = (currentZones || []).find(z => z.id === zoneId);
-    if (!zone) return;
-
-    // Rechteprüfung: Nur Admin oder Ersteller
-    const uCode = typeof activeUserCode !== 'undefined' ? activeUserCode : '';
-    const isAdminUser = typeof isAdmin !== 'undefined' ? isAdmin : false;
-
-    if (!isAdminUser && uCode !== zone.created_by) {
-        showToast('Nur Admins oder der Ersteller können diesen Rahmen sperren.', 'error');
-        return;
-    }
-
-    // Toggle Status
-    const newState = !zone.is_locked;
-    zone.is_locked = newState; // Optimistisches Update für sofortiges Feedback
-
-    // DB Update im Hintergrund ausführen
-    if (typeof db !== 'undefined') {
-        db.from('project_zones').update({ is_locked: newState }).eq('id', zoneId).then(({ error }) => {
-            if (error) {
-                console.error("Fehler beim Sperren der Zone:", error);
-                showToast('Fehler beim Speichern der Sperre', 'error');
-                // Revert bei Fehler
-                zone.is_locked = !newState;
-                if (typeof renderCanvas === 'function') renderCanvas();
-            }
-        });
-    }
-
-    showToast(`Rahmen ${newState ? 'gesperrt (Pan-Modus aktiv)' : 'entsperrt'}`, 'info');
-
-    // Canvas sofort neu zeichnen, um das Schloss-Icon und Panning-Verhalten zu aktualisieren
-    if (typeof renderCanvas === 'function') renderCanvas();
 };

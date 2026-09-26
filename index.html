@@ -691,12 +691,25 @@
     Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
     =============================================================================
     -->
+            <!--
+                =============================================================================
+                Projekt: CAD Time Manager
+                Domain: Viewport (Canvas-Modus Toggle & Manager Fokus-Filter)
+                ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
+                Zeitstempel: 2026-09-26 09:40:00 CEST
+                Breadcrumbs:
+                  - [2026-09-17 21:05:00 CEST]: Segment-Umschalter & Auto-Sortier-Button.
+                  - [2026-09-26 09:40:00 CEST]: Button #btnToggleManagerFocus hinzugefügt
+                    zum Filtern auf kritische Pfade (Budgetüberzieher, 2D-Übergaben).
+                =============================================================================
+                -->
             <div class="canvas-mode-switcher-container">
                 <div class="canvas-mode-switcher">
                     <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 CAD-Konstruktionsplan</button>
                     <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Fortschritts-Board</button>
                 </div>
                 <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="autoArrangeManagerCanvas()" title="Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen">🗂️ Nach Farbe & Name sortieren</button>
+                <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und anstehende 2D-Übergaben hervorheben">⚠️ Fokus: Kritische Pfade</button>
             </div>
 
             <!--

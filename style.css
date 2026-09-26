@@ -2371,3 +2371,89 @@ body.assigning-live-time {
             width: 150px;
         }
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Manager-Board Cockpit-Erweiterung: Health-Pills, Handoff & Focus)
+ * EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-26 09:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 09:40:00 CEST]: Styles für Earned-Value Health-Pills (Drift),
+ *     CAD->2D Übergabe-Badges, Zonen-Puffer und Fokus-Filter Button.
+ * =============================================================================
+ */
+
+/* Health-Pills (Earned-Value / Drift) */
+.mgr-health-pill {
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: monospace;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    line-height: 1.2;
+}
+
+    .mgr-health-pill.green {
+        background: #c6f6d5;
+        color: #22543d;
+    }
+
+    .mgr-health-pill.yellow {
+        background: #feebc8;
+        color: #744210;
+    }
+
+    .mgr-health-pill.red {
+        background: #fed7d7;
+        color: #9b2c2c;
+        border: 1px solid #feb2b2;
+    }
+
+    .mgr-health-pill.neutral {
+        background: rgba(255, 255, 255, 0.25);
+        color: #edf2f7;
+    }
+
+/* Handoff-Badges (CAD -> 2D Workflow) */
+.mgr-handoff-badge {
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    line-height: 1.2;
+}
+
+    .mgr-handoff-badge.ready-2d {
+        background: #bee3f8;
+        color: #2b6cb0;
+        border: 1px solid #90cdf4;
+        animation: livePulseAnim 2s infinite ease-in-out;
+    }
+
+    .mgr-handoff-badge.warning-early {
+        background: #feebc8;
+        color: #c05621;
+        border: 1px solid #fbd38d;
+    }
+
+    .mgr-handoff-badge.done {
+        background: #c6f6d5;
+        color: #22543d;
+    }
+
+/* Fokus-Filter Button aktiver Status */
+.btn-manager-action.active {
+    background: #e53e3e !important;
+    color: #ffffff !important;
+    border-color: #c53030 !important;
+    box-shadow: 0 0 10px rgba(229, 62, 62, 0.5) !important;
+}

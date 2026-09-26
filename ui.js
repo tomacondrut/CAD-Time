@@ -3636,6 +3636,20 @@ window.saveManagerLayout = async function (layout) {
  *     (cad_tm_panX_main / cad_tm_panX_manager), Zone-Lock Toggle & Zone Delete.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Mode-Switch & Manager Fokus-Filter)
+ * ERSETZEN IN: ui.js (Funktion switchCanvasMode ersetzen & toggleManagerFocusFilter anhängen)
+ * Zeitstempel: 2026-09-26 09:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:55:00 CEST]: Modus-Wechsel mit getrenntem Pan/Zoom State.
+ *   - [2026-09-26 09:40:00 CEST]: Steuerung für #btnToggleManagerFocus und
+ *     window.managerFocusActive integriert.
+ * =============================================================================
+ */
+window.managerFocusActive = false;
+
 window.switchCanvasMode = function (mode) {
     const prevMode = window.activeCanvasMode || 'main';
 
@@ -3650,6 +3664,7 @@ window.switchCanvasMode = function (mode) {
     const btnMain = document.getElementById('btnModeMain');
     const btnManager = document.getElementById('btnModeManager');
     const btnSort = document.getElementById('btnAutoSortManager');
+    const btnFocus = document.getElementById('btnToggleManagerFocus');
 
     if (btnMain && btnManager) {
         btnMain.classList.toggle('active', mode === 'main');
@@ -3658,6 +3673,11 @@ window.switchCanvasMode = function (mode) {
 
     if (btnSort) {
         btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
+    }
+
+    if (btnFocus) {
+        btnFocus.style.display = mode === 'manager' ? 'inline-block' : 'none';
+        btnFocus.classList.toggle('active', window.managerFocusActive);
     }
 
     // 2. Kameraposition des Zielmodus wiederherstellen oder zentrieren
@@ -3680,6 +3700,17 @@ window.switchCanvasMode = function (mode) {
 
     if (typeof renderCanvas === 'function') renderCanvas();
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
+};
+
+window.toggleManagerFocusFilter = function () {
+    window.managerFocusActive = !window.managerFocusActive;
+    const btnFocus = document.getElementById('btnToggleManagerFocus');
+    if (btnFocus) {
+        btnFocus.classList.toggle('active', window.managerFocusActive);
+        btnFocus.textContent = window.managerFocusActive ? '🎯 Alle Blöcke zeigen' : '⚠️ Fokus: Kritische Pfade';
+    }
+    showToast(window.managerFocusActive ? 'Fokus-Filter aktiv: Nur Überhänge & 2D-Übergaben' : 'Fokus-Filter deaktiviert: Alle Blöcke sichtbar', 'info');
+    if (typeof renderCanvas === 'function') renderCanvas();
 };
 
 window.toggleManagerZoneLock = function (e, zoneId) {
