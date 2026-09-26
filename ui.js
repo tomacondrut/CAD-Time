@@ -4409,7 +4409,10 @@ document.addEventListener('click', async (e) => {
         const zoneEl = zoneHeader.closest('.project-zone');
         if (!zoneEl) return;
         targetZoneId = zoneEl.id;
-        const zone = (currentZones || []).find(z => z.id === targetZoneId);
+
+        // Sucht die Zone in CAD-Zonen ODER Manager-Zonen
+        const zone = (currentZones || []).find(z => z.id === targetZoneId)
+            || ((typeof getManagerLayout === 'function') ? (getManagerLayout().zones || []).find(z => z.id === targetZoneId) : null);
         if (!zone) return;
 
         const docPart = zone.doc_number || (zone.article_number ? `ART-${zone.article_number}` : '');

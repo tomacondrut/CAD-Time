@@ -138,12 +138,18 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     während das Hineinziehen aus der Sidebar (.sb-pool-item) erhalten bleibt.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Rechtsklick- & Panning-Reparatur)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
+ * Zeitstempel: 2026-09-26 14:10:00 CEST
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
 
-    // Verhindert das native Browser-Ghosting bei Drag & Pan auf Canvas/Karten/Rahmen,
-    // erlaubt aber weiterhin das Hineinziehen von Bauteilen aus der Sidebar
     viewport.addEventListener('dragstart', (e) => {
         if (!e.target.closest('#sidebar')) {
             e.preventDefault();
@@ -165,29 +171,28 @@ function initNativeCanvasEngine() {
     };
 
     // ---------------------------------------------------------
-    // PANNING (Desktop)
+    // PANNING (Desktop) - Strikt nur Linksklick (0) oder Mittelklick (1)
     // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
+        if (e.button === 2) return; // Rechtsklick darf NIEMALS Panning starten
 
-        // Prüft, ob ein interaktives Canvas-Element angeklickt wurde
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
         if (interactiveEl) {
-            // Ausnahmeregelung: Wenn ein Kasten GESPERRT ist oder Klick auf freie Fläche im Manager-Rahmen
             const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
-            const isManagerZoneBody = interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
+            const isManagerZoneBody = (window.activeCanvasMode === 'manager') && interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
             const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
 
             if ((isLockedZone || isManagerZoneBody) && !isButtonOrAction) {
-                // Erlaubt das Panning auf dem Rahmen
+                // Panning durch gesperrte Zonen erlauben
             } else {
                 if (e.button === 0 && !e.altKey) return;
             }
         }
 
-        if (e.button === 0 || e.button === 1 || e.button === 2) {
-            e.preventDefault(); // Unterbindet Text-Selektion & natives Browser-Ghosting
+        if (e.button === 0 || e.button === 1) {
+            e.preventDefault();
             startPan(e.clientX, e.clientY);
         }
     });
@@ -201,7 +206,7 @@ function initNativeCanvasEngine() {
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
         if (interactiveEl) {
             const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
-            const isManagerZoneBody = interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
+            const isManagerZoneBody = (window.activeCanvasMode === 'manager') && interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
             const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
             if ((!isLockedZone && !isManagerZoneBody) || isButtonOrAction) return;
         }
@@ -211,7 +216,6 @@ function initNativeCanvasEngine() {
         }
     }, { passive: false });
 
-    // Move
     window.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
         const dx = e.clientX - startX;
@@ -233,7 +237,6 @@ function initNativeCanvasEngine() {
         }
     }, { passive: false });
 
-    // Stop
     const stopPan = () => {
         if (isPanning) {
             isPanning = false;
@@ -245,10 +248,10 @@ function initNativeCanvasEngine() {
     window.addEventListener('touchcancel', stopPan);
 
     // ---------------------------------------------------------
-    // ZOOMING
+    // ZOOMING - Schützt alle Zeiteingaben vor versehentlichem Canvas-Zoom
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
+        if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
             return;
         }
         e.preventDefault();
@@ -836,10 +839,10 @@ function renderCanvas() {
                 let allMovedZoneIds = [];
 
                 const startMgrZoneDrag = (e) => {
-                    
+                    if (e.type === 'mousedown' && e.button !== 0) return; // <--- NEU: Rechtsklick freigeben
                     if (e.target.closest('.zone-actions, button, input, select')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
-                    if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
+                    if (e.type === 'mousedown') e.preventDefault();
                     if (e.cancelable) e.stopPropagation();
                     window.isDraggingAnything = true;
 
@@ -1237,9 +1240,10 @@ function renderCanvas() {
                 let childNodes = [];
 
                 const startZoneDrag = (e) => {
+                    if (e.type === 'mousedown' && e.button !== 0) return; // <--- NEU: Rechtsklick freigeben
                     if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
-                    if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
+                    if (e.type === 'mousedown') e.preventDefault();
                     if (e.cancelable) e.stopPropagation();
                     window.isDraggingAnything = true;
                     isDragging = true;
@@ -2262,11 +2266,11 @@ function renderCanvas() {
             let initCurX = posX, initCurY = posY;
 
             const startCardDrag = (e) => {
-
+                if (e.type === 'mousedown' && e.button !== 0) return; // <--- NEU: Rechtsklick freigeben
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
                 if (e.type === 'touchstart' && e.touches.length > 1) return;
-                if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
+                if (e.type === 'mousedown') e.preventDefault();
                 if (e.cancelable) e.stopPropagation();
                 window.isDraggingAnything = true;
 
