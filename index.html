@@ -718,6 +718,55 @@
             <button id="infoGuideBtn" class="top-right-btn" style="right: 68px;" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
             <button id="adminLockBtn" class="top-right-btn" style="right: 20px;" title="Erweiterte Optionen freischalten" onclick="handleAdminIconClick()">🔒</button>
 
+
+            <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Live-Zeiterfassungs-Widget (Bottom Dock)
+    EINFÜGEN IN: index.html (Im #viewport vor .zoom-controls)
+    Zeitstempel: 2026-09-26 09:35:00 CEST
+    Breadcrumb: [2026-09-26] Live-Timer Leiste mit Start/Pause/Stop, Zuweisungs-Modus
+      und optischem Aufleuchten von Blöcken (vollflächig) und Rahmen (nur Header).
+    =============================================================================
+    -->
+            <div id="liveTimerBar" class="live-timer-bar">
+                <div class="live-timer-row" id="liveTimerControlsRow">
+                    <div class="live-timer-badge">
+                        <span class="live-timer-pulse" id="liveTimerPulse"></span>
+                        <span id="liveTimerDisplay" class="live-timer-clock">00:00:00</span>
+                    </div>
+
+                    <select id="liveTimerTaskType" class="live-timer-select" title="Kategorie wählen">
+                        <option value="drafting">📄 Zeichnung</option>
+                        <option value="design">📐 CAD</option>
+                    </select>
+
+                    <input type="text" id="liveTimerNote" class="live-timer-input" placeholder="Tätigkeit / Beschreibung..." />
+
+                    <div class="live-timer-actions" id="liveTimerBtnGroup">
+                        <button type="button" id="btnLiveTimerStart" class="btn-live-action start" onclick="window.startLiveTimer()" title="Zeiterfassung starten">▶ Start</button>
+                        <button type="button" id="btnLiveTimerPause" class="btn-live-action pause" style="display:none;" onclick="window.pauseLiveTimer()" title="Timer anhalten">⏸ Pause</button>
+                        <button type="button" id="btnLiveTimerStop" class="btn-live-action stop" style="display:none;" onclick="window.stopLiveTimer()" title="Timer beenden">⏹ Stop</button>
+                    </div>
+                </div>
+
+                <!-- Zuweisen / Verwerfen Leiste nach Stop -->
+                <div class="live-timer-row review-row" id="liveTimerReviewRow" style="display:none;">
+                    <span class="live-timer-review-text" id="liveTimerReviewSummary">0h 00m erfasst</span>
+                    <div class="live-timer-actions">
+                        <button type="button" class="btn-live-action assign" onclick="window.startLiveTimeAssignment()" title="Block oder Rahmen im Canvas anklicken">🎯 Zuweisen</button>
+                        <button type="button" class="btn-live-action resume" onclick="window.resumeLiveTimer()" title="Timer weiterlaufen lassen">▶ Weiter</button>
+                        <button type="button" class="btn-live-action discard" onclick="window.discardLiveTimer()" title="Erfassung verwerfen">🗑️ Verwerfen</button>
+                    </div>
+                </div>
+
+                <!-- Hinweistext während des Klick-Zuweisens -->
+                <div class="live-timer-assign-hint" id="liveTimerAssignHint" style="display:none;">
+                    <span>🎯 Klicke auf einen <strong>Block</strong> oder einen <strong>Rahmen-Header</strong> zum Zuweisen...</span>
+                    <button type="button" class="btn-live-assign-cancel" onclick="window.cancelLiveTimeAssignment()">✕ Abbrechen</button>
+                </div>
+            </div>
+
             <div class="zoom-controls">
                 <button class="btn-zoom" id="btnZoomIn">+</button>
                 <button class="btn-zoom" id="btnZoomReset">⟲</button>

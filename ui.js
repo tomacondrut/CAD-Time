@@ -1400,7 +1400,6 @@ window.handleLog = async function (e, nodeId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
-    const finalStatus = isAdmin ? 'approved' : 'pending';
 
     const { error } = await db.from('time_logs').insert([{
         project_id: activeProjectId,
@@ -1409,7 +1408,7 @@ window.handleLog = async function (e, nodeId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: finalStatus
+        status: 'pending'
     }]);
 
     if (error) {
@@ -1420,14 +1419,7 @@ window.handleLog = async function (e, nodeId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-
-    if (isAdmin) {
-        showToast(`${hours}h ${mins}m direkt verbucht`, 'success');
-    } else {
-        showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
-    }
-
-    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+    showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
 };
 
 window.handleRequestCompletion = async function (nodeId) {
@@ -1436,25 +1428,16 @@ window.handleRequestCompletion = async function (nodeId) {
         return;
     }
 
-    const confirmTitle = isAdmin ? 'Direkt als Erledigt markieren' : 'Fertigstellung melden';
-    const confirmMsg = isAdmin
-        ? 'Möchtest du diesen Block direkt als "Erledigt" (100%) markieren?'
-        : 'Möchtest du diesen Block als "Erledigt" zur Freigabe einreichen?';
-
-    const confirmed = await customConfirm(confirmTitle, confirmMsg);
-
+    const confirmed = await customConfirm('Fertigstellung melden', 'Möchtest du diesen Block als "Erledigt" zur Freigabe einreichen?');
     if (confirmed) {
-        const finalStatus = isAdmin ? 'approved' : 'pending';
-        const finalNodeStatus = isAdmin ? 'completed' : 'pending_approval';
-
         const { error } = await db.from('time_logs').insert([{
             project_id: activeProjectId,
             node_id: nodeId,
             user_code: activeUserCode,
             task_type: 'completion',
             hours: 0,
-            note: isAdmin ? 'Direkt als Erledigt markiert' : 'Fertigstellung beantragt',
-            status: finalStatus
+            note: 'Fertigstellung beantragt',
+            status: 'pending'
         }]);
 
         if (error) {
@@ -1462,23 +1445,9 @@ window.handleRequestCompletion = async function (nodeId) {
             return;
         }
 
-        const updatePayload = { completion_status: finalNodeStatus };
-        if (isAdmin) {
-            updatePayload.progress_design = 100;
-            updatePayload.progress_drafting = 100;
-        }
+        await db.from('project_nodes').update({ completion_status: 'pending_approval' }).eq('id', nodeId);
 
-        // Instanz-Synchronisation für Master/Referenzen
-        const targetNode = currentNodes.find(n => n.id === nodeId);
-        if (targetNode && targetNode.linked_id) {
-            const relatedNodes = currentNodes.filter(n => n.linked_id === targetNode.linked_id);
-            const updates = relatedNodes.map(rn => db.from('project_nodes').update(updatePayload).eq('id', rn.id));
-            await Promise.all(updates);
-        } else {
-            await db.from('project_nodes').update(updatePayload).eq('id', nodeId);
-        }
-
-        showToast(isAdmin ? 'Block als Erledigt markiert (100%)' : 'Fertigstellung zur Freigabe eingereicht', 'success');
+        showToast('Fertigstellung zur Freigabe eingereicht', 'success');
         fetchCanvasData();
     }
 };
@@ -2396,7 +2365,7 @@ window.toggleZoneLogs = function (e, zoneId) {
  *     und verständliche Fehlerbehandlung bei fehlender Schema-Spalte.
  * =============================================================================
  */
-window.handleZoneLog = async function (e, zoneId) {
+window.handleZoneLog = async function(e, zoneId) {
     e.preventDefault();
     const form = e.target;
     const taskType = form.elements[1].value;
@@ -2415,7 +2384,6 @@ window.handleZoneLog = async function (e, zoneId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
-    const finalStatus = isAdmin ? 'approved' : 'pending';
 
     const payload = {
         project_id: activeProjectId,
@@ -2423,7 +2391,7 @@ window.handleZoneLog = async function (e, zoneId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: finalStatus,
+        status: 'pending',
         zone_id: zoneId,
         node_id: null
     };
@@ -2443,13 +2411,7 @@ window.handleZoneLog = async function (e, zoneId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-
-    if (isAdmin) {
-        showToast(`${hours}h ${mins}m für Kasten direkt verbucht`, 'success');
-    } else {
-        showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
-    }
-
+    showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
@@ -3538,18 +3500,6 @@ function renderStructurePrintSheet(container, proj, showTimes) {
 *     wenn der Fokus in einem Textfeld oder auf einem Range-Slider liegt.
 * =============================================================================
 */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Globaler ESC-Key Modal & Dialog Closer)
- * ERSETZEN IN: ui.js (Am Ende der Datei)
- * Zeitstempel: 2026-09-18 08:00:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 20:20:00 CEST]: Capture-Phase Keydown-Listener für 'Escape'.
- *   - [2026-09-18 08:00:00 CEST]: Escape-Taste schließt nun auch geöffnete 
- *     Zonen-Logs und Block-Logs, sofern keine Modals offen sind.
- * =============================================================================
- */
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' || e.key === 'Esc') {
         // 1. Geöffneten Bestätigungs- / Prompt-Dialog abbrechen
@@ -3570,28 +3520,11 @@ window.addEventListener('keydown', (e) => {
         if (openModals.length > 0) {
             e.preventDefault();
             e.stopPropagation();
-            // Das oberste geöffnete Modal schließen
+            // Das oberste geöffnete Modal schließen (äquivalent zum Klick auf "Abbrechen")
             const topModal = openModals[openModals.length - 1];
             if (typeof closeModal === 'function') {
                 closeModal(topModal.id);
             }
-            return;
-        }
-
-        // 3. Zonen-Logs und Block-Logs einklappen, wenn keine Modals offen sind
-        let needsRender = false;
-        if (window.expandedZones && window.expandedZones.size > 0) {
-            window.expandedZones.clear();
-            needsRender = true;
-        }
-        if (window.expandedNodes && window.expandedNodes.size > 0) {
-            window.expandedNodes.clear();
-            needsRender = true;
-        }
-
-        if (needsRender) {
-            // Keine stopPropagation hier, da canvas.js den ESC parallel braucht (Linien abbrechen)
-            if (typeof renderCanvas === 'function') renderCanvas();
         }
     }
 }, true); // 'true' = Capture-Phase: feuert vor eventuellen Input-Blockaden
@@ -3795,82 +3728,13 @@ window.deleteManagerZone = async function (zoneId) {
 };
 
 // Automatisches Anordnen im Board
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
- * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
- * Zeitstempel: 2026-09-18 08:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 21:05:00 CEST]: Initiale Spalten-Sortierung nach Farbe & Name.
- *   - [2026-09-18 08:15:00 CEST]: Toggle-Logik implementiert: Legt vor dem
- *     Sortieren einen Snapshot (managerPreSortPlacements) an. Klickt man ein
- *     zweites Mal, springen alle Bauteile auf ihre ursprünglichen Koordinaten zurück.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
- * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
- * Zeitstempel: 2026-09-18 09:00:00 CEST
- * Breadcrumbs:
- *   - [2026-09-18 08:15:00 CEST]: Initiale Toggle-Logik mit Snapshot.
- *   - [2026-09-18 09:00:00 CEST]: BUGFIX: Deep-Clone für den Snapshot repariert.
- *     Sidebar wird nach dem Wiederherstellen ("Zurückspringen") explizit neu 
- *     gezeichnet, damit die Komponenten-Liste synchron bleibt.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Manager-Canvas Toggle-Sortierung mit Snapshot)
- * ERSETZEN IN: ui.js (Funktion autoArrangeManagerCanvas komplett ersetzen)
- * Zeitstempel: 2026-09-18 09:00:00 CEST
- * =============================================================================
- */
-
-window.managerPreSortPlacements = null;
-
 window.autoArrangeManagerCanvas = function () {
-    const btnSort = document.getElementById('btnAutoSortManager');
     const layout = getManagerLayout();
-
-    // 1. WIEDERHERSTELLEN (Zweiter Klick)
-    if (window.managerPreSortPlacements) {
-        layout.placements = JSON.parse(JSON.stringify(window.managerPreSortPlacements));
-        window.managerPreSortPlacements = null;
-
-        if (btnSort) {
-            btnSort.textContent = '🗂️ Nach Farbe & Name sortieren';
-            btnSort.title = 'Alle Bauteile automatisch nach Farbgruppen und Alphabet in Spalten anordnen';
-            btnSort.style.color = '';
-            btnSort.style.borderColor = '';
-        }
-
-        saveManagerLayout(layout);
-        showToast('Vorherige Anordnung wiederhergestellt', 'info');
-
-        renderCanvas();
-        if (typeof renderSidebarZones === 'function') renderSidebarZones();
-
-        if (typeof window.centerViewOnVisible === 'function') {
-            setTimeout(() => window.centerViewOnVisible(), 100);
-        }
-        return;
-    }
-
-    // 2. SORTIEREN & SNAPSHOT SICHERN (Erster Klick)
     const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
     if (nodes.length === 0) return;
 
-    window.managerPreSortPlacements = JSON.parse(JSON.stringify(layout.placements || {}));
-
     const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
     const groups = {};
-
     nodes.forEach(n => {
         const c = (n.color_hex || '#2b6cb0').toLowerCase();
         if (!groups[c]) groups[c] = [];
@@ -3897,22 +3761,10 @@ window.autoArrangeManagerCanvas = function () {
         startX += 320;
     });
 
-    if (btnSort) {
-        btnSort.textContent = '↺ Vorherige Anordnung';
-        btnSort.title = 'Klicken, um die Anordnung vor dem Sortieren wiederherzustellen';
-        btnSort.style.color = '#c53030';
-        btnSort.style.borderColor = '#feb2b2';
-    }
-
     saveManagerLayout(layout);
-    showToast('Bauteile nach Farbe & Name sortiert', 'success');
-
+    showToast('Bauteile nach Farbe & Name ausgerichtet', 'success');
     renderCanvas();
-    if (typeof renderSidebarZones === 'function') renderSidebarZones();
-
-    if (typeof window.centerViewOnVisible === 'function') {
-        setTimeout(() => window.centerViewOnVisible(), 100);
-    }
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
 };
 
 // Modal zur Block-Platzierung
@@ -4114,3 +3966,290 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 300);
 });
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Live-Zeiterfassung, Stoppuhr & Zuweisungs-Engine)
+* HINZUFÜGEN IN: ui.js (Am Ende der Datei)
+* Zeitstempel: 2026-09-26 09:35:00 CEST
+* Breadcrumbs:
+*   - [2026-09-26 09:35:00 CEST]: Live-Timer Engine mit Start/Pause/Stop/Zuweisen.
+*     Integriert optisches Aufleuchten (Blöcke vollflächig, Rahmen nur Header),
+*     Bestätigungsabfrage vor Zuweisung und automatische DB-Buchung via time_logs.
+* =============================================================================
+*/
+
+window.liveTimerState = {
+    isRunning: false,
+    isPaused: false,
+    startTime: 0,
+    accumulatedSeconds: 0,
+    intervalId: null
+};
+
+window.isAssigningLiveTime = false;
+
+// Formatierung Sekunden -> HH:MM:SS
+function formatSecondsToHMS(totalSec) {
+    const s = Math.max(0, Math.floor(totalSec));
+    const hours = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function updateLiveTimerUI() {
+    const display = document.getElementById('liveTimerDisplay');
+    const pulse = document.getElementById('liveTimerPulse');
+    const btnStart = document.getElementById('btnLiveTimerStart');
+    const btnPause = document.getElementById('btnLiveTimerPause');
+    const btnStop = document.getElementById('btnLiveTimerStop');
+    const controlsRow = document.getElementById('liveTimerControlsRow');
+    const reviewRow = document.getElementById('liveTimerReviewRow');
+    const assignHint = document.getElementById('liveTimerAssignHint');
+
+    if (!display) return;
+
+    let currentSec = window.liveTimerState.accumulatedSeconds;
+    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
+        currentSec += (Date.now() - window.liveTimerState.startTime) / 1000;
+    }
+
+    display.textContent = formatSecondsToHMS(currentSec);
+
+    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
+        pulse.className = 'live-timer-pulse running';
+        btnStart.style.display = 'none';
+        btnPause.style.display = 'inline-flex';
+        btnStop.style.display = 'inline-flex';
+        controlsRow.style.display = 'flex';
+        reviewRow.style.display = 'none';
+        assignHint.style.display = 'none';
+    } else if (window.liveTimerState.isPaused) {
+        pulse.className = 'live-timer-pulse paused';
+        btnStart.style.display = 'inline-flex';
+        btnStart.textContent = '▶ Weiter';
+        btnPause.style.display = 'none';
+        btnStop.style.display = 'inline-flex';
+        controlsRow.style.display = 'flex';
+        reviewRow.style.display = 'none';
+        assignHint.style.display = 'none';
+    } else if (window.isAssigningLiveTime) {
+        controlsRow.style.display = 'none';
+        reviewRow.style.display = 'none';
+        assignHint.style.display = 'flex';
+    } else if (window.liveTimerState.accumulatedSeconds > 0) {
+        // Gestoppt, wartet auf Zuweisung oder Verwerfen
+        pulse.className = 'live-timer-pulse';
+        controlsRow.style.display = 'none';
+        reviewRow.style.display = 'flex';
+        assignHint.style.display = 'none';
+
+        const decHours = Math.max(0.0167, parseFloat((window.liveTimerState.accumulatedSeconds / 3600).toFixed(4)));
+        const summaryText = typeof formatHoursToHM === 'function' ? formatHoursToHM(decHours) : `${Math.round(window.liveTimerState.accumulatedSeconds / 60)}m`;
+        document.getElementById('liveTimerReviewSummary').textContent = `${summaryText} erfasst (${formatSecondsToHMS(window.liveTimerState.accumulatedSeconds)})`;
+    } else {
+        // Idle
+        pulse.className = 'live-timer-pulse';
+        btnStart.style.display = 'inline-flex';
+        btnStart.textContent = '▶ Start';
+        btnPause.style.display = 'none';
+        btnStop.style.display = 'none';
+        controlsRow.style.display = 'flex';
+        reviewRow.style.display = 'none';
+        assignHint.style.display = 'none';
+    }
+}
+
+window.startLiveTimer = function () {
+    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) return;
+
+    window.liveTimerState.isRunning = true;
+    window.liveTimerState.isPaused = false;
+    window.liveTimerState.startTime = Date.now();
+
+    if (window.liveTimerState.intervalId) clearInterval(window.liveTimerState.intervalId);
+    window.liveTimerState.intervalId = setInterval(updateLiveTimerUI, 500);
+
+    updateLiveTimerUI();
+    showToast('Zeiterfassung gestartet', 'info');
+};
+
+window.pauseLiveTimer = function () {
+    if (!window.liveTimerState.isRunning || window.liveTimerState.isPaused) return;
+
+    window.liveTimerState.accumulatedSeconds += (Date.now() - window.liveTimerState.startTime) / 1000;
+    window.liveTimerState.isPaused = true;
+
+    if (window.liveTimerState.intervalId) {
+        clearInterval(window.liveTimerState.intervalId);
+        window.liveTimerState.intervalId = null;
+    }
+
+    updateLiveTimerUI();
+    showToast('Zeiterfassung pausiert', 'info');
+};
+
+window.resumeLiveTimer = function () {
+    window.startLiveTimer();
+};
+
+window.stopLiveTimer = function () {
+    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
+        window.liveTimerState.accumulatedSeconds += (Date.now() - window.liveTimerState.startTime) / 1000;
+    }
+
+    window.liveTimerState.isRunning = false;
+    window.liveTimerState.isPaused = false;
+
+    if (window.liveTimerState.intervalId) {
+        clearInterval(window.liveTimerState.intervalId);
+        window.liveTimerState.intervalId = null;
+    }
+
+    updateLiveTimerUI();
+};
+
+window.discardLiveTimer = async function () {
+    const confirmed = typeof customConfirm === 'function'
+        ? await customConfirm('Erfassung verwerfen', 'Möchtest du diese erfasste Zeit wirklich löschen?')
+        : confirm('Möchtest du diese erfasste Zeit wirklich löschen?');
+
+    if (confirmed) {
+        window.liveTimerState.accumulatedSeconds = 0;
+        window.liveTimerState.isRunning = false;
+        window.liveTimerState.isPaused = false;
+        const noteInput = document.getElementById('liveTimerNote');
+        if (noteInput) noteInput.value = '';
+        updateLiveTimerUI();
+        showToast('Zeiterfassung verworfen', 'info');
+    }
+};
+
+window.startLiveTimeAssignment = function () {
+    window.isAssigningLiveTime = true;
+    document.body.classList.add('assigning-live-time');
+    updateLiveTimerUI();
+    showToast('Klicke auf den gewünschten Block oder Rahmen-Header', 'info');
+};
+
+window.cancelLiveTimeAssignment = function () {
+    window.isAssigningLiveTime = false;
+    document.body.classList.remove('assigning-live-time');
+    updateLiveTimerUI();
+};
+
+// Globaler Klick-Interceptor im Zuweisungsmodus
+document.addEventListener('click', async (e) => {
+    if (!window.isAssigningLiveTime) return;
+
+    // Klicks innerhalb des Widgets oder von Dialogen ignorieren
+    if (e.target.closest('#liveTimerBar, .modal-backdrop, #dialogModal')) return;
+
+    const blockCard = e.target.closest('.assembly-card');
+    const zoneHeader = e.target.closest('.project-zone-header');
+
+    if (!blockCard && !zoneHeader) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
+    const taskTypeSelect = document.getElementById('liveTimerTaskType');
+    const noteInput = document.getElementById('liveTimerNote');
+    const taskType = taskTypeSelect ? taskTypeSelect.value : 'drafting';
+    const note = noteInput ? noteInput.value.trim() : '';
+
+    const totalSeconds = window.liveTimerState.accumulatedSeconds || 0;
+    // Mindestens 1 Minute bzw. 0.0167h buchen
+    const decimalHours = Math.max(0.0167, parseFloat((totalSeconds / 3600).toFixed(4)));
+
+    let targetId = null;
+    let targetZoneId = null;
+    let identifierLabel = '';
+
+    if (blockCard) {
+        targetId = blockCard.id;
+        const node = (currentNodes || []).find(n => n.id === targetId);
+        if (!node) return;
+
+        const docPart = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+        identifierLabel = docPart ? `${docPart} - ${node.name}` : node.name;
+    } else if (zoneHeader) {
+        const zoneEl = zoneHeader.closest('.project-zone');
+        if (!zoneEl) return;
+        targetZoneId = zoneEl.id;
+        const zone = (currentZones || []).find(z => z.id === targetZoneId);
+        if (!zone) return;
+
+        const docPart = zone.doc_number || (zone.article_number ? `ART-${zone.article_number}` : '');
+        identifierLabel = docPart ? `${docPart} - ${zone.title}` : zone.title;
+    }
+
+    const question = `Diesem Element "${identifierLabel}" zuweisen?`;
+    const confirmed = typeof customConfirm === 'function'
+        ? await customConfirm('Zeit zuweisen', question, 'Zuweisen', 'Abbrechen')
+        : confirm(question);
+
+    if (!confirmed) {
+        // Bleibt im Zuweisungsmodus, damit ein anderes Element geklickt werden kann
+        return;
+    }
+
+    // Buchung in Datenbank ausführen
+    const uCode = (typeof activeUserCode !== 'undefined' && activeUserCode) ? activeUserCode : 'COT';
+    const pId = typeof activeProjectId !== 'undefined' ? activeProjectId : null;
+    const finalStatus = (typeof isAdmin !== 'undefined' && isAdmin) ? 'approved' : 'pending';
+
+    const payload = {
+        project_id: pId,
+        node_id: targetId,
+        zone_id: targetZoneId,
+        user_code: uCode,
+        task_type: taskType,
+        hours: decimalHours,
+        note: note ? `[Live-Timer] ${note}` : '[Live-Timer]',
+        status: finalStatus,
+        logged_at: new Date().toISOString()
+    };
+
+    const { error } = await db.from('time_logs').insert([payload]);
+
+    if (error) {
+        showToast('Fehler beim Buchen: ' + error.message, 'error');
+        return;
+    }
+
+    // Erfolgreich verbucht
+    const timeFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(decimalHours) : `${decimalHours}h`;
+    showToast(`Zeit gebucht: ${timeFormatted} auf "${identifierLabel}"`, 'success');
+
+    // Reset des Timers
+    window.isAssigningLiveTime = false;
+    document.body.classList.remove('assigning-live-time');
+    window.liveTimerState.accumulatedSeconds = 0;
+    window.liveTimerState.isRunning = false;
+    window.liveTimerState.isPaused = false;
+    if (noteInput) noteInput.value = '';
+
+    updateLiveTimerUI();
+
+    // Canvas und Statistiken aktualisieren
+    if (typeof fetchCanvasData === 'function') {
+        fetchCanvasData();
+    } else {
+        if (typeof renderCanvas === 'function') renderCanvas();
+        if (typeof updateSidebarStats === 'function') updateSidebarStats();
+    }
+}, true); // Capture-Phase: fängt den Klick vor allen anderen Canvas-Karten ab
+
+// ESC-Handler zum Abbrechen des Zuweisungs-Modus
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window.isAssigningLiveTime) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.cancelLiveTimeAssignment();
+        showToast('Zuweisung abgebrochen (Zeit bleibt im Widget)', 'info');
+    }
+}, true);
