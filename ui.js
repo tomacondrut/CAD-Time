@@ -3827,6 +3827,16 @@ window.saveManagerLayout = async function (layout) {
  *     wodurch die Header der 260px hohen Karten vollständig lesbar bleiben.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager Filter: Nur in Rahmen & Entzerrte Sortier-Hilfe)
+ * ERSETZEN IN: ui.js (Bereich switchCanvasMode bis toggleManagerSortHelper)
+ * Zeitstempel: 2026-09-26 15:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 14:15:00 CEST]: Filter "Nur in Rahmen" und 290px Spalten-Abstand.
+ * =============================================================================
+ */
 window.managerFocusActive = false;
 window.managerFramedOnlyActive = localStorage.getItem('cad_tm_mgr_framed_only') === 'true';
 
@@ -3975,7 +3985,6 @@ window.toggleManagerSortHelper = function () {
         const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
         const placedIds = new Set(Object.keys(mgrLayout.placements || {}));
 
-        // Berücksichtigt optional den 'Nur in Rahmen'-Filter auch in der Sortier-Hilfe
         const nodes = (currentNodes || []).filter(n => {
             if (n.block_type === 'note' || !placedIds.has(n.id)) return false;
             if (window.managerFramedOnlyActive) {
@@ -4017,7 +4026,7 @@ window.toggleManagerSortHelper = function () {
             let startY = 80;
             groups[color].forEach(node => {
                 window.managerHelperVirtualPlacements[node.id] = { pos_x: startX, pos_y: startY };
-                startY += 290; // 260px Kartenhöhe + 30px freier Puffer verhindert Überdeckung der Header
+                startY += 290; // Entzerrter 290px-Schritt verhindert Header-Überlagerungen
             });
             startX += 320;
         });

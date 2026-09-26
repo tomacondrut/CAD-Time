@@ -684,6 +684,19 @@ function renderCanvas() {
                 return getMgrZoneDepth(a.id, mgrLayout.zones) - getMgrZoneDepth(b.id, mgrLayout.zones);
             });
 
+            /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Manager-Zonen: Vollständige Budget-Mathematik & Popovers)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> sortedMgrZones.forEach)
+ * Zeitstempel: 2026-09-26 15:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 14:40:00 CEST]: Info-Popovers ergänzt.
+ *   - [2026-09-26 15:10:00 CEST]: BUGFIX: ReferenceError (zoneSpentD / zoneProgress 
+ *     is not defined) behoben. Zonen-Budget- und Puffer-Mathematik wiederhergestellt 
+ *     und mit den Status-Popovers nahtlos verknüpft.
+ * =============================================================================
+ */
             sortedMgrZones.forEach(zone => {
                 const depth = getMgrZoneDepth(zone.id, mgrLayout.zones);
                 const isLocked = !!zone.is_locked;
@@ -711,33 +724,39 @@ function renderCanvas() {
                     }
                 });
 
+                // 1. FORTSCHRITT & STATUS-LISTEN BERECHNEN
                 let totalWeightedScore = 0;
                 let totalWeights = 0;
-
-                // Listen zur Erfassung betroffener Blöcke für die Info-Popovers
-
                 const listDone = [];
                 const listWarning = [];
                 const listReady2D = [];
 
                 containedBlocks.forEach(bn => {
-                    const mObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
-                    const isDone = (mObj.completion_status === 'completed') || (bn.completion_status === 'completed');
-                    const pD = isDone ? 100 : ((mObj.progress_design !== null && mObj.progress_design !== undefined) ? mObj.progress_design : 0);
-                    const pDr = isDone ? 100 : ((mObj.progress_drafting !== null && mObj.progress_drafting !== undefined) ? mObj.progress_drafting : 0);
-                    const bTotProg = (pD * 0.5) + (pDr * 0.5);
+                    const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
+                    const isDone = (masterObj.completion_status === 'completed') || (bn.completion_status === 'completed');
+                    const pD = isDone ? 100 : ((masterObj.progress_design !== null && masterObj.progress_design !== undefined) ? masterObj.progress_design : 0);
+                    const pDr = isDone ? 100 : ((masterObj.progress_drafting !== null && masterObj.progress_drafting !== undefined) ? masterObj.progress_drafting : 0);
+                    const bTotalProg = (pD * 0.5) + (pDr * 0.5);
 
-                    const rIds = mObj.linked_id ? currentNodes.filter(x => x.linked_id === mObj.linked_id).map(x => x.id) : [mObj.id];
+                    const bD = parseFloat(masterObj.budget_design_hours) || 0;
+                    const bDr = parseFloat(masterObj.budget_drafting_hours) || 0;
+                    const bWeight = (bD + bDr) || 1;
+
+                    totalWeightedScore += (bTotalProg * bWeight);
+                    totalWeights += bWeight;
+
+                    // Ist-Stunden für Warnungen ermitteln
+                    const rIds = masterObj.linked_id ? currentNodes.filter(x => x.linked_id === masterObj.linked_id).map(x => x.id) : [masterObj.id];
                     let bSpent = 0;
                     (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => rIds.includes(l.node_id)).forEach(l => {
                         bSpent += parseFloat(l.hours) || 0;
                     });
-                    const bBud = (parseFloat(mObj.budget_design_hours) || 0) + (parseFloat(mObj.budget_drafting_hours) || 0);
+                    const bBud = bD + bDr;
 
-                    const docStr = mObj.doc_number || (mObj.article_number ? `ART-${mObj.article_number}` : '');
-                    const blockDisplayName = docStr ? `[${docStr}] ${mObj.name}` : mObj.name;
+                    const docStr = masterObj.doc_number || (masterObj.article_number ? `ART-${masterObj.article_number}` : '');
+                    const blockDisplayName = docStr ? `[${docStr}] ${masterObj.name}` : masterObj.name;
 
-                    if (isDone || bTotProg === 100) {
+                    if (isDone || bTotalProg === 100) {
                         listDone.push({ id: bn.id, name: blockDisplayName, meta: '100%' });
                         if (bBud > 0 && bSpent > bBud) {
                             const over = bSpent - bBud;
@@ -750,15 +769,51 @@ function renderCanvas() {
                         if (bBud > 0 && bSpent > bBud) {
                             const over = bSpent - bBud;
                             listWarning.push({ id: bn.id, name: blockDisplayName, meta: `-${typeof formatHoursToHM === 'function' ? formatHoursToHM(over) : over.toFixed(1) + 'h'}` });
-                        } else if (bBud > 0 && (bSpent / bBud) > ((bTotProg + 25) / 100)) {
-                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `Verzug (${bTotProg}%)` });
-                        } else if (bTotProg === 0 && bSpent >= 1) {
+                        } else if (bBud > 0 && (bSpent / bBud) > ((bTotalProg + 25) / 100)) {
+                            listWarning.push({ id: bn.id, name: blockDisplayName, meta: `Verzug (${bTotalProg}%)` });
+                        } else if (bTotalProg === 0 && bSpent >= 1) {
                             listWarning.push({ id: bn.id, name: blockDisplayName, meta: `${typeof formatHoursToHM === 'function' ? formatHoursToHM(bSpent) : bSpent + 'h'} (0%)` });
                         }
                     }
                 });
 
-                // HTML-Generierung der Infoboxen
+                const zoneProgress = totalWeights > 0 ? Math.round(totalWeightedScore / totalWeights) : 0;
+                const barColor = zoneProgress === 100 ? '#38a169' : (zoneProgress > 50 ? '#3182ce' : '#dd6b20');
+
+                // 2. DEDUPLIZIERTE BUDGET- & PUFFER-BERECHNUNG
+                let zoneBudD = 0, zoneBudDr = 0, zoneSpentD = 0, zoneSpentDr = 0;
+                const countedBudgetKeys = new Set();
+
+                containedBlocks.forEach(bn => {
+                    const masterObj = bn.linked_id ? (currentNodes.find(x => x.linked_id === bn.linked_id) || bn) : bn;
+                    const uniqueKey = masterObj.linked_id || masterObj.id;
+
+                    if (!countedBudgetKeys.has(uniqueKey)) {
+                        countedBudgetKeys.add(uniqueKey);
+                        zoneBudD += parseFloat(masterObj.budget_design_hours) || 0;
+                        zoneBudDr += parseFloat(masterObj.budget_drafting_hours) || 0;
+
+                        const relatedIds = masterObj.linked_id
+                            ? currentNodes.filter(x => x.linked_id === masterObj.linked_id).map(x => x.id)
+                            : [masterObj.id];
+
+                        (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => relatedIds.includes(l.node_id)).forEach(l => {
+                            if (l.task_type === 'design') zoneSpentD += parseFloat(l.hours) || 0;
+                            if (l.task_type === 'drafting') zoneSpentDr += parseFloat(l.hours) || 0;
+                        });
+                    }
+                });
+
+                const zoneTotBud = zoneBudD + zoneBudDr;
+                const zoneTotSpent = zoneSpentD + zoneSpentDr;
+                const zonePufferExact = zoneTotBud - zoneTotSpent;
+                const hasZoneOverhang = zonePufferExact < -0.01;
+                const pufferColor = hasZoneOverhang ? '#e53e3e' : '#38a169';
+                const pufferText = hasZoneOverhang
+                    ? `Überhang: -${typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.abs(zonePufferExact)) : Math.abs(zonePufferExact).toFixed(1) + 'h'}`
+                    : `Puffer: +${typeof formatHoursToHM === 'function' ? formatHoursToHM(zonePufferExact) : zonePufferExact.toFixed(1) + 'h'}`;
+
+                // 3. POPOVER-HTML BAUEN
                 const buildPopoverListHtml = (items) => {
                     if (!items || items.length === 0) {
                         return '<div style="font-size:10px; color:#a0aec0; font-style:italic; padding:2px 0;">Keine Baugruppen in dieser Kategorie.</div>';
