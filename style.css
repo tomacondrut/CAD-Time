@@ -2612,3 +2612,21 @@ body.assigning-live-time {
     display: inline-block;
     width: 12px;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Native Drag-Ghost Image Unterdrückung)
+ * EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-26 13:40:00 CEST
+ * =============================================================================
+ */
+#canvas,
+#canvas *,
+.assembly-card,
+.project-zone,
+.note-card,
+#connections-layer {
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+}

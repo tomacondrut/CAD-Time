@@ -1626,6 +1626,71 @@ function setupRetroLogUserSelect() {
     }
 }
 
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Universeller Zonen-Lock für CAD & Manager-Modus)
+ * ERSETZEN / EINFÜGEN IN: ui.js
+ * Zeitstempel: 2026-09-26 13:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 21:55:00 CEST]: toggleManagerZoneLock Basis.
+ *   - [2026-09-26 13:40:00 CEST]: BUGFIX: Fehlende Funktion window.toggleZoneLock 
+ *     ergänzt (behob ReferenceError im CAD-Modus), DB-Sync für project_zones 
+ *     und Synchronisation mit der Sidebar integriert.
+ * =============================================================================
+ */
+window.toggleZoneLock = async function (e, zoneId) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    // Wenn im Manager-Modus: an Manager-Layout übergeben
+    if (window.activeCanvasMode === 'manager') {
+        window.toggleManagerZoneLock(e, zoneId);
+        return;
+    }
+
+    // CAD-Modus
+    const zone = (currentZones || []).find(z => z.id === zoneId);
+    if (!zone) return;
+
+    zone.is_locked = !zone.is_locked;
+    showToast(`Rahmen "${zone.title}" ${zone.is_locked ? 'gesperrt (Durchklicken zum Pan aktiv)' : 'entsperrt'}`, 'info');
+
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        try {
+            await db.from('project_zones').update({ is_locked: zone.is_locked }).eq('id', zoneId);
+        } catch (err) {
+            console.error("Fehler beim Speichern des Zonen-Lock-Status:", err);
+        }
+    }
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
+};
+
+window.toggleManagerZoneLock = function (e, zoneId) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const layout = getManagerLayout();
+    const zone = (layout.zones || []).find(z => z.id === zoneId);
+    if (!zone) return;
+
+    zone.is_locked = !zone.is_locked;
+    saveManagerLayout(layout);
+    showToast(`Rahmen ${zone.is_locked ? 'gesperrt (Durchklicken zum Pan aktiv)' : 'entsperrt'}`, 'info');
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof renderSidebarZones === 'function') renderSidebarZones();
+};
+
 // Öffnet Retro-Log für normale Baugruppen / Blöcke
 window.openRetroLogModal = function () {
     const id = document.getElementById('editNodeId').value;

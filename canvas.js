@@ -111,9 +111,32 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     Scroll-Filter auf echte Tabellen (.inline-logs-container, .log-table, .zone-body) reduziert.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan-Filter & Ghost-Image Prevention)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
+ * Zeitstempel: 2026-09-26 13:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 23:15:00 CEST]: Multiplikativer Zoom.
+ *   - [2026-09-26 13:40:00 CEST]: BUGFIX: 1. Natives dragstart auf Canvas unterbunden
+ *     (verhindert, dass der Canvas als transparentes Bild verschoben wird).
+ *     2. .project-zone in isInteractive aufgenommen (ungesperrte Rahmen starten 
+ *     kein Canvas-Panning mehr; gesperrte Rahmen lassen Pan gezielt durch).
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
+    const canvas = document.getElementById('canvas');
     if (!viewport) return;
+
+    // Verhindert das native Browser-Ghost-Image (HTML5-Drag) auf dem gesamten Canvas
+    if (canvas) {
+        canvas.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            return false;
+        });
+    }
 
     let isPanning = false;
     let startX = 0, startY = 0;
@@ -134,10 +157,20 @@ function initNativeCanvasEngine() {
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+        // Prüft, ob ein interaktives Canvas-Element angeklickt wurde
+        const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
-        if (isInteractive) {
-            if (e.button === 0 && !e.altKey) return;
+        if (interactiveEl) {
+            // Ausnahmeregelung: Wenn ein Kasten GESPERRT ist und nicht auf einen Button geklickt wurde,
+            // soll der Klick durchgehen und das Canvas-Panning erlauben.
+            const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
+            const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
+
+            if (isLockedZone && !isButtonOrAction) {
+                // Klick auf gesperrten Rahmen -> Pan starten
+            } else {
+                if (e.button === 0 && !e.altKey) return;
+            }
         }
 
         if (e.button === 0 || e.button === 1 || e.button === 2) {
@@ -151,8 +184,12 @@ function initNativeCanvasEngine() {
     viewport.addEventListener('touchstart', (e) => {
         if (window.isDraggingAnything) return;
 
-        const isInteractive = e.target.closest('.assembly-card, .project-zone-header, .zone-body, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
-        if (isInteractive) return;
+        const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
+        if (interactiveEl) {
+            const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
+            const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
+            if (!isLockedZone || isButtonOrAction) return;
+        }
 
         if (e.touches.length === 1) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
@@ -193,11 +230,9 @@ function initNativeCanvasEngine() {
     window.addEventListener('touchcancel', stopPan);
 
     // ---------------------------------------------------------
-    // ZOOMING (Multiplikativ & Maus-zentriert)
+    // ZOOMING
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        // BUGFIX: Normales Scrollen NUR noch in echten Scroll-Containern zulassen!
-        // .assembly-body und .note-card entfernt, damit der Zoom greift.
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
             return;
         }
@@ -788,9 +823,10 @@ function renderCanvas() {
                 const startMgrZoneDrag = (e) => {
                     if (e.target.closest('.zone-actions, button, input, select')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
+                    if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
                     if (e.cancelable) e.stopPropagation();
-
                     window.isDraggingAnything = true;
+
                     isDragging = true;
                     startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                     startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
@@ -1187,7 +1223,8 @@ function renderCanvas() {
                 const startZoneDrag = (e) => {
                     if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
-
+                    if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
+                    if (e.cancelable) e.stopPropagation();
                     window.isDraggingAnything = true;
                     isDragging = true;
                     const scale = window.currentScale || 1;
@@ -2212,8 +2249,10 @@ function renderCanvas() {
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
                 if (e.type === 'touchstart' && e.touches.length > 1) return;
-
+                if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
+                if (e.cancelable) e.stopPropagation();
                 window.isDraggingAnything = true;
+
                 isDragging = true;
                 startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
                 startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
