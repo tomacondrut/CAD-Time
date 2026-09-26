@@ -2488,8 +2488,19 @@ function renderConnections(mouseCoords = null) {
 // =============================================================================
 // KAMERA-FOKUS & CANVAS-GRENZEN
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Sichtbarkeits-Filter & Fokus für Manager-Rahmen)
+ * ERSETZEN IN: canvas.js (In centerViewOnVisible & am Dateiende)
+ * Zeitstempel: 2026-09-26 11:45:00 CEST
+ * =============================================================================
+ */
+
+// In window.centerViewOnVisible() den Manager-Modus Zweig aktualisieren:
 window.centerViewOnVisible = function (targetZoneId = null) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+    if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     let hasElements = false;
@@ -2504,12 +2515,17 @@ window.centerViewOnVisible = function (targetZoneId = null) {
 
     if (window.activeCanvasMode === 'manager') {
         const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
-        (mgrLayout.zones || []).forEach(z => {
+        const isHiddenFn = (typeof window.isMgrZoneHidden === 'function') ? window.isMgrZoneHidden : () => false;
+
+        (mgrLayout.zones || []).filter(z => !isHiddenFn(z.id, mgrLayout.zones)).forEach(z => {
             updateBounds(parseFloat(z.pos_x) || 0, parseFloat(z.pos_y) || 0, parseFloat(z.width) || 620, parseFloat(z.height) || 440);
         });
+
         Object.keys(mgrLayout.placements || {}).forEach(nId => {
             const p = mgrLayout.placements[nId];
-            if (p) updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
+            if (p && !(p.zone_id && isHiddenFn(p.zone_id, mgrLayout.zones))) {
+                updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
+            }
         });
     } else {
         if (targetZoneId) {
@@ -2562,7 +2578,6 @@ window.centerViewOnVisible = function (targetZoneId = null) {
 
     applyCanvasTransform(false);
 };
-
 window.adjustCanvasBounds = function () {
     let maxX = 0, maxY = 0;
 
@@ -2852,6 +2867,7 @@ window.handlePasteNodes = async function () {
 * Zeitstempel: 2026-09-26 10:45:00 CEST
 * =============================================================================
 */
+
 window.centerOnManagerZone = function (zoneId) {
     const layout = (typeof getManagerLayout === 'function') ? getManagerLayout() : null;
     if (!layout || !Array.isArray(layout.zones)) return;
@@ -2867,7 +2883,6 @@ window.centerOnManagerZone = function (zoneId) {
     const zW = parseFloat(zone.width) || 620;
     const zH = parseFloat(zone.height) || 440;
 
-    // Zoomfaktor berechnen, um den Rahmen mit Puffer einzupassen
     const padding = 80;
     const targetScale = Math.max(0.2, Math.min(1.5, Math.min((vw - padding * 2) / zW, (vh - padding * 2) / zH)));
 

@@ -396,15 +396,6 @@
                     <input type="hidden" id="editZoneColor" />
                 </div>
 
-                <!-- Button für Baugruppen-Farbkategorien -->
-                <div style="margin-bottom: 6px; border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong style="font-size: 12px; color: var(--primary);">Baugruppen & Farbkategorien</strong>
-                        <div style="font-size: 10px; color: #718096;">Farbzuordnung für Fördertechnik (Knicke, Bandelemente, Schurren etc.)</div>
-                    </div>
-                    <button type="button" class="btn-prim" style="padding: 4px 10px; font-size: 11px;" onclick="openColorCategoryModal()">🎨 Kategorien verwalten</button>
-                </div>
-
                 <!--
                 =============================================================================
                 Projekt: CAD Time Manager
@@ -976,6 +967,15 @@
                 <button type="button" class="btn-prim" style="padding: 4px 8px; font-size: 11px;" onclick="handleAddUserCode()">+ Kürzel anlegen</button>
             </div>
             <div id="userListContainer" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 60px; overflow-y: auto;"></div>
+
+            <!-- EINFÜGEN IN: index.html (Im #adminModal vor .modal-actions) -->
+            <div style="margin-bottom: 8px; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="font-size: 12px; color: var(--primary);">Baugruppen & Farbkategorien</strong>
+                    <div style="font-size: 10px; color: #718096;">Farben für Fördertechnik definieren (Knicke, Schurren, Bandelemente etc.)</div>
+                </div>
+                <button type="button" class="btn-prim" style="padding: 4px 10px; font-size: 11px;" onclick="openColorCategoryModal()">🎨 Kategorien verwalten</button>
+            </div>
 
             <div class="modal-actions" style="margin-top: 14px;">
                 <button type="button" class="btn-sec" onclick="closeModal('adminModal')">Schließen</button>

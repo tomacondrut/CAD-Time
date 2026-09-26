@@ -506,6 +506,18 @@ window.renderArchivedProjectsList = function () {
  *     und greifen dynamisch auf window.COLOR_PRESETS zu.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Farbkategorie-Hover ohne Hex-Code)
+ * ERSETZEN IN: ui.js (Funktionen renderColorPresets & renderZoneColorPresets)
+ * Zeitstempel: 2026-09-26 11:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 10:45:00 CEST]: Baugruppen-Presets.
+ *   - [2026-09-26 11:25:00 CEST]: Hex-Farbcode aus swatch.title entfernt. 
+ *     Zeigt beim Hovern nun rein die Baugruppen-Bezeichnung.
+ * =============================================================================
+ */
 window.renderColorPresets = function () {
     const container = document.getElementById('colorPresetsContainer');
     if (!container) return;
@@ -514,7 +526,7 @@ window.renderColorPresets = function () {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = `${p.name} (${p.hex})`;
+        swatch.title = p.name; // Rein die Bezeichnung anzeigen
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#colorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -533,7 +545,7 @@ window.renderZoneColorPresets = function () {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = `${p.name} (${p.hex})`;
+        swatch.title = p.name; // Rein die Bezeichnung anzeigen
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#zoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -1324,10 +1336,11 @@ window.openEditZoneModal = function (zoneId) {
     const cCont = document.getElementById('editZoneColorPresetsContainer');
     if (cCont) {
         cCont.innerHTML = '';
-        COLOR_PRESETS.forEach(p => {
+        (window.COLOR_PRESETS || []).forEach(p => {
             const s = document.createElement('div');
             s.className = 'color-swatch';
             s.style.backgroundColor = p.hex;
+            s.title = p.name; // Rein die Bezeichnung anzeigen
             if (p.hex.toLowerCase() === (zone.color_hex || '#a0aec0').toLowerCase()) s.classList.add('selected');
             s.addEventListener('click', () => {
                 document.querySelectorAll('#editZoneColorPresetsContainer .color-swatch').forEach(x => x.classList.remove('selected'));
