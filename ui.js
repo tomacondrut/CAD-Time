@@ -518,6 +518,15 @@ window.renderArchivedProjectsList = function () {
  *     Zeigt beim Hovern nun rein die Baugruppen-Bezeichnung.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Farb-Swatches ohne Farbcode im Hover)
+ * ERSETZEN IN: ui.js (Funktionen renderColorPresets & renderZoneColorPresets)
+ * Zeitstempel: 2026-09-26 12:15:00 CEST
+ * Breadcrumb: [2026-09-26] swatch.title zeigt strikt nur den Baugruppennamen.
+ * =============================================================================
+ */
 window.renderColorPresets = function () {
     const container = document.getElementById('colorPresetsContainer');
     if (!container) return;
@@ -526,7 +535,7 @@ window.renderColorPresets = function () {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = p.name; // Rein die Bezeichnung anzeigen
+        swatch.title = p.name; // Zeigt nur den Namen der Baugruppe (ohne Hex-Code)
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#colorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -545,7 +554,7 @@ window.renderZoneColorPresets = function () {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = p.name; // Rein die Bezeichnung anzeigen
+        swatch.title = p.name; // Zeigt nur den Namen der Baugruppe (ohne Hex-Code)
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#zoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -3678,6 +3687,16 @@ window.managerFocusActive = false;
 window.switchCanvasMode = function (mode) {
     const prevMode = window.activeCanvasMode || 'main';
 
+    // Sortier-Hilfsansicht beim Modus-Wechsel zurücksetzen
+    window.isManagerSortHelperActive = false;
+    window.managerHelperVirtualPlacements = null;
+    window.managerHelperPlacements = null; // Alias zur 100%igen Kompatibilität mit canvas.js
+    const btnSortReset = document.getElementById('btnAutoSortManager');
+    if (btnSortReset) {
+        btnSortReset.classList.remove('active');
+        btnSortReset.textContent = '🗂️ Sortier-Hilfe';
+    }
+
     // 1. Kameraposition des vorherigen Modus sichern
     localStorage.setItem(`cad_tm_panX_${prevMode}`, window.currentPanX);
     localStorage.setItem(`cad_tm_panY_${prevMode}`, window.currentPanY);
@@ -3791,45 +3810,93 @@ window.deleteManagerZone = async function (zoneId) {
     }
 };
 
-// Automatisches Anordnen im Board
-window.autoArrangeManagerCanvas = function () {
-    const layout = getManagerLayout();
-    const nodes = (currentNodes || []).filter(n => n.block_type !== 'note');
-    if (nodes.length === 0) return;
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Zerstörungsfreie Sortier-Hilfsansicht im Manager-Board)
+ * EINFÜGEN IN: ui.js (Direkt nach window.deleteManagerZone)
+ * Zeitstempel: 2026-09-26 12:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 12:45:00 CEST]: Reine temporäre Hilfsansicht (Toggle).
+ *     Niemals saveManagerLayout() ausführen! Datenbank-Positionen bleiben unberührt.
+ * =============================================================================
+ */
+window.isManagerSortHelperActive = false;
+window.managerHelperVirtualPlacements = null;
 
-    const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
-    const groups = {};
-    nodes.forEach(n => {
-        const c = (n.color_hex || '#2b6cb0').toLowerCase();
-        if (!groups[c]) groups[c] = [];
-        groups[c].push(n);
-    });
+window.toggleManagerSortHelper = function () {
+    const btn = document.getElementById('btnAutoSortManager');
+    window.isManagerSortHelperActive = !window.isManagerSortHelperActive;
 
-    Object.keys(groups).forEach(c => {
-        groups[c].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    });
+    if (window.isManagerSortHelperActive) {
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { placements: {} };
+        const placedIds = new Set(Object.keys(mgrLayout.placements || {}));
 
-    const sortedColors = Object.keys(groups).sort((a, b) => {
-        const idxA = colorOrder.indexOf(a);
-        const idxB = colorOrder.indexOf(b);
-        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-    });
+        // Nur Blöcke sortieren, die aktuell auf dem Board platziert sind
+        const nodes = (currentNodes || []).filter(n => n.block_type !== 'note' && placedIds.has(n.id));
+        if (nodes.length === 0) {
+            window.isManagerSortHelperActive = false;
+            showToast('Keine platzierten Blöcke zum Sortieren vorhanden', 'info');
+            return;
+        }
 
-    let startX = 60;
-    sortedColors.forEach(color => {
-        let startY = 80;
-        groups[color].forEach(node => {
-            layout.placements[node.id] = { pos_x: startX, pos_y: startY, zone_id: null };
-            startY += 180;
+        const colorOrder = (window.COLOR_PRESETS || []).map(c => c.hex.toLowerCase());
+        const groups = {};
+        nodes.forEach(n => {
+            const c = (n.color_hex || '#2b6cb0').toLowerCase();
+            if (!groups[c]) groups[c] = [];
+            groups[c].push(n);
         });
-        startX += 320;
-    });
 
-    saveManagerLayout(layout);
-    showToast('Bauteile nach Farbe & Name ausgerichtet', 'success');
-    renderCanvas();
-    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 100);
+        Object.keys(groups).forEach(c => {
+            groups[c].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        });
+
+        const sortedColors = Object.keys(groups).sort((a, b) => {
+            const idxA = colorOrder.indexOf(a);
+            const idxB = colorOrder.indexOf(b);
+            return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+        });
+
+
+        // Rein temporäres Objekt im RAM – KEIN Speichern in DB!
+        window.managerHelperVirtualPlacements = {};
+        window.managerHelperPlacements = window.managerHelperVirtualPlacements; // Synchron halten
+        let startX = 60;
+        sortedColors.forEach(color => {
+            let startY = 80;
+            groups[color].forEach(node => {
+                window.managerHelperVirtualPlacements[node.id] = { pos_x: startX, pos_y: startY };
+                startY += 180;
+            });
+            startX += 320;
+        });
+
+        if (btn) {
+            btn.classList.add('active');
+            btn.textContent = '↩ Gespeicherte Ansicht';
+            btn.title = 'Zurück zu deinen gespeicherten Rahmen- und Blockpositionen';
+        }
+        showToast('Hilfsansicht aktiv (Originalpositionen bleiben unverändert)', 'info');
+    } else {
+        window.managerHelperVirtualPlacements = null;
+        window.managerHelperPlacements = null;
+        if (btn) {
+            btn.classList.remove('active');
+            btn.textContent = '🗂️ Sortier-Hilfe';
+            btn.title = 'Temporäre Übersicht nach Baugruppen-Farben';
+        }
+        showToast('Gespeicherte Rahmen-Anordnung wiederhergestellt', 'info');
+    }
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 60);
 };
+
+// Alias für eventuelle Altaufrufe
+window.autoArrangeManagerCanvas = window.toggleManagerSortHelper;
+
+
 
 // Modal zur Block-Platzierung
 let pendingMgrPlaceCoords = { x: 100, y: 100 };

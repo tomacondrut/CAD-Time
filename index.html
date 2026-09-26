@@ -718,8 +718,8 @@
                     <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 Konstruktionsplan</button>
                     <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Status-Board</button>
                 </div>
-                <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="autoArrangeManagerCanvas()" title="Bauteile nach Farben und Namen in Spalten ausrichten">🗂️ Sortieren</button>
-                <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und anstehende 2D-Übergaben filtern">⚠️ Nur Kritische</button>
+                <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerSortHelper()" title="Temporäre Hilfsansicht (Überschreibt keine gespeicherten Positionen)">🗂️ Sortier-Hilfe</button>
+                <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und 2D-Übergaben filtern">⚠️ Nur Kritische</button>
             </div>
 
             <!--

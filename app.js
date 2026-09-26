@@ -2,15 +2,13 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Haupt-Bootstrap, Sidebar Zonen-Rendering & Visibility Engine
- * ERSETZEN IN: app.js (Gesamte Datei)
- * Zeitstempel: 2026-08-30 22:30:00 CEST
+ * ERSETZEN IN: app.js (Gesamte Datei komplett ersetzen)
+ * Zeitstempel: 2026-09-26 12:15:00 CEST
  * Breadcrumbs:
- *   - [2026-08-23 15:00:00 CEST]: Initialer Start & Realtime-Sync.
- *   - [2026-08-26 20:25:00 CEST]: Auto-Login & Session-Restore aus localStorage.
- *   - [2026-08-28 23:35:00 CEST]: DocumentFragment-Fix gegen Flackern.
- *   - [2026-08-29 20:20:00 CEST]: Notizen-Ausblendung mit !important geschützt.
- *   - [2026-08-30 22:05:00 CEST]: Flächen-Fallback entfernt, strikte sort_order.
- *   - [2026-08-30 22:15:00 CEST]: canReorderZones Berechtigung für Admins und lokale Projekte.
+ *   - [2026-08-30 22:30:00 CEST]: Basis-Bootstrap & Realtime-Sync.
+ *   - [2026-09-26 11:45:00 CEST]: Manager-Board Zonen-Hierarchie & Pool-Akkordeon.
+ *   - [2026-09-26 12:15:00 CEST]: BUGFIX: SyntaxError durch doppelte/verschachtelte 
+ *     renderSidebarZones-Deklaration bereinigt. Alle Funktionen liegen im sauberen Scope.
  * =============================================================================
  */
 
@@ -49,11 +47,10 @@ function initApp() {
     addListenerIfEx('btnDeleteBlock', 'click', handleDeleteNode);
     addListenerIfEx('retroLogForm', 'submit', handleSaveRetroLog);
     addListenerIfEx('adminProjectForm', 'submit', handleSaveProject);
-    // Notiz Formulare:
     addListenerIfEx('newNoteForm', 'submit', handleAddNote);
     addListenerIfEx('editNoteForm', 'submit', handleSaveNote);
 
-    // Auto-Login Vorab-Prüfung: Overlay direkt verstecken, wenn Daten vorhanden
+    // Auto-Login Vorab-Prüfung
     const cachedUser = localStorage.getItem('cad_tm_user');
     const cachedProject = localStorage.getItem('cad_tm_project');
 
@@ -62,7 +59,7 @@ function initApp() {
         if (overlay) overlay.style.display = 'none';
     }
 
-    // Initialer Datenabruf mit anschließendem Dropdown-Update & Auto-Login
+    // Initialer Datenabruf
     if (typeof fetchUsers === 'function' && typeof fetchProjects === 'function') {
         Promise.all([fetchUsers(), fetchProjects()]).then(() => {
             if (typeof renderUserDropdowns === 'function') renderUserDropdowns();
@@ -91,9 +88,7 @@ function initApp() {
     }
 }
 
-// =============================================================================
-// SICHERER START-MECHANISMUS
-// =============================================================================
+// Start-Mechanismus
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', initApp);
 } else {
@@ -101,11 +96,14 @@ if (document.readyState === 'loading') {
 }
 
 // =============================================================================
-// SIDEBAR ZONEN-RENDERING & HIERARCHISCHE ISOLATION
+// SIDEBAR ZONEN-RENDERING & HIERARCHISCHE ISOLATION (CAD & MANAGER)
 // =============================================================================
 if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
 if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
+if (!window.collapsedMgrZoneIds) window.collapsedMgrZoneIds = new Set();
+if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
 
+// Toggle CAD-Konstruktionsplan
 window.toggleSidebarZoneCollapse = function (e, zoneId) {
     if (e) e.stopPropagation();
     if (window.collapsedZoneIds.has(zoneId)) {
@@ -116,113 +114,188 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
     if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering (Flache 1-Ebenen-Hierarchie)
- * ERSETZEN IN: app.js (Funktion renderSidebarZones)
- * Zeitstempel: 2026-08-31 17:45:00 CEST
- * Breadcrumbs:
- *   - [2026-08-31 17:35:00 CEST]: Hierarchie-Rekursion.
- *   - [2026-08-31 17:45:00 CEST]: Begrenzung der Sidebar-Struktur auf strikt 
- *     eine Unterebene (Hauptrahmen -> direkte Kindrahmen).
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering (Reihenfolge-Persistierung Fix)
- * ERSETZEN IN: app.js (Funktion renderSidebarZones)
- * Zeitstempel: 2026-09-01 17:40:00 CEST
- * Breadcrumbs:
- *   - [2026-08-31 17:45:00 CEST]: 1-Ebenen-Hierarchie.
- *   - [2026-09-01 17:40:00 CEST]: saveDatabaseZoneOrder auf live DOM-Container 
- *     umgestellt, um leere DocumentFragment-Referenzen beim Drag & Drop zu beheben.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Rendering (Dual-Mode: CAD-Zonen vs. Manager-Komponenten-Pool)
- * ERSETZEN IN: app.js (In renderSidebarZones Kopfbereich)
- * Zeitstempel: 2026-09-17 21:40:00 CEST
- * Breadcrumbs:
- *   - [2026-09-01 17:40:00 CEST]: Zonen-Reihenfolge Persistierung.
- *   - [2026-09-17 21:40:00 CEST]: Im Manager-Modus schaltet die Sidebar auf den
- *     Komponenten-Pool um (Sortierung nach Farbe & Name, Klick/Drag zum Platzieren).
- * =============================================================================
- */
+// Toggle Manager-Board (Übersichts-Rahmen aufklappen / zuklappen)
+window.toggleSidebarMgrZoneCollapse = function (e, zoneId) {
+    if (e) e.stopPropagation();
+    if (!window.collapsedMgrZoneIds) window.collapsedMgrZoneIds = new Set();
+    if (window.collapsedMgrZoneIds.has(zoneId)) {
+        window.collapsedMgrZoneIds.delete(zoneId);
+    } else {
+        window.collapsedMgrZoneIds.add(zoneId);
+    }
+    if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
+};
+
+// Prüft, ob ein Manager-Rahmen (oder ein Elternrahmen) verborgen ist
+window.isMgrZoneHidden = function (zoneId, zones) {
+    if (!zoneId || !window.hiddenMgrZoneIds || window.hiddenMgrZoneIds.size === 0) return false;
+    if (window.hiddenMgrZoneIds.has(zoneId)) return true;
+
+    const zList = zones || ((typeof getManagerLayout === 'function') ? getManagerLayout().zones : []);
+    let current = (zList || []).find(x => x.id === zoneId);
+    let depthGuard = 0;
+    while (current && current.parent_zone_id && depthGuard < 10) {
+        if (window.hiddenMgrZoneIds.has(current.parent_zone_id)) return true;
+        current = (zList || []).find(x => x.id === current.parent_zone_id);
+        depthGuard++;
+    }
+    return false;
+};
+
+window.toggleMgrZoneVisibility = function (zoneId) {
+    if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
+    if (window.hiddenMgrZoneIds.has(zoneId)) {
+        window.hiddenMgrZoneIds.delete(zoneId);
+    } else {
+        window.hiddenMgrZoneIds.add(zoneId);
+    }
+    window.syncVisibilityToDOM();
+};
+
+window.toggleIsolateMgrZone = function (zoneId) {
+    if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
+    const layout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [] };
+    const zones = layout.zones || [];
+    const targetZone = zones.find(z => z.id === zoneId);
+    if (!targetZone) return;
+
+    const ancestors = new Set();
+    let curr = targetZone;
+    while (curr && curr.parent_zone_id) {
+        ancestors.add(curr.parent_zone_id);
+        curr = zones.find(z => z.id === curr.parent_zone_id);
+    }
+
+    const descendants = new Set();
+    const getDesc = (pId) => {
+        zones.filter(z => z.parent_zone_id === pId).forEach(c => {
+            descendants.add(c.id);
+            getDesc(c.id);
+        });
+    };
+    getDesc(zoneId);
+
+    const keepVisible = new Set([zoneId, ...ancestors, ...descendants]);
+
+    let currentlyIsolated = true;
+    zones.forEach(z => {
+        if (keepVisible.has(z.id)) {
+            if (window.hiddenMgrZoneIds.has(z.id)) currentlyIsolated = false;
+        } else {
+            if (!window.hiddenMgrZoneIds.has(z.id)) currentlyIsolated = false;
+        }
+    });
+
+    window.hiddenMgrZoneIds.clear();
+    if (!currentlyIsolated) {
+        zones.forEach(z => {
+            if (!keepVisible.has(z.id)) window.hiddenMgrZoneIds.add(z.id);
+        });
+    }
+
+    window.syncVisibilityToDOM();
+    if (typeof window.centerOnManagerZone === 'function') {
+        window.centerOnManagerZone(zoneId);
+    }
+};
+
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
-    // Den Titel der Sidebar-Sektion dynamisch anpassen
     const sectionTitleEl = container.previousElementSibling;
     const isMgr = (window.activeCanvasMode === 'manager');
 
     if (sectionTitleEl && sectionTitleEl.classList.contains('sidebar-section-title')) {
-        sectionTitleEl.textContent = isMgr ? 'Komponenten-Pool (Bauteile & Baugruppen)' : 'Top-Bereiche (Ansicht)';
+        sectionTitleEl.textContent = isMgr ? 'Übersichts-Bereiche (Board)' : 'Top-Bereiche (Ansicht)';
     }
 
     // =========================================================================
-    // MODUS A: MANAGER-COCKPIT -> KOMPONENTEN-POOL (NACH FARBE & NAME SORTIERT)
-    // =========================================================================
-    // =========================================================================
-    // MODUS A: MANAGER-COCKPIT -> ÜBERSICHTS-RAHMEN & EINKLAPPBARER POOL
-    // ERSETZEN IN: app.js (In renderSidebarZones() -> if (isMgr) { ... })
-    // Zeitstempel: 2026-09-26 10:45:00 CEST
+    // MODUS A: MANAGER-COCKPIT -> HIERARCHISCHE ÜBERSICHTS-RAHMEN & POOL
     // =========================================================================
     if (isMgr) {
         const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
         const rawNodes = (currentNodes || []).filter(n => n.block_type !== 'note');
         const fragment = document.createDocumentFragment();
 
-        // ---------------------------------------------------------------------
-        // 1. ÜBERSICHTS-RAHMEN DES MANAGER-BOARDS (FOKUS & SICHTBARKEIT)
-        // ---------------------------------------------------------------------
+        // 1. Übersichts-Rahmen mit Aufklapp-Hierarchie
         const zonesHeader = document.createElement('div');
         zonesHeader.className = 'sidebar-section-title';
         zonesHeader.style.cssText = 'margin-top: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;';
         zonesHeader.innerHTML = `
             <span>Übersichts-Rahmen (${(mgrLayout.zones || []).length})</span>
-            <button type="button" class="sb-details-toggle" onclick="centerViewOnVisible()" title="Alle Rahmen ins Bild setzen">⟲ Alle</button>
+            <button type="button" class="sb-details-toggle" onclick="centerViewOnVisible()" title="Alle sichtbaren Rahmen ins Bild setzen">⟲ Alle</button>
         `;
         fragment.appendChild(zonesHeader);
 
         const zonesContainer = document.createElement('div');
         zonesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;';
 
-        if (!mgrLayout.zones || mgrLayout.zones.length === 0) {
-            zonesContainer.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Übersichts-Rahmen auf dem Board.</div>';
+        const topMgrZones = (mgrLayout.zones || []).filter(z => !z.parent_zone_id);
+
+        if (topMgrZones.length === 0) {
+            zonesContainer.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Übersichts-Rahmen angelegt.</div>';
         } else {
-            mgrLayout.zones.forEach(zone => {
-                const zEl = document.createElement('div');
-                zEl.className = 'sidebar-zone-item top-zone';
-                zEl.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #2d3748; border-radius: 4px; font-size: 12px; margin-bottom: 2px;';
+            const renderMgrZoneTree = (zone, isSubZone, parentContainer) => {
+                const isHidden = window.isMgrZoneHidden(zone.id, mgrLayout.zones);
+                const childZones = !isSubZone ? (mgrLayout.zones || []).filter(z => z.parent_zone_id === zone.id) : [];
+                const hasChildren = childZones.length > 0;
+                const isCollapsed = window.collapsedMgrZoneIds.has(zone.id);
+
+                const el = document.createElement('div');
+                el.className = `sidebar-zone-item ${isSubZone ? 'sub-zone' : 'top-zone'}`;
+                el.dataset.zoneId = zone.id;
+                el.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: ${isSubZone ? '6px 10px 6px 0' : '6px 8px'}; background: ${isSubZone ? 'transparent' : '#2d3748'}; border-radius: ${isSubZone ? '0' : '4px'}; font-size: 12px; color: ${isHidden ? '#718096' : '#e2e8f0'}; margin-bottom: ${isSubZone ? '0' : '3px'}; transition: background 0.15s ease;`;
+
+                let toggleBtnHtml = '';
+                if (hasChildren && !isSubZone) {
+                    toggleBtnHtml = `<span onclick="window.toggleSidebarMgrZoneCollapse(event, '${zone.id}')" style="cursor:pointer; font-size:10px; padding:0 3px; user-select:none; opacity:0.8; width: 16px; display:inline-block; text-align:center;" title="${isCollapsed ? 'Unterrahmen aufklappen' : 'Unterrahmen einklappen'}">${isCollapsed ? '▶' : '▼'}</span>`;
+                } else if (!isSubZone) {
+                    toggleBtnHtml = `<span style="width: 16px; display:inline-block;"></span>`;
+                }
 
                 const docBadge = zone.doc_number ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(zone.doc_number)}</span>` : '';
 
-                zEl.innerHTML = `
-                    <div style="display:flex; align-items:center; overflow:hidden; flex:1; cursor:pointer;" onclick="window.centerOnManagerZone('${zone.id}')" title="Kamera auf Rahmen zentrieren: ${escapeHtml(zone.title)}">
+                el.innerHTML = `
+                    <div style="display:flex; align-items:center; overflow:hidden; flex:1; cursor:pointer;" onclick="window.centerOnManagerZone('${zone.id}')" title="Kamera zentrieren: ${escapeHtml(zone.title)}">
+                        ${toggleBtnHtml}
                         <span style="color:${zone.color_hex || '#2b6cb0'}; font-size: 14px; margin-right: 6px;">📁</span>
                         <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
-                            <span style="overflow:hidden; text-overflow:ellipsis; font-weight:600; color:#fff;">${escapeHtml(zone.title)}</span>
+                            <span style="overflow:hidden; text-overflow:ellipsis; font-weight:600; color:${isHidden ? '#718096' : '#fff'}; ${isHidden ? 'text-decoration:line-through; opacity:0.5;' : ''}">${escapeHtml(zone.title)}</span>
                             <div>${docBadge}</div>
                         </div>
                     </div>
                     <div style="display:flex; gap:4px; flex-shrink:0;">
-                        <button type="button" title="Kamera auf Rahmen zentrieren" onclick="window.centerOnManagerZone('${zone.id}')" style="background:none; border:none; cursor:pointer; font-size:12px;">🎯</button>
+                        <button type="button" title="Sichtbarkeit umschalten" onclick="window.toggleMgrZoneVisibility('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.4' : '1'}; font-size:12px;">👁️</button>
+                        <button type="button" title="Nur diesen Rahmen isolieren" onclick="window.toggleIsolateMgrZone('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.4' : '1'}; font-size:12px;">🎯</button>
                         <button type="button" title="Rahmen sperren/entsperren" onclick="window.toggleManagerZoneLock(event, '${zone.id}')" style="background:none; border:none; cursor:pointer; font-size:11px;">${zone.is_locked ? '🔒' : '🔓'}</button>
                     </div>
                 `;
-                zonesContainer.appendChild(zEl);
-            });
+
+                if (!isSubZone) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'top-zone-wrapper';
+                    wrapper.style.display = 'flex';
+                    wrapper.style.flexDirection = 'column';
+                    wrapper.appendChild(el);
+
+                    if (hasChildren && !isCollapsed) {
+                        const childrenContainer = document.createElement('div');
+                        childrenContainer.className = 'sub-zones-container';
+                        childZones.forEach(child => renderMgrZoneTree(child, true, childrenContainer));
+                        wrapper.appendChild(childrenContainer);
+                    }
+                    parentContainer.appendChild(wrapper);
+                } else {
+                    parentContainer.appendChild(el);
+                }
+            };
+
+            topMgrZones.forEach(z => renderMgrZoneTree(z, false, zonesContainer));
         }
         fragment.appendChild(zonesContainer);
 
-        // ---------------------------------------------------------------------
-        // 2. KOMPONENTEN-POOL (EINKLAPPBARES AKKORDEON)
-        // ---------------------------------------------------------------------
+        // 2. Einklappbarer Komponenten-Pool
         const isPoolCollapsed = localStorage.getItem('cad_tm_pool_collapsed') === 'true';
 
         const poolToggleHeader = document.createElement('div');
@@ -248,7 +321,6 @@ window.renderSidebarZones = function () {
             if (rawNodes.length === 0) {
                 poolBody.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Komponenten im Plan vorhanden.</div>';
             } else {
-                // Sortierung nach Baugruppen-Farben und sekundär nach Name
                 const colorOrder = (window.COLOR_PRESETS || []).map(c => c.hex.toLowerCase());
                 const sortedNodes = [...rawNodes].sort((a, b) => {
                     const colA = (a.color_hex || '#2b6cb0').toLowerCase();
@@ -286,7 +358,7 @@ window.renderSidebarZones = function () {
                         <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
                             ${isPlaced
                             ? `<button type="button" class="btn-pool-action focus" onclick="window.centerOnManagerBlock('${node.id}')" title="Kamera auf Bauteil zentrieren">🎯</button>
-                               <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
+                                   <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
                             : `<button type="button" class="btn-pool-action add" onclick="window.addBlockToManagerCanvas('${node.id}')" title="Auf Manager-Board einfügen">➕</button>`
                         }
                         </div>
@@ -311,405 +383,95 @@ window.renderSidebarZones = function () {
     // =========================================================================
     // MODUS B: HAUPT-CANVAS (CAD) -> REGULÄRER ZONEN-BAUM
     // =========================================================================
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Zonen-Rendering (Dual-Mode: CAD & Manager Board mit Hierarchie)
- * ERSETZEN IN: app.js (Ab Zeile 107 bis vor window.toggleZoneVisibility)
- * Zeitstempel: 2026-09-26 11:45:00 CEST
- * Breadcrumbs:
- *   - [2026-08-31 17:45:00 CEST]: 1-Ebenen-Hierarchie Hauptcanvas.
- *   - [2026-09-17 21:40:00 CEST]: Komponenten-Pool Manager-Board.
- *   - [2026-09-26 11:45:00 CEST]: Übersichts-Rahmen im Manager-Board hierarchisch 
- *     verschachtelt mit ▶ / ▼ Aufklapp-Toggle, Sichtbarkeit 👁️ und Isolation 🎯.
- * =============================================================================
- */
+    if (!window.collapsedZonesInitialized && currentZones && currentZones.length > 0) {
+        currentZones.forEach(z => {
+            const hasChildren = currentZones.some(child => child.parent_zone_id === z.id);
+            if (hasChildren) window.collapsedZoneIds.add(z.id);
+        });
+        window.collapsedZonesInitialized = true;
+    }
 
-    if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
-    if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-    if (!window.collapsedMgrZoneIds) window.collapsedMgrZoneIds = new Set();
-    if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
+    const fragment = document.createDocumentFragment();
+    const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    const canReorderZones = isAdmin || isLocalProject;
 
-    // Toggle für CAD-Konstruktionsplan
-    window.toggleSidebarZoneCollapse = function (e, zoneId) {
-        if (e) e.stopPropagation();
-        if (window.collapsedZoneIds.has(zoneId)) {
-            window.collapsedZoneIds.delete(zoneId);
-        } else {
-            window.collapsedZoneIds.add(zoneId);
-        }
-        if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
+    const sortZonesByOrder = (zones) => {
+        return [...zones].sort((a, b) => {
+            const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
+            const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
+            return ordA - ordB;
+        });
     };
 
-    // Toggle für Manager-Board (Übersichts-Rahmen aufklappen / zuklappen)
-    window.toggleSidebarMgrZoneCollapse = function (e, zoneId) {
-        if (e) e.stopPropagation();
-        if (!window.collapsedMgrZoneIds) window.collapsedMgrZoneIds = new Set();
-        if (window.collapsedMgrZoneIds.has(zoneId)) {
-            window.collapsedMgrZoneIds.delete(zoneId);
-        } else {
-            window.collapsedMgrZoneIds.add(zoneId);
-        }
-        if (typeof window.renderSidebarZones === 'function') window.renderSidebarZones();
-    };
+    const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
 
-    // Prüft, ob ein Manager-Rahmen (oder ein Elternrahmen) ausgeblendet ist
-    window.isMgrZoneHidden = function (zoneId, zones) {
-        if (!zoneId || !window.hiddenMgrZoneIds || window.hiddenMgrZoneIds.size === 0) return false;
-        if (window.hiddenMgrZoneIds.has(zoneId)) return true;
+    if (topZones.length === 0) {
+        container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Bereiche definiert.</div>';
+        return;
+    }
 
-        const zList = zones || ((typeof getManagerLayout === 'function') ? getManagerLayout().zones : []);
-        let current = (zList || []).find(x => x.id === zoneId);
-        let depthGuard = 0;
-        while (current && current.parent_zone_id && depthGuard < 10) {
-            if (window.hiddenMgrZoneIds.has(current.parent_zone_id)) return true;
-            current = (zList || []).find(x => x.id === current.parent_zone_id);
-            depthGuard++;
-        }
-        return false;
-    };
+    let draggedEl = null;
 
-    window.toggleMgrZoneVisibility = function (zoneId) {
-        if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
-        if (window.hiddenMgrZoneIds.has(zoneId)) {
-            window.hiddenMgrZoneIds.delete(zoneId);
-        } else {
-            window.hiddenMgrZoneIds.add(zoneId);
-        }
-        window.syncVisibilityToDOM();
-    };
+    const saveDatabaseZoneOrder = async (targetParentEl) => {
+        if (!canReorderZones || !targetParentEl) return;
+        const itemEls = Array.from(targetParentEl.children)
+            .map(child => child.classList.contains('sidebar-zone-item') ? child : child.querySelector('.sidebar-zone-item'))
+            .filter(Boolean);
 
-    window.toggleIsolateMgrZone = function (zoneId) {
-        if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
-        const layout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [] };
-        const zones = layout.zones || [];
-        const targetZone = zones.find(z => z.id === zoneId);
-        if (!targetZone) return;
-
-        // Vorfahren ermitteln
-        const ancestors = new Set();
-        let curr = targetZone;
-        while (curr && curr.parent_zone_id) {
-            ancestors.add(curr.parent_zone_id);
-            curr = zones.find(z => z.id === curr.parent_zone_id);
-        }
-
-        // Nachkommen ermitteln
-        const descendants = new Set();
-        const getDesc = (pId) => {
-            zones.filter(z => z.parent_zone_id === pId).forEach(c => {
-                descendants.add(c.id);
-                getDesc(c.id);
-            });
-        };
-        getDesc(zoneId);
-
-        const keepVisible = new Set([zoneId, ...ancestors, ...descendants]);
-
-        let currentlyIsolated = true;
-        zones.forEach(z => {
-            if (keepVisible.has(z.id)) {
-                if (window.hiddenMgrZoneIds.has(z.id)) currentlyIsolated = false;
-            } else {
-                if (!window.hiddenMgrZoneIds.has(z.id)) currentlyIsolated = false;
+        const updates = [];
+        itemEls.forEach((el, index) => {
+            const zId = el.dataset.zoneId;
+            const targetZone = (currentZones || []).find(z => z.id === zId);
+            if (targetZone && targetZone.sort_order !== index) {
+                targetZone.sort_order = index;
+                updates.push(db.from('project_zones').update({ sort_order: index }).eq('id', zId));
             }
         });
 
-        window.hiddenMgrZoneIds.clear();
-        if (!currentlyIsolated) {
-            zones.forEach(z => {
-                if (!keepVisible.has(z.id)) window.hiddenMgrZoneIds.add(z.id);
-            });
-        }
-
-        window.syncVisibilityToDOM();
-        if (typeof window.centerOnManagerZone === 'function') {
-            window.centerOnManagerZone(zoneId);
+        if (updates.length > 0) {
+            await Promise.all(updates);
+            showToast('Rahmen-Reihenfolge aktualisiert', 'success');
         }
     };
 
-    window.renderSidebarZones = function () {
-        const container = document.getElementById('sidebarZonesContainer');
-        if (!container) return;
+    const renderZoneTree = (zone, isSubZone, parentContainer) => {
+        const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zone.id) : false;
+        const childZones = !isSubZone ? sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id)) : [];
+        const hasChildren = childZones.length > 0;
+        const isCollapsed = window.collapsedZoneIds.has(zone.id);
 
-        const sectionTitleEl = container.previousElementSibling;
-        const isMgr = (window.activeCanvasMode === 'manager');
+        const el = document.createElement('div');
+        el.className = `sidebar-zone-item ${isSubZone ? 'sub-zone' : 'top-zone'}`;
+        el.dataset.zoneId = zone.id;
+        el.dataset.parentId = zone.parent_zone_id || 'root';
+        el.draggable = canReorderZones;
 
-        if (sectionTitleEl && sectionTitleEl.classList.contains('sidebar-section-title')) {
-            sectionTitleEl.textContent = isMgr ? 'Übersichts-Bereiche (Board)' : 'Top-Bereiche (Ansicht)';
+        el.style.display = 'flex';
+        el.style.justifyContent = 'space-between';
+        el.style.alignItems = 'center';
+        el.style.padding = isSubZone ? '6px 10px 6px 0' : '6px 10px';
+        el.style.background = isSubZone ? 'transparent' : '#2d3748';
+        el.style.borderRadius = isSubZone ? '0' : '4px';
+        el.style.fontSize = '12px';
+        el.style.color = isHidden ? '#718096' : '#e2e8f0';
+        el.style.marginBottom = isSubZone ? '0' : '4px';
+        el.style.cursor = canReorderZones ? 'grab' : 'default';
+        el.style.transition = 'background 0.15s ease';
+
+        let toggleBtnHtml = '';
+        if (hasChildren && !isSubZone) {
+            toggleBtnHtml = `<span onclick="toggleSidebarZoneCollapse(event, '${zone.id}')" style="cursor:pointer; font-size:10px; padding:0 3px; user-select:none; opacity:0.8; width: 16px; display:inline-block; text-align:center;" title="${isCollapsed ? 'Unterrahmen aufklappen' : 'Unterrahmen einklappen'}">${isCollapsed ? '▶' : '▼'}</span>`;
+        } else if (!isSubZone) {
+            toggleBtnHtml = `<span style="width: 16px; display:inline-block;"></span>`;
         }
 
-        // =========================================================================
-        // MODUS A: MANAGER-COCKPIT -> HIERARCHISCHE ÜBERSICHTS-RAHMEN & POOL
-        // =========================================================================
-        if (isMgr) {
-            const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
-            const rawNodes = (currentNodes || []).filter(n => n.block_type !== 'note');
-            const fragment = document.createDocumentFragment();
+        const dragHandleHtml = canReorderZones
+            ? `<span style="color:#718096; font-size:12px; cursor:grab; user-select:none; margin-right: 4px;" title="Ziehen zum Neuanordnen">⋮⋮</span>`
+            : '';
 
-            // ---------------------------------------------------------------------
-            // 1. ÜBERSICHTS-RAHMEN (VERSCHACHTELT MIT AUFKLAPP-TREE)
-            // ---------------------------------------------------------------------
-            const zonesHeader = document.createElement('div');
-            zonesHeader.className = 'sidebar-section-title';
-            zonesHeader.style.cssText = 'margin-top: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;';
-            zonesHeader.innerHTML = `
-            <span>Übersichts-Rahmen (${(mgrLayout.zones || []).length})</span>
-            <button type="button" class="sb-details-toggle" onclick="centerViewOnVisible()" title="Alle sichtbaren Rahmen ins Bild setzen">⟲ Alle</button>
-        `;
-            fragment.appendChild(zonesHeader);
+        const nodeIconHtml = `<span style="color:${zone.color_hex || '#a0aec0'}; font-size: 14px; margin-right: 6px;">■</span>`;
 
-            const zonesContainer = document.createElement('div');
-            zonesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;';
-
-            const topMgrZones = (mgrLayout.zones || []).filter(z => !z.parent_zone_id);
-
-            if (topMgrZones.length === 0) {
-                zonesContainer.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Übersichts-Rahmen angelegt.</div>';
-            } else {
-                const renderMgrZoneTree = (zone, isSubZone, parentContainer) => {
-                    const isHidden = window.isMgrZoneHidden(zone.id, mgrLayout.zones);
-                    const childZones = !isSubZone ? (mgrLayout.zones || []).filter(z => z.parent_zone_id === zone.id) : [];
-                    const hasChildren = childZones.length > 0;
-                    const isCollapsed = window.collapsedMgrZoneIds.has(zone.id);
-
-                    const el = document.createElement('div');
-                    el.className = `sidebar-zone-item ${isSubZone ? 'sub-zone' : 'top-zone'}`;
-                    el.dataset.zoneId = zone.id;
-                    el.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: ${isSubZone ? '6px 10px 6px 0' : '6px 8px'}; background: ${isSubZone ? 'transparent' : '#2d3748'}; border-radius: ${isSubZone ? '0' : '4px'}; font-size: 12px; color: ${isHidden ? '#718096' : '#e2e8f0'}; margin-bottom: ${isSubZone ? '0' : '3px'}; transition: background 0.15s ease;`;
-
-                    let toggleBtnHtml = '';
-                    if (hasChildren && !isSubZone) {
-                        toggleBtnHtml = `<span onclick="window.toggleSidebarMgrZoneCollapse(event, '${zone.id}')" style="cursor:pointer; font-size:10px; padding:0 3px; user-select:none; opacity:0.8; width: 16px; display:inline-block; text-align:center;" title="${isCollapsed ? 'Unterrahmen aufklappen' : 'Unterrahmen einklappen'}">${isCollapsed ? '▶' : '▼'}</span>`;
-                    } else if (!isSubZone) {
-                        toggleBtnHtml = `<span style="width: 16px; display:inline-block;"></span>`;
-                    }
-
-                    const docBadge = zone.doc_number ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(zone.doc_number)}</span>` : '';
-
-                    el.innerHTML = `
-                    <div style="display:flex; align-items:center; overflow:hidden; flex:1; cursor:pointer;" onclick="window.centerOnManagerZone('${zone.id}')" title="Kamera zentrieren: ${escapeHtml(zone.title)}">
-                        ${toggleBtnHtml}
-                        <span style="color:${zone.color_hex || '#2b6cb0'}; font-size: 14px; margin-right: 6px;">📁</span>
-                        <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
-                            <span style="overflow:hidden; text-overflow:ellipsis; font-weight:600; color:${isHidden ? '#718096' : '#fff'}; ${isHidden ? 'text-decoration:line-through; opacity:0.5;' : ''}">${escapeHtml(zone.title)}</span>
-                            <div>${docBadge}</div>
-                        </div>
-                    </div>
-                    <div style="display:flex; gap:4px; flex-shrink:0;">
-                        <button type="button" title="Sichtbarkeit umschalten" onclick="window.toggleMgrZoneVisibility('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.4' : '1'}; font-size:12px;">👁️</button>
-                        <button type="button" title="Nur diesen Rahmen isolieren" onclick="window.toggleIsolateMgrZone('${zone.id}')" style="background:none; border:none; cursor:pointer; opacity: ${isHidden ? '0.4' : '1'}; font-size:12px;">🎯</button>
-                        <button type="button" title="Rahmen sperren/entsperren" onclick="window.toggleManagerZoneLock(event, '${zone.id}')" style="background:none; border:none; cursor:pointer; font-size:11px;">${zone.is_locked ? '🔒' : '🔓'}</button>
-                    </div>
-                `;
-
-                    if (!isSubZone) {
-                        const wrapper = document.createElement('div');
-                        wrapper.className = 'top-zone-wrapper';
-                        wrapper.style.display = 'flex';
-                        wrapper.style.flexDirection = 'column';
-                        wrapper.appendChild(el);
-
-                        if (hasChildren && !isCollapsed) {
-                            const childrenContainer = document.createElement('div');
-                            childrenContainer.className = 'sub-zones-container';
-                            childZones.forEach(child => renderMgrZoneTree(child, true, childrenContainer));
-                            wrapper.appendChild(childrenContainer);
-                        }
-                        parentContainer.appendChild(wrapper);
-                    } else {
-                        parentContainer.appendChild(el);
-                    }
-                };
-
-                topMgrZones.forEach(z => renderMgrZoneTree(z, false, zonesContainer));
-            }
-            fragment.appendChild(zonesContainer);
-
-            // ---------------------------------------------------------------------
-            // 2. KOMPONENTEN-POOL (EINKLAPPBARES AKKORDEON)
-            // ---------------------------------------------------------------------
-            const isPoolCollapsed = localStorage.getItem('cad_tm_pool_collapsed') === 'true';
-
-            const poolToggleHeader = document.createElement('div');
-            poolToggleHeader.className = 'sb-pool-collapsible-header';
-            poolToggleHeader.innerHTML = `
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span class="pool-toggle-icon">${isPoolCollapsed ? '▶' : '▼'}</span>
-                <span class="sidebar-section-title" style="margin: 0; color: #e2e8f0;">Komponenten-Pool (${rawNodes.length})</span>
-            </div>
-            <span style="font-size:10px; color:#a0aec0;">${isPoolCollapsed ? 'Ausklappen' : 'Einklappen'}</span>
-        `;
-            poolToggleHeader.onclick = () => {
-                const nextState = !isPoolCollapsed;
-                localStorage.setItem('cad_tm_pool_collapsed', nextState ? 'true' : 'false');
-                renderSidebarZones();
-            };
-            fragment.appendChild(poolToggleHeader);
-
-            if (!isPoolCollapsed) {
-                const poolBody = document.createElement('div');
-                poolBody.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-top: 6px;';
-
-                if (rawNodes.length === 0) {
-                    poolBody.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Komponenten im Plan vorhanden.</div>';
-                } else {
-                    const colorOrder = (window.COLOR_PRESETS || []).map(c => c.hex.toLowerCase());
-                    const sortedNodes = [...rawNodes].sort((a, b) => {
-                        const colA = (a.color_hex || '#2b6cb0').toLowerCase();
-                        const colB = (b.color_hex || '#2b6cb0').toLowerCase();
-                        const idxA = colorOrder.indexOf(colA);
-                        const idxB = colorOrder.indexOf(colB);
-                        if (idxA !== idxB) return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-                        return (a.name || '').localeCompare(b.name || '');
-                    });
-
-                    sortedNodes.forEach(node => {
-                        const isPlaced = !!(mgrLayout.placements && mgrLayout.placements[node.id]);
-                        const nodeColor = node.color_hex || '#2b6cb0';
-                        const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
-                        const docText = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
-
-                        const item = document.createElement('div');
-                        item.className = `sidebar-zone-item sb-pool-item ${isPlaced ? 'is-placed' : ''}`;
-                        item.dataset.nodeId = node.id;
-                        item.draggable = true;
-                        item.style.cssText = `display:flex; justify-content:space-between; align-items:center; padding:6px 8px; background:${isPlaced ? 'rgba(45, 55, 72, 0.45)' : '#2d3748'}; border-radius:4px; font-size:12px; margin-bottom:3px; border-left:3px solid ${nodeColor}; cursor:grab; transition:all 0.15s ease;`;
-
-                        const docBadgeHtml = docText ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(docText)}</span>` : '';
-
-                        item.innerHTML = `
-                        <div style="display:flex; align-items:center; overflow:hidden; flex:1; gap: 5px;" title="${escapeHtml(node.name)}">
-                            <span style="font-size: 13px; line-height: 1;">${iconSvg}</span>
-                            <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
-                                <span style="overflow:hidden; text-overflow:ellipsis; color: ${isPlaced ? '#a0aec0' : '#fff'}; font-weight: 600;">${escapeHtml(node.name)}</span>
-                                <div style="display:flex; align-items:center; margin-top: 1px;">
-                                    ${docBadgeHtml}
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                            ${isPlaced
-                                ? `<button type="button" class="btn-pool-action focus" onclick="window.centerOnManagerBlock('${node.id}')" title="Kamera auf Bauteil zentrieren">🎯</button>
-                               <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
-                                : `<button type="button" class="btn-pool-action add" onclick="window.addBlockToManagerCanvas('${node.id}')" title="Auf Manager-Board einfügen">➕</button>`
-                            }
-                        </div>
-                    `;
-
-                        item.addEventListener('dragstart', (e) => {
-                            e.dataTransfer.setData('text/plain', node.id);
-                            e.dataTransfer.effectAllowed = 'copyMove';
-                        });
-
-                        poolBody.appendChild(item);
-                    });
-                }
-                fragment.appendChild(poolBody);
-            }
-
-            container.innerHTML = '';
-            container.appendChild(fragment);
-            return;
-        }
-
-        // =========================================================================
-        // MODUS B: HAUPT-CANVAS (CAD) -> REGULÄRER ZONEN-BAUM
-        // =========================================================================
-        if (!window.collapsedZoneIds) window.collapsedZoneIds = new Set();
-        if (!window.collapsedZonesInitialized && currentZones && currentZones.length > 0) {
-            currentZones.forEach(z => {
-                const hasChildren = currentZones.some(child => child.parent_zone_id === z.id);
-                if (hasChildren) {
-                    window.collapsedZoneIds.add(z.id);
-                }
-            });
-            window.collapsedZonesInitialized = true;
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
-        const canReorderZones = isAdmin || isLocalProject;
-
-        const sortZonesByOrder = (zones) => {
-            return [...zones].sort((a, b) => {
-                const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
-                const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
-                return ordA - ordB;
-            });
-        };
-
-        const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
-
-        if (topZones.length === 0) {
-            container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Bereiche definiert.</div>';
-            return;
-        }
-
-        let draggedEl = null;
-
-        const saveDatabaseZoneOrder = async (targetParentEl) => {
-            if (!canReorderZones || !targetParentEl) return;
-
-            const itemEls = Array.from(targetParentEl.children)
-                .map(child => child.classList.contains('sidebar-zone-item') ? child : child.querySelector('.sidebar-zone-item'))
-                .filter(Boolean);
-
-            const updates = [];
-            itemEls.forEach((el, index) => {
-                const zId = el.dataset.zoneId;
-                const targetZone = (currentZones || []).find(z => z.id === zId);
-                if (targetZone && targetZone.sort_order !== index) {
-                    targetZone.sort_order = index;
-                    updates.push(db.from('project_zones').update({ sort_order: index }).eq('id', zId));
-                }
-            });
-
-            if (updates.length > 0) {
-                await Promise.all(updates);
-                showToast('Rahmen-Reihenfolge aktualisiert', 'success');
-            }
-        };
-
-        const renderZoneTree = (zone, isSubZone, parentContainer) => {
-            const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zone.id) : false;
-            const childZones = !isSubZone ? sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === zone.id)) : [];
-            const hasChildren = childZones.length > 0;
-            const isCollapsed = window.collapsedZoneIds.has(zone.id);
-
-            const el = document.createElement('div');
-            el.className = `sidebar-zone-item ${isSubZone ? 'sub-zone' : 'top-zone'}`;
-            el.dataset.zoneId = zone.id;
-            el.dataset.parentId = zone.parent_zone_id || 'root';
-            el.draggable = canReorderZones;
-
-            el.style.display = 'flex';
-            el.style.justifyContent = 'space-between';
-            el.style.alignItems = 'center';
-            el.style.padding = isSubZone ? '6px 10px 6px 0' : '6px 10px';
-            el.style.background = isSubZone ? 'transparent' : '#2d3748';
-            el.style.borderRadius = isSubZone ? '0' : '4px';
-            el.style.fontSize = '12px';
-            el.style.color = isHidden ? '#718096' : '#e2e8f0';
-            el.style.marginBottom = isSubZone ? '0' : '4px';
-            el.style.cursor = canReorderZones ? 'grab' : 'default';
-            el.style.transition = 'background 0.15s ease';
-
-            let toggleBtnHtml = '';
-            if (hasChildren && !isSubZone) {
-                toggleBtnHtml = `<span onclick="toggleSidebarZoneCollapse(event, '${zone.id}')" style="cursor:pointer; font-size:10px; padding:0 3px; user-select:none; opacity:0.8; width: 16px; display:inline-block; text-align:center;" title="${isCollapsed ? 'Unterrahmen aufklappen' : 'Unterrahmen einklappen'}">${isCollapsed ? '▶' : '▼'}</span>`;
-            } else if (!isSubZone) {
-                toggleBtnHtml = `<span style="width: 16px; display:inline-block;"></span>`;
-            }
-
-            const dragHandleHtml = canReorderZones
-                ? `<span style="color:#718096; font-size:12px; cursor:grab; user-select:none; margin-right: 4px;" title="Ziehen zum Neuanordnen">⋮⋮</span>`
-                : '';
-
-            const nodeIconHtml = `<span style="color:${zone.color_hex || '#a0aec0'}; font-size: 14px; margin-right: 6px;">■</span>`;
-
-            el.innerHTML = `
+        el.innerHTML = `
             <div style="display:flex; align-items:center; overflow:hidden; flex:1; position: relative; height: 100%;">
                 ${dragHandleHtml}
                 ${toggleBtnHtml}
@@ -722,178 +484,125 @@ window.renderSidebarZones = function () {
             </div>
         `;
 
-            if (canReorderZones) {
-                el.addEventListener('dragstart', (e) => {
-                    draggedEl = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', zone.id);
-                    setTimeout(() => { if (draggedEl) draggedEl.style.opacity = '0.4'; }, 0);
+        if (canReorderZones) {
+            el.addEventListener('dragstart', (e) => {
+                draggedEl = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', zone.id);
+                setTimeout(() => { if (draggedEl) draggedEl.style.opacity = '0.4'; }, 0);
+            });
+
+            el.addEventListener('dragend', () => {
+                if (draggedEl) draggedEl.style.opacity = '1';
+                draggedEl = null;
+                document.querySelectorAll('.sidebar-zone-item').forEach(item => {
+                    item.style.borderTop = '';
+                    item.style.borderBottom = '';
                 });
+            });
 
-                el.addEventListener('dragend', () => {
-                    if (draggedEl) draggedEl.style.opacity = '1';
-                    draggedEl = null;
-                    document.querySelectorAll('.sidebar-zone-item').forEach(item => {
-                        item.style.borderTop = '';
-                        item.style.borderBottom = '';
-                    });
-                });
+            el.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
+                if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
 
-                el.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
-                    if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
+                e.dataTransfer.dropEffect = 'move';
+                const rect = dropTarget.getBoundingClientRect();
+                const relY = e.clientY - rect.top;
 
-                    e.dataTransfer.dropEffect = 'move';
-                    const rect = dropTarget.getBoundingClientRect();
-                    const relY = e.clientY - rect.top;
-
-                    if (relY < rect.height / 2) {
-                        el.style.borderTop = '2px solid #3182ce';
-                        el.style.borderBottom = '';
-                    } else {
-                        el.style.borderBottom = '2px solid #3182ce';
-                        el.style.borderTop = '';
-                    }
-                });
-
-                el.addEventListener('dragleave', () => {
-                    el.style.borderTop = '';
+                if (relY < rect.height / 2) {
+                    el.style.borderTop = '2px solid #3182ce';
                     el.style.borderBottom = '';
-                });
-
-                el.addEventListener('drop', async (e) => {
-                    e.preventDefault();
+                } else {
+                    el.style.borderBottom = '2px solid #3182ce';
                     el.style.borderTop = '';
-                    el.style.borderBottom = '';
-
-                    const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
-                    if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
-
-                    const liveParent = dropTarget.parentElement;
-                    const rect = dropTarget.getBoundingClientRect();
-                    const relY = e.clientY - rect.top;
-
-                    if (relY < rect.height / 2) {
-                        liveParent.insertBefore(draggedEl, dropTarget);
-                    } else {
-                        liveParent.insertBefore(draggedEl, dropTarget.nextSibling);
-                    }
-
-                    await saveDatabaseZoneOrder(liveParent);
-                });
-            }
-
-            if (!isSubZone) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'top-zone-wrapper';
-                wrapper.style.display = 'flex';
-                wrapper.style.flexDirection = 'column';
-                wrapper.appendChild(el);
-
-                if (hasChildren && !isCollapsed) {
-                    const childrenContainer = document.createElement('div');
-                    childrenContainer.className = 'sub-zones-container';
-                    childZones.forEach(child => renderZoneTree(child, true, childrenContainer));
-                    wrapper.appendChild(childrenContainer);
-                }
-                parentContainer.appendChild(wrapper);
-            } else {
-                parentContainer.appendChild(el);
-            }
-        };
-
-        topZones.forEach(zone => {
-            renderZoneTree(zone, false, fragment);
-        });
-
-        container.innerHTML = '';
-        container.appendChild(fragment);
-    };
-
-    window.syncVisibilityToDOM = function () {
-        // -------------------------------------------------------------------------
-        // A. MANAGER-MODUS: RAHMEN & PLATZIERTE BLÖCKE ANHAND hiddenMgrZoneIds STEUERN
-        // -------------------------------------------------------------------------
-        if (window.activeCanvasMode === 'manager') {
-            const svgLayer = document.getElementById('connections-layer');
-            if (svgLayer) svgLayer.innerHTML = '';
-
-            const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
-
-            // 1. Sidebar Styles anpassen (Durchstreichen & Opacity)
-            const sidebarItems = document.querySelectorAll('#sidebarZonesContainer .sidebar-zone-item');
-            sidebarItems.forEach(el => {
-                const zId = el.dataset.zoneId;
-                if (!zId) return;
-                const isHidden = (typeof window.isMgrZoneHidden === 'function') ? window.isMgrZoneHidden(zId, mgrLayout.zones) : false;
-
-                const textSpan = el.querySelector('span[style*="overflow:hidden"]');
-                if (textSpan) {
-                    textSpan.style.textDecoration = isHidden ? 'line-through' : 'none';
-                    textSpan.style.opacity = isHidden ? '0.45' : '1';
-                }
-
-                el.querySelectorAll('button').forEach(btn => {
-                    btn.style.opacity = isHidden ? '0.35' : '1';
-                });
-            });
-
-            // 2. Manager-Rahmen auf dem Canvas ein-/ausblenden
-            (mgrLayout.zones || []).forEach(z => {
-                const el = document.getElementById(z.id);
-                if (el) {
-                    const isHidden = (typeof window.isMgrZoneHidden === 'function') ? window.isMgrZoneHidden(z.id, mgrLayout.zones) : false;
-                    if (isHidden) {
-                        el.style.setProperty('display', 'none', 'important');
-                    } else {
-                        el.style.display = '';
-                    }
                 }
             });
 
-            // 3. Im Rahmen liegende Manager-Blöcke ausblenden, falls der Rahmen verborgen ist
-            Object.keys(mgrLayout.placements || {}).forEach(nodeId => {
-                const pl = mgrLayout.placements[nodeId];
-                const el = document.getElementById(nodeId);
-                if (el) {
-                    const isHidden = pl && pl.zone_id && (typeof window.isMgrZoneHidden === 'function') && window.isMgrZoneHidden(pl.zone_id, mgrLayout.zones);
-                    if (isHidden) {
-                        el.style.setProperty('display', 'none', 'important');
-                    } else {
-                        // Prüfen, ob der Fokus-Filter greift
-                        const isFocusDimmed = window.managerFocusActive && el.classList.contains('node-dimmed');
-                        el.style.display = '';
-                    }
-                }
+            el.addEventListener('dragleave', () => {
+                el.style.borderTop = '';
+                el.style.borderBottom = '';
             });
-            return;
+
+            el.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                el.style.borderTop = '';
+                el.style.borderBottom = '';
+
+                const dropTarget = !isSubZone ? el.closest('.top-zone-wrapper') || el : el;
+                if (!draggedEl || draggedEl === dropTarget || draggedEl.parentElement !== dropTarget.parentElement) return;
+
+                const liveParent = dropTarget.parentElement;
+                const rect = dropTarget.getBoundingClientRect();
+                const relY = e.clientY - rect.top;
+
+                if (relY < rect.height / 2) {
+                    liveParent.insertBefore(draggedEl, dropTarget);
+                } else {
+                    liveParent.insertBefore(draggedEl, dropTarget.nextSibling);
+                }
+
+                await saveDatabaseZoneOrder(liveParent);
+            });
         }
 
-        // -------------------------------------------------------------------------
-        // B. CAD-MODUS: REGULÄRE SICHTBARKEIT & SVG-VERBINDUNGEN
-        // -------------------------------------------------------------------------
-        const sidebarItems = document.querySelectorAll('.sidebar-zone-item');
+        if (!isSubZone) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'top-zone-wrapper';
+            wrapper.style.display = 'flex';
+            wrapper.style.flexDirection = 'column';
+            wrapper.appendChild(el);
+
+            if (hasChildren && !isCollapsed) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'sub-zones-container';
+                childZones.forEach(child => renderZoneTree(child, true, childrenContainer));
+                wrapper.appendChild(childrenContainer);
+            }
+            parentContainer.appendChild(wrapper);
+        } else {
+            parentContainer.appendChild(el);
+        }
+    };
+
+    topZones.forEach(zone => {
+        renderZoneTree(zone, false, fragment);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(fragment);
+};
+
+window.syncVisibilityToDOM = function () {
+    // A. Manager-Modus
+    if (window.activeCanvasMode === 'manager') {
+        const svgLayer = document.getElementById('connections-layer');
+        if (svgLayer) svgLayer.innerHTML = '';
+
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
+
+        const sidebarItems = document.querySelectorAll('#sidebarZonesContainer .sidebar-zone-item');
         sidebarItems.forEach(el => {
             const zId = el.dataset.zoneId;
-            const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zId) : false;
+            if (!zId) return;
+            const isHidden = (typeof window.isMgrZoneHidden === 'function') ? window.isMgrZoneHidden(zId, mgrLayout.zones) : false;
 
-            const textSpan = el.querySelector('span[onclick^="centerViewOnVisible"]');
+            const textSpan = el.querySelector('span[style*="overflow:hidden"]');
             if (textSpan) {
                 textSpan.style.textDecoration = isHidden ? 'line-through' : 'none';
                 textSpan.style.opacity = isHidden ? '0.45' : '1';
             }
 
-            const btns = el.querySelectorAll('button');
-            btns.forEach(btn => {
+            el.querySelectorAll('button').forEach(btn => {
                 btn.style.opacity = isHidden ? '0.35' : '1';
             });
         });
 
-        (currentZones || []).forEach(z => {
+        (mgrLayout.zones || []).forEach(z => {
             const el = document.getElementById(z.id);
             if (el) {
-                if (window.isZoneHidden(z.id)) {
+                const isHidden = (typeof window.isMgrZoneHidden === 'function') ? window.isMgrZoneHidden(z.id, mgrLayout.zones) : false;
+                if (isHidden) {
                     el.style.setProperty('display', 'none', 'important');
                 } else {
                     el.style.display = '';
@@ -901,42 +610,81 @@ window.renderSidebarZones = function () {
             }
         });
 
-        (currentNodes || []).forEach(n => {
-            const el = document.getElementById(n.id);
+        Object.keys(mgrLayout.placements || {}).forEach(nodeId => {
+            const pl = mgrLayout.placements[nodeId];
+            const el = document.getElementById(nodeId);
             if (el) {
-                const zoneHidden = n.zone_id && window.isZoneHidden(n.zone_id);
-                const treeHidden = typeof isNodeHiddenByAncestor === 'function' && isNodeHiddenByAncestor(n.id);
-
-                if (zoneHidden || treeHidden) {
+                const isHidden = pl && pl.zone_id && (typeof window.isMgrZoneHidden === 'function') && window.isMgrZoneHidden(pl.zone_id, mgrLayout.zones);
+                if (isHidden) {
                     el.style.setProperty('display', 'none', 'important');
                 } else {
                     el.style.display = '';
                 }
             }
         });
+        return;
+    }
 
-        if (typeof renderConnections === 'function') renderConnections();
-    };
+    // B. CAD-Modus
+    const sidebarItems = document.querySelectorAll('.sidebar-zone-item');
+    sidebarItems.forEach(el => {
+        const zId = el.dataset.zoneId;
+        const isHidden = typeof window.isZoneHidden === 'function' ? window.isZoneHidden(zId) : false;
+
+        const textSpan = el.querySelector('span[onclick^="centerViewOnVisible"]');
+        if (textSpan) {
+            textSpan.style.textDecoration = isHidden ? 'line-through' : 'none';
+            textSpan.style.opacity = isHidden ? '0.45' : '1';
+        }
+
+        el.querySelectorAll('button').forEach(btn => {
+            btn.style.opacity = isHidden ? '0.35' : '1';
+        });
+    });
+
+    (currentZones || []).forEach(z => {
+        const el = document.getElementById(z.id);
+        if (el) {
+            if (window.isZoneHidden(z.id)) {
+                el.style.setProperty('display', 'none', 'important');
+            } else {
+                el.style.display = '';
+            }
+        }
+    });
+
+    (currentNodes || []).forEach(n => {
+        const el = document.getElementById(n.id);
+        if (el) {
+            const zoneHidden = n.zone_id && window.isZoneHidden(n.zone_id);
+            const treeHidden = typeof isNodeHiddenByAncestor === 'function' && isNodeHiddenByAncestor(n.id);
+
+            if (zoneHidden || treeHidden) {
+                el.style.setProperty('display', 'none', 'important');
+            } else {
+                el.style.display = '';
+            }
+        }
+    });
+
+    if (typeof renderConnections === 'function') renderConnections();
+};
 
 window.toggleZoneVisibility = function (zoneId) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-
     if (window.hiddenTopZoneIds.has(zoneId)) {
         window.hiddenTopZoneIds.delete(zoneId);
     } else {
         window.hiddenTopZoneIds.add(zoneId);
     }
-
     window.syncVisibilityToDOM();
 };
 
 window.toggleIsolateZone = function (zoneId) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
-
     const targetZone = (currentZones || []).find(z => z.id === zoneId);
     if (!targetZone) return;
 
-    // Vorfahren ermitteln
     const ancestors = new Set();
     let curr = targetZone;
     while (curr.parent_zone_id) {
@@ -945,7 +693,6 @@ window.toggleIsolateZone = function (zoneId) {
         if (!curr) break;
     }
 
-    // Nachkommen ermitteln
     const descendants = new Set();
     const getDescendants = (parentId) => {
         (currentZones || []).filter(z => z.parent_zone_id === parentId).forEach(child => {
@@ -967,7 +714,6 @@ window.toggleIsolateZone = function (zoneId) {
     });
 
     window.hiddenTopZoneIds.clear();
-
     if (!currentlyIsolated) {
         (currentZones || []).forEach(z => {
             if (!keepVisible.has(z.id)) window.hiddenTopZoneIds.add(z.id);
@@ -975,7 +721,6 @@ window.toggleIsolateZone = function (zoneId) {
     }
 
     window.syncVisibilityToDOM();
-
     if (typeof window.centerViewOnVisible === 'function') {
         window.centerViewOnVisible(currentlyIsolated ? null : zoneId);
     }

@@ -610,10 +610,11 @@ function renderCanvas() {
 
             const containedBlocks = [];
             Object.keys(mgrLayout.placements || {}).forEach(nId => {
-                const pl = mgrLayout.placements[nId];
-                if (pl && allIncludedZoneIds.includes(pl.zone_id)) {
-                    const bNode = (currentNodes || []).find(x => x.id === nId);
-                    if (bNode && bNode.block_type !== 'note') containedBlocks.push(bNode);
+                const p = (window.isManagerSortHelperActive && window.managerHelperPlacements && window.managerHelperPlacements[nId])
+                    ? window.managerHelperPlacements[nId]
+                    : mgrLayout.placements[nId];
+                if (p && !(p.zone_id && isHiddenFn(p.zone_id, mgrLayout.zones))) {
+                    updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
                 }
             });
 
@@ -1827,8 +1828,18 @@ function renderCanvas() {
             `;
         }
 
-        const posX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? node.pos_x) : node.pos_x;
-        const posY = isManagerMode ? (mgrLayout.placements[node.id]?.pos_y ?? node.pos_y) : node.pos_y;
+        // Ermittelt die Position: Im Hilfsmodus die temporäre Spalte, sonst die echte gespeicherte Koordinate
+
+        const helperPlacement = (window.isManagerSortHelperActive && (window.managerHelperVirtualPlacements || window.managerHelperPlacements))
+            ? (window.managerHelperVirtualPlacements || window.managerHelperPlacements)[node.id]
+            : null;
+
+        const posX = isManagerMode
+            ? (helperPlacement?.pos_x ?? mgrLayout.placements[node.id]?.pos_x ?? node.pos_x)
+            : node.pos_x;
+        const posY = isManagerMode
+            ? (helperPlacement?.pos_y ?? mgrLayout.placements[node.id]?.pos_y ?? node.pos_y)
+            : node.pos_y;
         const isSelected = window.selectedNodeIds.has(node.id);
 
         const creator = node.created_by || 'COT';
@@ -2270,11 +2281,18 @@ function renderCanvas() {
                         const centerY = finalY + 60;
                         const targetZone = getDeepestMgrZoneAt(centerX, centerY, [], mgrLayout.zones);
 
+                        // Händisches Verschieben definiert die Koordinate fest & dauerhaft in der DB!
                         mgrLayout.placements[node.id] = {
                             pos_x: finalX,
                             pos_y: finalY,
                             zone_id: targetZone ? targetZone.id : null
                         };
+
+                        // Falls die Hilfsansicht aktiv war, übernimmt dieser gezielt bewegte Block seine neue Position
+                        if (window.managerHelperVirtualPlacements && window.managerHelperVirtualPlacements[node.id]) {
+                            window.managerHelperVirtualPlacements[node.id] = { pos_x: finalX, pos_y: finalY };
+                        }
+
                         if (typeof saveManagerLayout === 'function') saveManagerLayout(mgrLayout);
                         renderCanvas();
                     } else {
@@ -2522,7 +2540,9 @@ window.centerViewOnVisible = function (targetZoneId = null) {
         });
 
         Object.keys(mgrLayout.placements || {}).forEach(nId => {
-            const p = mgrLayout.placements[nId];
+            const p = (window.isManagerSortHelperActive && window.managerHelperVirtualPlacements && window.managerHelperVirtualPlacements[nId])
+                ? window.managerHelperVirtualPlacements[nId]
+                : mgrLayout.placements[nId];
             if (p && !(p.zone_id && isHiddenFn(p.zone_id, mgrLayout.zones))) {
                 updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
             }
