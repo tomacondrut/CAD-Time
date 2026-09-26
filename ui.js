@@ -494,15 +494,27 @@ window.renderArchivedProjectsList = function () {
     });
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Baugruppen-Presets mit Tooltips)
+ * ERSETZEN IN: ui.js (Funktionen renderColorPresets & renderZoneColorPresets)
+ * Zeitstempel: 2026-09-26 10:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30]: Farb-Swatches.
+ *   - [2026-09-26 10:45:00 CEST]: Swatches zeigen jetzt Baugruppennamen als Tooltip
+ *     und greifen dynamisch auf window.COLOR_PRESETS zu.
+ * =============================================================================
+ */
 window.renderColorPresets = function () {
     const container = document.getElementById('colorPresetsContainer');
     if (!container) return;
     container.innerHTML = '';
-    COLOR_PRESETS.forEach(p => {
+    (window.COLOR_PRESETS || []).forEach(p => {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = p.name;
+        swatch.title = `${p.name} (${p.hex})`;
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#colorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -517,11 +529,11 @@ window.renderZoneColorPresets = function () {
     const container = document.getElementById('zoneColorPresetsContainer');
     if (!container) return;
     container.innerHTML = '';
-    COLOR_PRESETS.forEach(p => {
+    (window.COLOR_PRESETS || []).forEach(p => {
         const swatch = document.createElement('div');
         swatch.className = 'color-swatch';
         swatch.style.backgroundColor = p.hex;
-        swatch.title = p.name;
+        swatch.title = `${p.name} (${p.hex})`;
         swatch.dataset.hex = p.hex;
         swatch.addEventListener('click', () => {
             document.querySelectorAll('#zoneColorPresetsContainer .color-swatch').forEach(s => s.classList.remove('selected'));
@@ -4292,3 +4304,91 @@ window.addEventListener('keydown', (e) => {
         showToast('Zuweisung abgebrochen (Zeit bleibt im Widget)', 'info');
     }
 }, true);
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: UI Controller (Baugruppen-Farbkategorien Verwaltung)
+* HINZUFÜGEN IN: ui.js (Am Dateiende)
+* Zeitstempel: 2026-09-26 10:45:00 CEST
+* =============================================================================
+*/
+window.openColorCategoryModal = function () {
+    renderColorCategoriesEditor();
+    openModal('colorCategoryModal');
+};
+
+function renderColorCategoriesEditor() {
+    const container = document.getElementById('colorCategoriesListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    (window.COLOR_PRESETS || []).forEach((cat, idx) => {
+        const row = document.createElement('div');
+        row.className = 'color-cat-row';
+
+        row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="color" value="${cat.hex}" class="color-picker-input" onchange="handleUpdateColorCategory(${idx}, 'hex', this.value)" title="Farbe anpassen" />
+                <input type="text" value="${escapeHtml(cat.name)}" class="color-cat-name-input" onchange="handleUpdateColorCategory(${idx}, 'name', this.value)" title="Baugruppen-Zugehörigkeit umbenennen" />
+            </div>
+            <div style="display:flex; gap:4px; align-items:center;">
+                <button type="button" class="btn-pool-action remove" onclick="handleDeleteColorCategory(${idx})" title="Kategorie entfernen">✕</button>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.handleUpdateColorCategory = async function (index, field, value) {
+    const categories = [...(window.COLOR_PRESETS || [])];
+    if (!categories[index]) return;
+
+    categories[index][field] = value.trim();
+    await saveColorCategories(categories);
+    showToast(`Baugruppe "${categories[index].name}" aktualisiert`, 'success');
+};
+
+window.handleAddNewColorCategory = async function (e) {
+    e.preventDefault();
+    const colorInput = document.getElementById('newCatColorInput');
+    const nameInput = document.getElementById('newCatNameInput');
+
+    const name = nameInput.value.trim();
+    const hex = colorInput.value;
+
+    if (!name) return;
+
+    const categories = [...(window.COLOR_PRESETS || [])];
+    categories.push({ name, hex });
+
+    await saveColorCategories(categories);
+    nameInput.value = '';
+    renderColorCategoriesEditor();
+    showToast(`Kategorie "${name}" hinzugefügt`, 'success');
+};
+
+window.handleDeleteColorCategory = async function (index) {
+    const categories = [...(window.COLOR_PRESETS || [])];
+    if (categories.length <= 1) {
+        showToast('Mindestens eine Farbkategorie muss erhalten bleiben.', 'error');
+        return;
+    }
+
+    const removed = categories.splice(index, 1)[0];
+    await saveColorCategories(categories);
+    renderColorCategoriesEditor();
+    showToast(`Kategorie "${removed.name}" gelöscht`, 'info');
+};
+
+window.handleResetColorCategories = async function () {
+    const confirmed = typeof customConfirm === 'function'
+        ? await customConfirm('Auf Standard zurücksetzen', 'Möchtest du alle Farbkategorien wieder auf die Anlagenbau-Standardliste zurücksetzen?')
+        : confirm('Möchtest du alle Farbkategorien wieder auf die Anlagenbau-Standardliste zurücksetzen?');
+
+    if (confirmed) {
+        await saveColorCategories([...window.DEFAULT_COLOR_PRESETS]);
+        renderColorCategoriesEditor();
+        showToast('Farbkategorien auf Standard zurückgesetzt', 'success');
+    }
+};

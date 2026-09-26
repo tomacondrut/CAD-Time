@@ -203,25 +203,78 @@ window.activeProjectId = 'proj_default';
 
 /**
  * =============================================================================
- * Domain: Farbpaletten (Global)
+ * Projekt: CAD Time Manager
+ * Domain: Baugruppen-Farbkategorien (Supabase-Master mit lokalem Cache)
+ * ERSETZEN IN: db.js (Abschnitt Farbpaletten & Kategorien)
+ * Zeitstempel: 2026-09-26 11:05:00 CEST
  * Breadcrumbs:
- *   - [2026-08-28 22:50:00 CEST]: 9 komplementäre Erdfarben.
- *   - [2026-08-28 23:05:00 CEST]: High-Contrast Edition für Dark-Sidebar/Light-Canvas.
- *   - [2026-08-29 20:50:00 CEST]: Dunkelgrau und Sonnengelb integriert.
- *   - [2026-08-29 21:15:00 CEST]: Farbkreis-Sortierung von Rot bis Magenta.
+ *   - [2026-08-29 21:15:00 CEST]: Statische Farbkreis-Sortierung.
+ *   - [2026-09-26 10:45:00 CEST]: Umstellung von reinen Farben auf Baugruppen-
+ *     Zugehörigkeiten (Förderbänder, Bandelemente, Antriebsstationen, Knicke, Schurren etc.).
+ *   - [2026-09-26 11:05:00 CEST]: Supabase-Tabelle 'app_config' als zentrale Master-DB
+ *     mit Spalte 'updated_at' verknüpft; doppelten Initial-Fetch bereinigt.
  * =============================================================================
  */
-const COLOR_PRESETS = [
-    { name: 'Rubinrot', hex: '#dc2626' },
-    { name: 'Bernstein', hex: '#ea580c' },
-    { name: 'Sonnengelb', hex: '#eab308' },
-    { name: 'Smaragdgrün', hex: '#16a34a' },
-    { name: 'Königsblau', hex: '#2563eb' },
-    { name: 'Violett', hex: '#7c3aed' },
-    { name: 'Magenta', hex: '#c026d3' },
-    { name: 'Ockergold', hex: '#b45309' },
-    { name: 'Dunkelgrau', hex: '#4b5563' }
+
+window.DEFAULT_COLOR_PRESETS = [
+    { name: 'Förderbänder', hex: '#2563eb' },
+    { name: 'Bandelemente', hex: '#ea580c' },
+    { name: 'Antriebsstationen', hex: '#dc2626' },
+    { name: 'Spannstationen', hex: '#7c3aed' },
+    { name: 'Knicke', hex: '#c026d3' },
+    { name: 'Schurren', hex: '#eab308' },
+    { name: 'Abstützungen', hex: '#16a34a' },
+    { name: 'Sonstiges / Allgemein', hex: '#4b5563' }
 ];
+
+// 1. Initialer Stand (Cache oder Werkseinstellung)
+window.COLOR_PRESETS = JSON.parse(localStorage.getItem('cad_tm_color_categories')) || window.DEFAULT_COLOR_PRESETS;
+
+// 2. Asynchroner Abruf aus Supabase Master-Tabelle
+window.fetchColorCategories = async function () {
+    try {
+        const client = (typeof realDb !== 'undefined') ? realDb : db;
+        const { data, error } = await client.from('app_config').select('value').eq('key', 'color_categories').single();
+        if (!error && data && data.value) {
+            const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                window.COLOR_PRESETS = parsed;
+                localStorage.setItem('cad_tm_color_categories', JSON.stringify(parsed));
+
+                // UI sofort mit den aktuellen Server-Daten aktualisieren
+                if (typeof renderColorPresets === 'function') renderColorPresets();
+                if (typeof renderZoneColorPresets === 'function') renderZoneColorPresets();
+                if (typeof renderCanvas === 'function') renderCanvas();
+            }
+        }
+    } catch (e) {
+        console.warn("Kategorien aus Cache/Default geladen (Supabase nicht erreichbar).", e);
+    }
+};
+
+// 3. Speichern direkt in Supabase
+window.saveColorCategories = async function (categories) {
+    window.COLOR_PRESETS = categories;
+    localStorage.setItem('cad_tm_color_categories', JSON.stringify(categories));
+
+    try {
+        const client = (typeof realDb !== 'undefined') ? realDb : db;
+        await client.from('app_config').upsert({
+            key: 'color_categories',
+            value: JSON.stringify(categories),
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+    } catch (e) {
+        console.warn("Fehler beim Speichern in Supabase (nur Cache aktiv):", e);
+    }
+
+    if (typeof renderColorPresets === 'function') renderColorPresets();
+    if (typeof renderZoneColorPresets === 'function') renderZoneColorPresets();
+    if (typeof renderCanvas === 'function') renderCanvas();
+};
+
+// Genau ein initialer Abruf beim Laden
+window.fetchColorCategories();
 
 // Globale State-Arrays
 window.currentProjects = [];

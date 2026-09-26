@@ -31,41 +31,10 @@ function initApp() {
     }
 
     // Kontextmenü bei Klick irgendwo schließen
-    // Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
-    // Kontextmenü und ausgeklappte Bereiche bei Klick überall schließen (Capture-Phase)
-    window.addEventListener('click', (e) => {
-        // 1. Kontextmenü schließen
+    window.addEventListener('click', () => {
         const menu = document.getElementById('canvasContextMenu');
-        if (menu && !e.target.closest('#canvasContextMenu')) {
-            menu.style.display = 'none';
-        }
-
-        // 2. Klick in einem Modal ignorieren
-        if (e.target.closest('.modal-content')) return;
-
-        // 3. Toggle-Buttons regeln ihr Öffnen/Schließen selbst
-        if (e.target.closest('.btn-toggle-zone-times') || e.target.closest('.btn-expand-toggle')) return;
-
-        // 4. Klicks innerhalb von Formularen/Listen nicht abbrechen
-        if (e.target.closest('.zone-body') || e.target.closest('.assembly-body')) return;
-
-        // 5. Bei Klick auf leeren Canvas oder andere Blöcke -> Zeiten einklappen
-        let needsClose = false;
-        if (window.expandedZones && window.expandedZones.size > 0) {
-            window.expandedZones.clear();
-            needsClose = true;
-        }
-        if (window.expandedNodes && window.expandedNodes.size > 0) {
-            window.expandedNodes.clear();
-            needsClose = true;
-        }
-
-        if (needsClose && typeof renderCanvas === 'function') {
-            setTimeout(() => {
-                renderCanvas();
-            }, 10);
-        }
-    }, true);
+        if (menu) menu.style.display = 'none';
+    });
 
     // Event Listener für Formulare und Modals
     const addListenerIfEx = (id, event, handler) => {
@@ -183,17 +152,11 @@ window.toggleSidebarZoneCollapse = function (e, zoneId) {
  *     Komponenten-Pool um (Sortierung nach Farbe & Name, Klick/Drag zum Platzieren).
  * =============================================================================
  */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Sidebar Rendering (Dual-Mode: CAD-Zonen vs. Manager-Komponenten-Pool)
- * ERSETZEN IN: app.js (Gesamte Funktion renderSidebarZones)
- * =============================================================================
- */
 window.renderSidebarZones = function () {
     const container = document.getElementById('sidebarZonesContainer');
     if (!container) return;
 
+    // Den Titel der Sidebar-Sektion dynamisch anpassen
     const sectionTitleEl = container.previousElementSibling;
     const isMgr = (window.activeCanvasMode === 'manager');
 
@@ -204,124 +167,140 @@ window.renderSidebarZones = function () {
     // =========================================================================
     // MODUS A: MANAGER-COCKPIT -> KOMPONENTEN-POOL (NACH FARBE & NAME SORTIERT)
     // =========================================================================
+    // =========================================================================
+    // MODUS A: MANAGER-COCKPIT -> ÜBERSICHTS-RAHMEN & EINKLAPPBARER POOL
+    // ERSETZEN IN: app.js (In renderSidebarZones() -> if (isMgr) { ... })
+    // Zeitstempel: 2026-09-26 10:45:00 CEST
+    // =========================================================================
     if (isMgr) {
-        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { placements: {} };
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
         const rawNodes = (currentNodes || []).filter(n => n.block_type !== 'note');
-
-        if (rawNodes.length === 0) {
-            container.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 10px;">Keine Komponenten im CAD-Plan vorhanden.</div>';
-            return;
-        }
-
-        const colorOrder = (typeof COLOR_PRESETS !== 'undefined') ? COLOR_PRESETS.map(c => c.hex.toLowerCase()) : [];
-        const sortedNodes = [...rawNodes].sort((a, b) => {
-            const colA = (a.color_hex || '#2b6cb0').toLowerCase();
-            const colB = (b.color_hex || '#2b6cb0').toLowerCase();
-            const idxA = colorOrder.indexOf(colA);
-            const idxB = colorOrder.indexOf(colB);
-
-            if (idxA !== idxB) {
-                return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-            }
-            return (a.name || '').localeCompare(b.name || '');
-        });
-
         const fragment = document.createDocumentFragment();
-        const placedNodes = [];
-        const hiddenNodes = [];
 
-        // In auf dem Board platzierte und ausgeblendete Blöcke splitten
-        sortedNodes.forEach(node => {
-            if (mgrLayout.placements && mgrLayout.placements[node.id]) {
-                placedNodes.push(node);
-            } else {
-                hiddenNodes.push(node);
-            }
-        });
+        // ---------------------------------------------------------------------
+        // 1. ÜBERSICHTS-RAHMEN DES MANAGER-BOARDS (FOKUS & SICHTBARKEIT)
+        // ---------------------------------------------------------------------
+        const zonesHeader = document.createElement('div');
+        zonesHeader.className = 'sidebar-section-title';
+        zonesHeader.style.cssText = 'margin-top: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;';
+        zonesHeader.innerHTML = `
+            <span>Übersichts-Rahmen (${(mgrLayout.zones || []).length})</span>
+            <button type="button" class="sb-details-toggle" onclick="centerViewOnVisible()" title="Alle Rahmen ins Bild setzen">⟲ Alle</button>
+        `;
+        fragment.appendChild(zonesHeader);
 
-        const createItemHtml = (node, isPlaced) => {
-            const nodeColor = node.color_hex || '#2b6cb0';
-            const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
-            const docText = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+        const zonesContainer = document.createElement('div');
+        zonesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;';
 
-            const item = document.createElement('div');
-            item.className = `sidebar-zone-item sb-pool-item ${isPlaced ? 'is-placed' : ''}`;
-            item.dataset.nodeId = node.id;
-            item.draggable = true;
+        if (!mgrLayout.zones || mgrLayout.zones.length === 0) {
+            zonesContainer.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Übersichts-Rahmen auf dem Board.</div>';
+        } else {
+            mgrLayout.zones.forEach(zone => {
+                const zEl = document.createElement('div');
+                zEl.className = 'sidebar-zone-item top-zone';
+                zEl.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #2d3748; border-radius: 4px; font-size: 12px; margin-bottom: 2px;';
 
-            item.style.display = 'flex';
-            item.style.justifyContent = 'space-between';
-            item.style.alignItems = 'center';
-            item.style.padding = '6px 8px';
-            item.style.background = isPlaced ? 'rgba(45, 55, 72, 0.45)' : '#2d3748';
-            item.style.borderRadius = '4px';
-            item.style.fontSize = '12px';
-            item.style.marginBottom = '4px';
-            item.style.borderLeft = `3px solid ${nodeColor}`;
-            item.style.cursor = 'grab';
-            item.style.transition = 'all 0.15s ease';
+                const docBadge = zone.doc_number ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(zone.doc_number)}</span>` : '';
 
-            const docBadgeHtml = docText ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(docText)}</span>` : '';
-
-            item.innerHTML = `
-                <div style="display:flex; align-items:center; overflow:hidden; flex:1; gap: 5px;" title="${escapeHtml(node.name)}">
-                    <span style="font-size: 13px; line-height: 1;">${iconSvg}</span>
-                    <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
-                        <span style="overflow:hidden; text-overflow:ellipsis; color: ${isPlaced ? '#a0aec0' : '#fff'}; font-weight: 600;">${escapeHtml(node.name)}</span>
-                        <div style="display:flex; align-items:center; margin-top: 1px;">
-                            ${docBadgeHtml}
+                zEl.innerHTML = `
+                    <div style="display:flex; align-items:center; overflow:hidden; flex:1; cursor:pointer;" onclick="window.centerOnManagerZone('${zone.id}')" title="Kamera auf Rahmen zentrieren: ${escapeHtml(zone.title)}">
+                        <span style="color:${zone.color_hex || '#2b6cb0'}; font-size: 14px; margin-right: 6px;">📁</span>
+                        <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
+                            <span style="overflow:hidden; text-overflow:ellipsis; font-weight:600; color:#fff;">${escapeHtml(zone.title)}</span>
+                            <div>${docBadge}</div>
                         </div>
                     </div>
-                </div>
-                <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                    ${isPlaced
-                    ? `<button type="button" class="btn-pool-action focus" onclick="window.centerOnManagerBlock('${node.id}')" title="Kamera auf Bauteil zentrieren">🎯</button>
-                           <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
-                    : `<button type="button" class="btn-pool-action add" onclick="window.addBlockToManagerCanvas('${node.id}')" title="Auf Manager-Board einfügen">➕</button>`
-                }
-                </div>
-            `;
-
-            item.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', node.id);
-                e.dataTransfer.effectAllowed = 'copyMove';
+                    <div style="display:flex; gap:4px; flex-shrink:0;">
+                        <button type="button" title="Kamera auf Rahmen zentrieren" onclick="window.centerOnManagerZone('${zone.id}')" style="background:none; border:none; cursor:pointer; font-size:12px;">🎯</button>
+                        <button type="button" title="Rahmen sperren/entsperren" onclick="window.toggleManagerZoneLock(event, '${zone.id}')" style="background:none; border:none; cursor:pointer; font-size:11px;">${zone.is_locked ? '🔒' : '🔓'}</button>
+                    </div>
+                `;
+                zonesContainer.appendChild(zEl);
             });
+        }
+        fragment.appendChild(zonesContainer);
 
-            return item;
+        // ---------------------------------------------------------------------
+        // 2. KOMPONENTEN-POOL (EINKLAPPBARES AKKORDEON)
+        // ---------------------------------------------------------------------
+        const isPoolCollapsed = localStorage.getItem('cad_tm_pool_collapsed') === 'true';
+
+        const poolToggleHeader = document.createElement('div');
+        poolToggleHeader.className = 'sb-pool-collapsible-header';
+        poolToggleHeader.innerHTML = `
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span class="pool-toggle-icon">${isPoolCollapsed ? '▶' : '▼'}</span>
+                <span class="sidebar-section-title" style="margin: 0; color: #e2e8f0;">Komponenten-Pool (${rawNodes.length})</span>
+            </div>
+            <span style="font-size:10px; color:#a0aec0;">${isPoolCollapsed ? 'Ausklappen' : 'Einklappen'}</span>
+        `;
+        poolToggleHeader.onclick = () => {
+            const nextState = !isPoolCollapsed;
+            localStorage.setItem('cad_tm_pool_collapsed', nextState ? 'true' : 'false');
+            renderSidebarZones();
         };
+        fragment.appendChild(poolToggleHeader);
 
-        // 1. Platzierte Elemente direkt rendern
-        placedNodes.forEach(node => fragment.appendChild(createItemHtml(node, true)));
+        if (!isPoolCollapsed) {
+            const poolBody = document.createElement('div');
+            poolBody.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-top: 6px;';
 
-        // 2. Ausgeblendete Elemente im Akkordeon-Unterordner rendern
-        if (hiddenNodes.length > 0) {
-            const isOpen = window.managerHiddenPoolOpen === true;
-            const hiddenHeader = document.createElement('div');
-            hiddenHeader.className = 'sidebar-section-title';
-            hiddenHeader.style.cursor = 'pointer';
-            hiddenHeader.style.display = 'flex';
-            hiddenHeader.style.justifyContent = 'space-between';
-            hiddenHeader.style.alignItems = 'center';
-            hiddenHeader.style.marginTop = '15px';
-            hiddenHeader.style.paddingTop = '10px';
-            hiddenHeader.style.borderTop = '1px solid #4a5568';
-            hiddenHeader.innerHTML = `<span>Ausgeblendete Instanzen (${hiddenNodes.length})</span><span style="font-size: 10px;">${isOpen ? '▼' : '▶'}</span>`;
+            if (rawNodes.length === 0) {
+                poolBody.innerHTML = '<div style="font-size: 11px; color: #718096; padding-left: 6px;">Keine Komponenten im Plan vorhanden.</div>';
+            } else {
+                // Sortierung nach Baugruppen-Farben und sekundär nach Name
+                const colorOrder = (window.COLOR_PRESETS || []).map(c => c.hex.toLowerCase());
+                const sortedNodes = [...rawNodes].sort((a, b) => {
+                    const colA = (a.color_hex || '#2b6cb0').toLowerCase();
+                    const colB = (b.color_hex || '#2b6cb0').toLowerCase();
+                    const idxA = colorOrder.indexOf(colA);
+                    const idxB = colorOrder.indexOf(colB);
+                    if (idxA !== idxB) return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+                    return (a.name || '').localeCompare(b.name || '');
+                });
 
-            hiddenHeader.onclick = () => {
-                window.managerHiddenPoolOpen = !window.managerHiddenPoolOpen;
-                if (typeof renderSidebarZones === 'function') renderSidebarZones();
-            };
-            fragment.appendChild(hiddenHeader);
+                sortedNodes.forEach(node => {
+                    const isPlaced = !!(mgrLayout.placements && mgrLayout.placements[node.id]);
+                    const nodeColor = node.color_hex || '#2b6cb0';
+                    const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+                    const docText = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
 
-            if (isOpen) {
-                const hiddenContainer = document.createElement('div');
-                hiddenContainer.style.display = 'flex';
-                hiddenContainer.style.flexDirection = 'column';
-                hiddenContainer.style.gap = '2px';
-                hiddenContainer.style.marginTop = '6px';
-                hiddenNodes.forEach(node => hiddenContainer.appendChild(createItemHtml(node, false)));
-                fragment.appendChild(hiddenContainer);
+                    const item = document.createElement('div');
+                    item.className = `sidebar-zone-item sb-pool-item ${isPlaced ? 'is-placed' : ''}`;
+                    item.dataset.nodeId = node.id;
+                    item.draggable = true;
+                    item.style.cssText = `display:flex; justify-content:space-between; align-items:center; padding:6px 8px; background:${isPlaced ? 'rgba(45, 55, 72, 0.45)' : '#2d3748'}; border-radius:4px; font-size:12px; margin-bottom:3px; border-left:3px solid ${nodeColor}; cursor:grab; transition:all 0.15s ease;`;
+
+                    const docBadgeHtml = docText ? `<span style="font-family:monospace; font-size:9px; background:#1a202c; color:#cbd5e0; padding:1px 4px; border-radius:2px; margin-right:4px;">${escapeHtml(docText)}</span>` : '';
+
+                    item.innerHTML = `
+                        <div style="display:flex; align-items:center; overflow:hidden; flex:1; gap: 5px;" title="${escapeHtml(node.name)}">
+                            <span style="font-size: 13px; line-height: 1;">${iconSvg}</span>
+                            <div style="display:flex; flex-direction:column; overflow:hidden; white-space:nowrap;">
+                                <span style="overflow:hidden; text-overflow:ellipsis; color: ${isPlaced ? '#a0aec0' : '#fff'}; font-weight: 600;">${escapeHtml(node.name)}</span>
+                                <div style="display:flex; align-items:center; margin-top: 1px;">
+                                    ${docBadgeHtml}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                            ${isPlaced
+                            ? `<button type="button" class="btn-pool-action focus" onclick="window.centerOnManagerBlock('${node.id}')" title="Kamera auf Bauteil zentrieren">🎯</button>
+                               <button type="button" class="btn-pool-action remove" onclick="window.removeBlockFromManagerCanvas('${node.id}')" title="Vom Manager-Board entfernen">✕</button>`
+                            : `<button type="button" class="btn-pool-action add" onclick="window.addBlockToManagerCanvas('${node.id}')" title="Auf Manager-Board einfügen">➕</button>`
+                        }
+                        </div>
+                    `;
+
+                    item.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', node.id);
+                        e.dataTransfer.effectAllowed = 'copyMove';
+                    });
+
+                    poolBody.appendChild(item);
+                });
             }
+            fragment.appendChild(poolBody);
         }
 
         container.innerHTML = '';
@@ -344,6 +323,7 @@ window.renderSidebarZones = function () {
     }
 
     const fragment = document.createDocumentFragment();
+
     const isLocalProject = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
     const canReorderZones = isAdmin || isLocalProject;
 

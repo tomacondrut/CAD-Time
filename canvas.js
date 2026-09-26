@@ -2843,3 +2843,44 @@ window.handlePasteNodes = async function () {
     showToast(`${window.copiedNodeIds.length} Instanz(en) eingefügt`, 'success');
     if (typeof fetchCanvasData === 'function') await fetchCanvasData();
 };
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: Canvas Engine (Kamera-Fokus auf Manager-Zonen)
+* HINZUFÜGEN IN: canvas.js (Am Dateiende)
+* Zeitstempel: 2026-09-26 10:45:00 CEST
+* =============================================================================
+*/
+window.centerOnManagerZone = function (zoneId) {
+    const layout = (typeof getManagerLayout === 'function') ? getManagerLayout() : null;
+    if (!layout || !Array.isArray(layout.zones)) return;
+
+    const zone = layout.zones.find(z => z.id === zoneId);
+    if (!zone) return;
+
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return;
+
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    const zW = parseFloat(zone.width) || 620;
+    const zH = parseFloat(zone.height) || 440;
+
+    // Zoomfaktor berechnen, um den Rahmen mit Puffer einzupassen
+    const padding = 80;
+    const targetScale = Math.max(0.2, Math.min(1.5, Math.min((vw - padding * 2) / zW, (vh - padding * 2) / zH)));
+
+    window.currentScale = targetScale;
+    window.currentPanX = (vw / 2) - ((zone.pos_x + (zW / 2)) * targetScale);
+    window.currentPanY = (vh / 2) - ((zone.pos_y + (zH / 2)) * targetScale);
+
+    if (typeof applyCanvasTransform === 'function') applyCanvasTransform(true);
+
+    const el = document.getElementById(zoneId);
+    if (el) {
+        el.style.transition = 'box-shadow 0.25s ease';
+        el.style.boxShadow = '0 0 28px 6px #3182ce';
+        setTimeout(() => { el.style.boxShadow = ''; }, 1400);
+    }
+};

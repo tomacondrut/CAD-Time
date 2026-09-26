@@ -731,24 +731,40 @@ html, body {
 }
 
 /* Toast */
+/*
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Toast-Positionierung oberhalb des Zeiterfassungs-Widgets)
+* Zeitstempel: 2026-09-26 10:25:00 CEST
+* Breadcrumb: [2026-09-26] BUGFIX: bottom von 20px auf 80px angehoben, damit
+* Status-Meldungen ("Zeiterfassung gestartet" etc.) nicht mehr über der
+* unteren Timer-Leiste eingeblendet werden.
+* =============================================================================
+ */
 #toast {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #2d3748;
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 4000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  display: none;
+    position: fixed;
+    bottom: 80px; /* Schwebt mit 15px Abstand sauber über der Live-Timer-Bar */
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2d3748;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 4000;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    display: none;
+    pointer-events: none; /* Klicks gehen durch, falls der Toast noch ausfadet */
 }
 
-#toast.toast-error { background: var(--danger); }
-#toast.toast-success { background: var(--success); }
+#toast.toast-error {
+    background: var(--danger);
+}
+
+#toast.toast-success {
+    background: var(--success);
+}
 
 /* Tabellen */
 .log-table {
@@ -1990,26 +2006,36 @@ html, body {
  *   integriert, um Überlappung mit den Top-Right-Icons (360px rechts) auszuschließen.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Linksbündige Verankerung des Modus-Umschalters)
+ * ERSETZEN IN: style.css (Klasse .canvas-mode-switcher-container)
+ * Zeitstempel: 2026-09-26 10:25:00 CEST
+ * Breadcrumb: [2026-09-26] BUGFIX: Zentrierung (left: 50%) entfernt.
+ *   Leiste beginnt links (left: 20px) und hält durch max-width strikt 360px
+ *   Abstand zu den oberen rechten Dateibuttons.
+ * =============================================================================
+ */
 .canvas-mode-switcher-container {
     position: absolute;
     top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 45; /* Hinter Tooltips und Dialogen, vor dem Canvas */
+    left: 20px;
+    transform: none; /* Zentrierung aufgehoben */
+    z-index: 45;
     display: flex;
     align-items: center;
     gap: 8px;
     pointer-events: auto;
-    /* Schützt die fixierten Buttons rechts (360px) und die Sidebar links */
-    max-width: calc(100vw - 720px);
+    /* Verhindert Kollision mit den 7 Buttons oben rechts (360px Breite) */
+    max-width: calc(100% - 370px);
     overflow: hidden;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 768px) {
     .canvas-mode-switcher-container {
-        left: 340px;
-        transform: none;
-        max-width: calc(100vw - 720px);
+        left: 64px; /* Platzhalter für den mobilen Menü-Button ☰ */
+        max-width: calc(100% - 74px);
     }
 }
 
@@ -2027,6 +2053,18 @@ html, body {
     white-space: nowrap;
     flex-shrink: 0;
 }
+
+    .btn-manager-action:hover {
+        background: #edf2f7;
+        color: #2b6cb0;
+    }
+
+    .btn-manager-action.active {
+        background: #e53e3e !important;
+        color: #ffffff !important;
+        border-color: #c53030 !important;
+        box-shadow: 0 0 10px rgba(229, 62, 62, 0.5) !important;
+    }
 
 .canvas-mode-switcher {
     display: flex;
@@ -2059,19 +2097,6 @@ html, body {
             color: #fff;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
-
-.btn-manager-action {
-    background: #fff;
-    border: 1px solid #cbd5e0;
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 11px;
-    font-weight: bold;
-    color: #2d3748;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s ease;
-}
 
     .btn-manager-action:hover {
         background: #edf2f7;
@@ -2492,4 +2517,98 @@ body.assigning-live-time {
     color: #ffffff !important;
     border-color: #c53030 !important;
     box-shadow: 0 0 10px rgba(229, 62, 62, 0.5) !important;
+}
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Baugruppen-Farbkategorien & Manager-Sidebar Akkordeon)
+ * EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-26 10:45:00 CEST
+ * =============================================================================
+ */
+
+/* Baugruppen-Kategorien Editor im Admin-Modal */
+.color-cat-list-container {
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid #edf2f7;
+    border-radius: 6px;
+    padding: 6px;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.color-cat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 5px 8px;
+    border-radius: 4px;
+    gap: 8px;
+}
+
+.color-picker-input {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+    background: none;
+    flex-shrink: 0;
+}
+
+.color-cat-name-input {
+    flex: 1;
+    border: 1px solid transparent;
+    padding: 4px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #2d3748;
+    border-radius: 3px;
+    background: transparent;
+    transition: all 0.15s ease;
+}
+
+    .color-cat-name-input:focus {
+        background: #ffffff;
+        border-color: #3182ce;
+        outline: none;
+    }
+
+.new-color-cat-box {
+    background: #edf2f7;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e0;
+}
+
+/* Einklappbarer Header für den Komponenten-Pool */
+.sb-pool-collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #2d3748;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+    .sb-pool-collapsible-header:hover {
+        background: #3a475d;
+    }
+
+.pool-toggle-icon {
+    font-size: 10px;
+    color: #a0aec0;
+    display: inline-block;
+    width: 12px;
 }
