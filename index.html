@@ -774,11 +774,30 @@
                 </div>
 
                 <!-- Zuweisen / Verwerfen Leiste nach Stop -->
+                <
+                <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Live-Timer Review-Leiste mit Mousewheel- & Direkteingabe (5-Minuten-Raster)
+    ERSETZEN IN: index.html (Im #liveTimerBar -> #liveTimerReviewRow)
+    Zeitstempel: 2026-09-26 13:50:00 CEST
+    Breadcrumbs:
+      - [2026-09-26 09:35:00 CEST]: Live-Timer Dock Basis.
+      - [2026-09-26 13:50:00 CEST]: Statischen Text durch interaktive Stunden-
+        und Minutenfelder mit Mousewheel-Support (5-Minuten-Schritte) ersetzt.
+    =============================================================================
+    -->
                 <div class="live-timer-row review-row" id="liveTimerReviewRow" style="display:none;">
-                    <span class="live-timer-review-text" id="liveTimerReviewSummary">0h 00m erfasst</span>
+                    <span class="live-timer-review-text">Erfasst:</span>
+                    <div class="time-inputs-row live-timer-time-inputs" id="liveTimerReviewInputs">
+                        <input type="number" id="liveTimerReviewHours" class="log-input input-hours" min="0" value="0" style="width: 44px;" title="Stunden (Mausrad: +/- 1h)" onwheel="handleTimeWheel(event, 'hour')" />
+                        <span style="color: #cbd5e0; font-size: 11px; font-weight: bold;">h</span>
+                        <input type="number" id="liveTimerReviewMins" class="log-input input-mins" min="0" max="55" step="5" value="05" style="width: 44px;" title="Minuten (Mausrad: +/- 5m)" onwheel="handleTimeWheel(event, 'min')" />
+                        <span style="color: #cbd5e0; font-size: 11px; font-weight: bold;">m</span>
+                    </div>
                     <div class="live-timer-actions">
                         <button type="button" class="btn-live-action assign" onclick="window.startLiveTimeAssignment()" title="Block oder Rahmen im Canvas anklicken">🎯 Zuweisen</button>
-                        <button type="button" class="btn-live-action resume" onclick="window.resumeLiveTimer()" title="Timer weiterlaufen lassen">▶ Weiter</button>
+                        <button type="button" class="btn-live-action resume" onclick="window.resumeLiveTimer()" title="Timer mit dieser Zeit weiterlaufen lassen">▶ Weiter</button>
                         <button type="button" class="btn-live-action discard" onclick="window.discardLiveTimer()" title="Erfassung verwerfen">🗑️ Verwerfen</button>
                     </div>
                 </div>

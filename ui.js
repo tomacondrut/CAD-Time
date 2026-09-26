@@ -4195,6 +4195,19 @@ function formatSecondsToHMS(totalSec) {
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Live-Timer Stopp-Anpassung mit 5-Minuten-Raster)
+ * ERSETZEN IN: ui.js (Funktionen updateLiveTimerUI, stopLiveTimer, resumeLiveTimer, discardLiveTimer und Klick-Interceptor)
+ * Zeitstempel: 2026-09-26 13:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 09:35:00 CEST]: Live-Timer Dock Engine.
+ *   - [2026-09-26 13:50:00 CEST]: Zeit nach Stopp editierbar gemacht (händisch 
+ *     sowie per Mousewheel). Runden beim Stoppen automatisch auf 5-Minuten-Schritte.
+ * =============================================================================
+ */
+
 function updateLiveTimerUI() {
     const display = document.getElementById('liveTimerDisplay');
     const pulse = document.getElementById('liveTimerPulse');
@@ -4236,15 +4249,20 @@ function updateLiveTimerUI() {
         reviewRow.style.display = 'none';
         assignHint.style.display = 'flex';
     } else if (window.liveTimerState.accumulatedSeconds > 0) {
-        // Gestoppt, wartet auf Zuweisung oder Verwerfen
+        // Gestoppt: Eingabefelder mit gerundeter Zeit anzeigen
         pulse.className = 'live-timer-pulse';
         controlsRow.style.display = 'none';
         reviewRow.style.display = 'flex';
         assignHint.style.display = 'none';
 
-        const decHours = Math.max(0.0167, parseFloat((window.liveTimerState.accumulatedSeconds / 3600).toFixed(4)));
-        const summaryText = typeof formatHoursToHM === 'function' ? formatHoursToHM(decHours) : `${Math.round(window.liveTimerState.accumulatedSeconds / 60)}m`;
-        document.getElementById('liveTimerReviewSummary').textContent = `${summaryText} erfasst (${formatSecondsToHMS(window.liveTimerState.accumulatedSeconds)})`;
+        const totalMins = Math.round(window.liveTimerState.accumulatedSeconds / 60);
+        const hInput = document.getElementById('liveTimerReviewHours');
+        const mInput = document.getElementById('liveTimerReviewMins');
+
+        if (hInput && mInput && !hInput.dataset.userEdited) {
+            hInput.value = Math.floor(totalMins / 60);
+            mInput.value = (totalMins % 60).toString().padStart(2, '0');
+        }
     } else {
         // Idle
         pulse.className = 'live-timer-pulse';
@@ -4257,39 +4275,6 @@ function updateLiveTimerUI() {
         assignHint.style.display = 'none';
     }
 }
-
-window.startLiveTimer = function () {
-    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) return;
-
-    window.liveTimerState.isRunning = true;
-    window.liveTimerState.isPaused = false;
-    window.liveTimerState.startTime = Date.now();
-
-    if (window.liveTimerState.intervalId) clearInterval(window.liveTimerState.intervalId);
-    window.liveTimerState.intervalId = setInterval(updateLiveTimerUI, 500);
-
-    updateLiveTimerUI();
-    showToast('Zeiterfassung gestartet', 'info');
-};
-
-window.pauseLiveTimer = function () {
-    if (!window.liveTimerState.isRunning || window.liveTimerState.isPaused) return;
-
-    window.liveTimerState.accumulatedSeconds += (Date.now() - window.liveTimerState.startTime) / 1000;
-    window.liveTimerState.isPaused = true;
-
-    if (window.liveTimerState.intervalId) {
-        clearInterval(window.liveTimerState.intervalId);
-        window.liveTimerState.intervalId = null;
-    }
-
-    updateLiveTimerUI();
-    showToast('Zeiterfassung pausiert', 'info');
-};
-
-window.resumeLiveTimer = function () {
-    window.startLiveTimer();
-};
 
 window.stopLiveTimer = function () {
     if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
@@ -4304,7 +4289,36 @@ window.stopLiveTimer = function () {
         window.liveTimerState.intervalId = null;
     }
 
+    // Beim Stoppen automatisch auf 5-Minuten-Schritte runden (mindestens 5m, falls Zeit lief)
+    if (window.liveTimerState.accumulatedSeconds > 0) {
+        const rawMinutes = window.liveTimerState.accumulatedSeconds / 60;
+        const roundedMins = Math.max(5, Math.round(rawMinutes / 5) * 5);
+        window.liveTimerState.accumulatedSeconds = roundedMins * 60;
+    }
+
+    // Edit-Flag zurücksetzen und Felder befüllen
+    const hInput = document.getElementById('liveTimerReviewHours');
+    const mInput = document.getElementById('liveTimerReviewMins');
+    if (hInput && mInput) {
+        delete hInput.dataset.userEdited;
+        const mins = Math.round(window.liveTimerState.accumulatedSeconds / 60);
+        hInput.value = Math.floor(mins / 60);
+        mInput.value = (mins % 60).toString().padStart(2, '0');
+    }
+
     updateLiveTimerUI();
+};
+
+window.resumeLiveTimer = function () {
+    // Falls vor dem Fortsetzen Werte manuell geändert wurden, diese als Startwert übernehmen
+    const hInput = document.getElementById('liveTimerReviewHours');
+    const mInput = document.getElementById('liveTimerReviewMins');
+    if (hInput && mInput) {
+        const h = parseInt(hInput.value, 10) || 0;
+        const m = parseInt(mInput.value, 10) || 0;
+        window.liveTimerState.accumulatedSeconds = (h * 3600) + (m * 60);
+    }
+    window.startLiveTimer();
 };
 
 window.discardLiveTimer = async function () {
@@ -4318,29 +4332,35 @@ window.discardLiveTimer = async function () {
         window.liveTimerState.isPaused = false;
         const noteInput = document.getElementById('liveTimerNote');
         if (noteInput) noteInput.value = '';
+
+        const hInput = document.getElementById('liveTimerReviewHours');
+        const mInput = document.getElementById('liveTimerReviewMins');
+        if (hInput) { hInput.value = '0'; delete hInput.dataset.userEdited; }
+        if (mInput) { mInput.value = '05'; }
+
         updateLiveTimerUI();
         showToast('Zeiterfassung verworfen', 'info');
     }
 };
 
-window.startLiveTimeAssignment = function () {
-    window.isAssigningLiveTime = true;
-    document.body.classList.add('assigning-live-time');
-    updateLiveTimerUI();
-    showToast('Klicke auf den gewünschten Block oder Rahmen-Header', 'info');
-};
-
-window.cancelLiveTimeAssignment = function () {
-    window.isAssigningLiveTime = false;
-    document.body.classList.remove('assigning-live-time');
-    updateLiveTimerUI();
-};
+// Händische Eingabe & Wheel-Änderungen sofort im State puffern
+document.addEventListener('input', (e) => {
+    if (e.target.closest('#liveTimerReviewInputs')) {
+        const hInput = document.getElementById('liveTimerReviewHours');
+        const mInput = document.getElementById('liveTimerReviewMins');
+        if (hInput && mInput) {
+            hInput.dataset.userEdited = 'true';
+            const h = parseInt(hInput.value, 10) || 0;
+            const m = parseInt(mInput.value, 10) || 0;
+            window.liveTimerState.accumulatedSeconds = (h * 3600) + (m * 60);
+        }
+    }
+});
 
 // Globaler Klick-Interceptor im Zuweisungsmodus
 document.addEventListener('click', async (e) => {
     if (!window.isAssigningLiveTime) return;
 
-    // Klicks innerhalb des Widgets oder von Dialogen ignorieren
     if (e.target.closest('#liveTimerBar, .modal-backdrop, #dialogModal')) return;
 
     const blockCard = e.target.closest('.assembly-card');
@@ -4357,9 +4377,22 @@ document.addEventListener('click', async (e) => {
     const taskType = taskTypeSelect ? taskTypeSelect.value : 'drafting';
     const note = noteInput ? noteInput.value.trim() : '';
 
-    const totalSeconds = window.liveTimerState.accumulatedSeconds || 0;
-    // Mindestens 1 Minute bzw. 0.0167h buchen
-    const decimalHours = Math.max(0.0167, parseFloat((totalSeconds / 3600).toFixed(4)));
+    // Liest exakt die (per Tastatur oder Mausrad) angepassten Werte aus den Eingabefeldern
+    const hInput = document.getElementById('liveTimerReviewHours');
+    const mInput = document.getElementById('liveTimerReviewMins');
+    let totalSeconds = window.liveTimerState.accumulatedSeconds || 0;
+    if (hInput && mInput) {
+        const h = parseInt(hInput.value, 10) || 0;
+        const m = parseInt(mInput.value, 10) || 0;
+        totalSeconds = (h * 3600) + (m * 60);
+    }
+
+    if (totalSeconds <= 0) {
+        showToast('Bitte eine Zeit größer als 0 Minuten angeben.', 'error');
+        return;
+    }
+
+    const decimalHours = parseFloat((totalSeconds / 3600).toFixed(4));
 
     let targetId = null;
     let targetZoneId = null;
@@ -4383,17 +4416,14 @@ document.addEventListener('click', async (e) => {
         identifierLabel = docPart ? `${docPart} - ${zone.title}` : zone.title;
     }
 
-    const question = `Diesem Element "${identifierLabel}" zuweisen?`;
+    const timeFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(decimalHours) : `${decimalHours}h`;
+    const question = `Dem Element "${identifierLabel}" ${timeFormatted} zuweisen?`;
     const confirmed = typeof customConfirm === 'function'
         ? await customConfirm('Zeit zuweisen', question, 'Zuweisen', 'Abbrechen')
         : confirm(question);
 
-    if (!confirmed) {
-        // Bleibt im Zuweisungsmodus, damit ein anderes Element geklickt werden kann
-        return;
-    }
+    if (!confirmed) return;
 
-    // Buchung in Datenbank ausführen
     const uCode = (typeof activeUserCode !== 'undefined' && activeUserCode) ? activeUserCode : 'COT';
     const pId = typeof activeProjectId !== 'undefined' ? activeProjectId : null;
     const finalStatus = (typeof isAdmin !== 'undefined' && isAdmin) ? 'approved' : 'pending';
@@ -4417,28 +4447,26 @@ document.addEventListener('click', async (e) => {
         return;
     }
 
-    // Erfolgreich verbucht
-    const timeFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(decimalHours) : `${decimalHours}h`;
     showToast(`Zeit gebucht: ${timeFormatted} auf "${identifierLabel}"`, 'success');
 
-    // Reset des Timers
     window.isAssigningLiveTime = false;
     document.body.classList.remove('assigning-live-time');
     window.liveTimerState.accumulatedSeconds = 0;
     window.liveTimerState.isRunning = false;
     window.liveTimerState.isPaused = false;
     if (noteInput) noteInput.value = '';
+    if (hInput) { hInput.value = '0'; delete hInput.dataset.userEdited; }
+    if (mInput) { mInput.value = '05'; }
 
     updateLiveTimerUI();
 
-    // Canvas und Statistiken aktualisieren
     if (typeof fetchCanvasData === 'function') {
         fetchCanvasData();
     } else {
         if (typeof renderCanvas === 'function') renderCanvas();
         if (typeof updateSidebarStats === 'function') updateSidebarStats();
     }
-}, true); // Capture-Phase: fängt den Klick vor allen anderen Canvas-Karten ab
+}, true);// Capture-Phase: fängt den Klick vor allen anderen Canvas-Karten ab
 
 // ESC-Handler zum Abbrechen des Zuweisungs-Modus
 window.addEventListener('keydown', (e) => {

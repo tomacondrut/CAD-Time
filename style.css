@@ -2630,3 +2630,40 @@ body.assigning-live-time {
     -webkit-user-drag: none !important;
     user-drag: none !important;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Live-Timer Review Time Inputs)
+ * EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-09-26 13:50:00 CEST
+ * =============================================================================
+ */
+.live-timer-time-inputs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #2d3748;
+    padding: 3px 8px;
+    border-radius: 16px;
+    border: 1px solid #4a5568;
+}
+
+    .live-timer-time-inputs input {
+        background: #1a202c;
+        color: #63b3ed;
+        border: 1px solid #4a5568;
+        border-radius: 4px;
+        text-align: center;
+        font-weight: bold;
+        font-family: monospace;
+        font-size: 13px;
+        padding: 3px 4px;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .live-timer-time-inputs input:focus {
+            border-color: #3182ce;
+            box-shadow: 0 0 6px rgba(49, 130, 206, 0.6);
+        }

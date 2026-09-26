@@ -125,18 +125,31 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     kein Canvas-Panning mehr; gesperrte Rahmen lassen Pan gezielt durch).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Manager-Canvas Ghosting-Eliminierung & Pan-Fix)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
+ * Zeitstempel: 2026-09-26 13:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 13:40:00 CEST]: Pan-Filter & e.preventDefault() Basis.
+ *   - [2026-09-26 13:50:00 CEST]: BUGFIX: Viewport-weites dragstart-Interception
+ *     aktiviert. Blockiert das Ghosting im Manager-Canvas vollständig,
+ *     während das Hineinziehen aus der Sidebar (.sb-pool-item) erhalten bleibt.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
-    const canvas = document.getElementById('canvas');
     if (!viewport) return;
 
-    // Verhindert das native Browser-Ghost-Image (HTML5-Drag) auf dem gesamten Canvas
-    if (canvas) {
-        canvas.addEventListener('dragstart', (e) => {
+    // Verhindert das native Browser-Ghosting bei Drag & Pan auf Canvas/Karten/Rahmen,
+    // erlaubt aber weiterhin das Hineinziehen von Bauteilen aus der Sidebar
+    viewport.addEventListener('dragstart', (e) => {
+        if (!e.target.closest('#sidebar')) {
             e.preventDefault();
             return false;
-        });
-    }
+        }
+    });
 
     let isPanning = false;
     let startX = 0, startY = 0;
@@ -161,19 +174,20 @@ function initNativeCanvasEngine() {
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
 
         if (interactiveEl) {
-            // Ausnahmeregelung: Wenn ein Kasten GESPERRT ist und nicht auf einen Button geklickt wurde,
-            // soll der Klick durchgehen und das Canvas-Panning erlauben.
+            // Ausnahmeregelung: Wenn ein Kasten GESPERRT ist oder Klick auf freie Fläche im Manager-Rahmen
             const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
+            const isManagerZoneBody = interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
             const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
 
-            if (isLockedZone && !isButtonOrAction) {
-                // Klick auf gesperrten Rahmen -> Pan starten
+            if ((isLockedZone || isManagerZoneBody) && !isButtonOrAction) {
+                // Erlaubt das Panning auf dem Rahmen
             } else {
                 if (e.button === 0 && !e.altKey) return;
             }
         }
 
         if (e.button === 0 || e.button === 1 || e.button === 2) {
+            e.preventDefault(); // Unterbindet Text-Selektion & natives Browser-Ghosting
             startPan(e.clientX, e.clientY);
         }
     });
@@ -187,8 +201,9 @@ function initNativeCanvasEngine() {
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
         if (interactiveEl) {
             const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
+            const isManagerZoneBody = interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
             const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
-            if (!isLockedZone || isButtonOrAction) return;
+            if ((!isLockedZone && !isManagerZoneBody) || isButtonOrAction) return;
         }
 
         if (e.touches.length === 1) {
@@ -233,7 +248,7 @@ function initNativeCanvasEngine() {
     // ZOOMING
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
-        if (e.target.closest('.inline-logs-container, .log-table, .zone-body') && !e.ctrlKey && !e.metaKey) {
+        if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
             return;
         }
         e.preventDefault();
@@ -821,6 +836,7 @@ function renderCanvas() {
                 let allMovedZoneIds = [];
 
                 const startMgrZoneDrag = (e) => {
+                    
                     if (e.target.closest('.zone-actions, button, input, select')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;
                     if (e.type === 'mousedown') e.preventDefault(); // <--- Verhindert Ghost-Image
@@ -2246,6 +2262,7 @@ function renderCanvas() {
             let initCurX = posX, initCurY = posY;
 
             const startCardDrag = (e) => {
+
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
                 if (e.type === 'touchstart' && e.touches.length > 1) return;
