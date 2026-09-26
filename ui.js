@@ -3794,22 +3794,35 @@ window.saveManagerLayout = async function (layout) {
  *     window.managerFocusActive integriert.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Manager Filter: Nur in Rahmen & Entzerrte Sortier-Hilfe)
+ * ERSETZEN IN: ui.js (Bereich switchCanvasMode bis toggleManagerSortHelper)
+ * Zeitstempel: 2026-09-26 14:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 12:45:00 CEST]: Sortier-Hilfe Basis.
+ *   - [2026-09-26 14:15:00 CEST]: 1. toggleManagerFramedOnlyFilter ergänzt, um
+ *     alle nicht gerahmten/unverschobenen Elemente im Status-Board auszublenden.
+ *     2. BUGFIX Sortier-Hilfe: startY-Schritt von 180 auf 290 px korrigiert,
+ *     wodurch die Header der 260px hohen Karten vollständig lesbar bleiben.
+ * =============================================================================
+ */
 window.managerFocusActive = false;
+window.managerFramedOnlyActive = localStorage.getItem('cad_tm_mgr_framed_only') === 'true';
 
 window.switchCanvasMode = function (mode) {
     const prevMode = window.activeCanvasMode || 'main';
 
-    // Sortier-Hilfsansicht beim Modus-Wechsel zurücksetzen
     window.isManagerSortHelperActive = false;
     window.managerHelperVirtualPlacements = null;
-    window.managerHelperPlacements = null; // Alias zur 100%igen Kompatibilität mit canvas.js
+    window.managerHelperPlacements = null;
     const btnSortReset = document.getElementById('btnAutoSortManager');
     if (btnSortReset) {
         btnSortReset.classList.remove('active');
         btnSortReset.textContent = '🗂️ Sortier-Hilfe';
     }
 
-    // 1. Kameraposition des vorherigen Modus sichern
     localStorage.setItem(`cad_tm_panX_${prevMode}`, window.currentPanX);
     localStorage.setItem(`cad_tm_panY_${prevMode}`, window.currentPanY);
     localStorage.setItem(`cad_tm_scale_${prevMode}`, window.currentScale);
@@ -3821,22 +3834,26 @@ window.switchCanvasMode = function (mode) {
     const btnManager = document.getElementById('btnModeManager');
     const btnSort = document.getElementById('btnAutoSortManager');
     const btnFocus = document.getElementById('btnToggleManagerFocus');
+    const btnFramed = document.getElementById('btnToggleManagerFramedOnly');
 
     if (btnMain && btnManager) {
         btnMain.classList.toggle('active', mode === 'main');
         btnManager.classList.toggle('active', mode === 'manager');
     }
 
-    if (btnSort) {
-        btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
-    }
+    if (btnSort) btnSort.style.display = mode === 'manager' ? 'inline-block' : 'none';
 
     if (btnFocus) {
         btnFocus.style.display = mode === 'manager' ? 'inline-block' : 'none';
         btnFocus.classList.toggle('active', window.managerFocusActive);
     }
 
-    // 2. Kameraposition des Zielmodus wiederherstellen oder zentrieren
+    if (btnFramed) {
+        btnFramed.style.display = mode === 'manager' ? 'inline-block' : 'none';
+        btnFramed.classList.toggle('active', window.managerFramedOnlyActive);
+        btnFramed.textContent = window.managerFramedOnlyActive ? '🔲 Nur in Rahmen (Aktiv)' : '🔲 Nur in Rahmen';
+    }
+
     const savedX = localStorage.getItem(`cad_tm_panX_${mode}`);
     const savedY = localStorage.getItem(`cad_tm_panY_${mode}`);
     const savedScale = localStorage.getItem(`cad_tm_scale_${mode}`);
@@ -3858,14 +3875,6 @@ window.switchCanvasMode = function (mode) {
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Kompakter Fokus-Toggle)
- * ERSETZEN IN: ui.js (Funktion window.toggleManagerFocusFilter)
- * Zeitstempel: 2026-09-26 10:15:00 CEST
- * =============================================================================
- */
 window.toggleManagerFocusFilter = function () {
     window.managerFocusActive = !window.managerFocusActive;
     const btnFocus = document.getElementById('btnToggleManagerFocus');
@@ -3875,6 +3884,22 @@ window.toggleManagerFocusFilter = function () {
     }
     showToast(window.managerFocusActive ? 'Fokus aktiv: Nur Überhänge & 2D-Übergaben sichtbar' : 'Alle Blöcke eingeblendet', 'info');
     if (typeof renderCanvas === 'function') renderCanvas();
+};
+
+window.toggleManagerFramedOnlyFilter = function () {
+    window.managerFramedOnlyActive = !window.managerFramedOnlyActive;
+    localStorage.setItem('cad_tm_mgr_framed_only', window.managerFramedOnlyActive ? 'true' : 'false');
+
+    const btn = document.getElementById('btnToggleManagerFramedOnly');
+    if (btn) {
+        btn.classList.toggle('active', window.managerFramedOnlyActive);
+        btn.textContent = window.managerFramedOnlyActive ? '🔲 Nur in Rahmen (Aktiv)' : '🔲 Nur in Rahmen';
+    }
+
+    showToast(window.managerFramedOnlyActive ? 'Filter aktiv: Nur Blöcke in Rahmen sichtbar' : 'Alle Blöcke eingeblendet', 'info');
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof window.syncVisibilityToDOM === 'function') window.syncVisibilityToDOM();
+    if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 60);
 };
 
 window.toggleManagerZoneLock = function (e, zoneId) {
@@ -3900,7 +3925,6 @@ window.deleteManagerZone = async function (zoneId) {
     );
 
     if (confirmed) {
-        // Untergeordnete Rahmen werden eine Ebene nach oben freigegeben
         (layout.zones || []).forEach(z => {
             if (z.parent_zone_id === zoneId) {
                 z.parent_zone_id = zone.parent_zone_id || null;
@@ -3909,7 +3933,6 @@ window.deleteManagerZone = async function (zoneId) {
 
         layout.zones = (layout.zones || []).filter(z => z.id !== zoneId);
 
-        // Blöcke im gelöschten Rahmen werden wieder frei auf das Board gelegt
         Object.keys(layout.placements || {}).forEach(k => {
             if (layout.placements[k].zone_id === zoneId) {
                 layout.placements[k].zone_id = zone.parent_zone_id || null;
@@ -3922,17 +3945,6 @@ window.deleteManagerZone = async function (zoneId) {
     }
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Zerstörungsfreie Sortier-Hilfsansicht im Manager-Board)
- * EINFÜGEN IN: ui.js (Direkt nach window.deleteManagerZone)
- * Zeitstempel: 2026-09-26 12:45:00 CEST
- * Breadcrumbs:
- *   - [2026-09-26 12:45:00 CEST]: Reine temporäre Hilfsansicht (Toggle).
- *     Niemals saveManagerLayout() ausführen! Datenbank-Positionen bleiben unberührt.
- * =============================================================================
- */
 window.isManagerSortHelperActive = false;
 window.managerHelperVirtualPlacements = null;
 
@@ -3941,14 +3953,22 @@ window.toggleManagerSortHelper = function () {
     window.isManagerSortHelperActive = !window.isManagerSortHelperActive;
 
     if (window.isManagerSortHelperActive) {
-        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { placements: {} };
+        const mgrLayout = (typeof getManagerLayout === 'function') ? getManagerLayout() : { zones: [], placements: {} };
         const placedIds = new Set(Object.keys(mgrLayout.placements || {}));
 
-        // Nur Blöcke sortieren, die aktuell auf dem Board platziert sind
-        const nodes = (currentNodes || []).filter(n => n.block_type !== 'note' && placedIds.has(n.id));
+        // Berücksichtigt optional den 'Nur in Rahmen'-Filter auch in der Sortier-Hilfe
+        const nodes = (currentNodes || []).filter(n => {
+            if (n.block_type === 'note' || !placedIds.has(n.id)) return false;
+            if (window.managerFramedOnlyActive) {
+                const pl = mgrLayout.placements[n.id];
+                return pl && pl.zone_id && (mgrLayout.zones || []).some(z => z.id === pl.zone_id);
+            }
+            return true;
+        });
+
         if (nodes.length === 0) {
             window.isManagerSortHelperActive = false;
-            showToast('Keine platzierten Blöcke zum Sortieren vorhanden', 'info');
+            showToast('Keine passenden Blöcke zum Sortieren vorhanden', 'info');
             return;
         }
 
@@ -3970,16 +3990,15 @@ window.toggleManagerSortHelper = function () {
             return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
         });
 
-
-        // Rein temporäres Objekt im RAM – KEIN Speichern in DB!
         window.managerHelperVirtualPlacements = {};
-        window.managerHelperPlacements = window.managerHelperVirtualPlacements; // Synchron halten
+        window.managerHelperPlacements = window.managerHelperVirtualPlacements;
+
         let startX = 60;
         sortedColors.forEach(color => {
             let startY = 80;
             groups[color].forEach(node => {
                 window.managerHelperVirtualPlacements[node.id] = { pos_x: startX, pos_y: startY };
-                startY += 180;
+                startY += 290; // 260px Kartenhöhe + 30px freier Puffer verhindert Überdeckung der Header
             });
             startX += 320;
         });
@@ -4005,7 +4024,6 @@ window.toggleManagerSortHelper = function () {
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 60);
 };
 
-// Alias für eventuelle Altaufrufe
 window.autoArrangeManagerCanvas = window.toggleManagerSortHelper;
 
 

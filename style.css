@@ -2667,3 +2667,39 @@ body.assigning-live-time {
             border-color: #3182ce;
             box-shadow: 0 0 6px rgba(49, 130, 206, 0.6);
         }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Isolierte GPU-Ebene für animierte Pfeile)
+ * Zeitstempel: 2026-09-26 14:05:00 CEST
+ * Breadcrumb: [2026-09-26] #flow-layer ergänzt, um CPU-Repaints statischer
+ * Linien durch flowDash-Animationen vollständig zu eliminieren.
+ * =============================================================================
+ */
+#flow-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 6;
+    transform: translateZ(0); /* Zwingt GPU-Layer-Promotion */
+    will-change: transform;
+}
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Manager-Board Rahmen-Filter Button)
+ * Zeitstempel: 2026-09-26 14:15:00 CEST
+ * Breadcrumb: [2026-09-26] #btnToggleManagerFramedOnly.active Styling ergänzt.
+ * =============================================================================
+ */
+#btnToggleManagerFramedOnly.active {
+    background: #2b6cb0 !important;
+    color: #ffffff !important;
+    border-color: #2b6cb0 !important;
+    box-shadow: 0 0 10px rgba(43, 108, 176, 0.5) !important;
+}

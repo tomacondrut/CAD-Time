@@ -720,6 +720,7 @@
                 </div>
                 <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerSortHelper()" title="Temporäre Hilfsansicht (Überschreibt keine gespeicherten Positionen)">🗂️ Sortier-Hilfe</button>
                 <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und 2D-Übergaben filtern">⚠️ Nur Kritische</button>
+                <button type="button" id="btnToggleManagerFramedOnly" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFramedOnlyFilter()" title="Alle freien Blöcke ausblenden, die keinem Rahmen zugewiesen sind">🔲 Nur in Rahmen</button>
             </div>
 
             <!--
@@ -803,7 +804,10 @@
             </div>
 
             <div id="canvas" class="hide-handles">
+                <!-- Statische Verbindungen (wird nur bei Block-Verschiebung neu gezeichnet) -->
                 <svg id="connections-layer"></svg>
+                <!-- Isolierte Ebene für animierten Materialfluss (GPU-beschleunigt) -->
+                <svg id="flow-layer"></svg>
             </div>
         </div>
     </div>

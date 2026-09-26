@@ -614,8 +614,11 @@ window.syncVisibilityToDOM = function () {
             const pl = mgrLayout.placements[nodeId];
             const el = document.getElementById(nodeId);
             if (el) {
-                const isHidden = pl && pl.zone_id && (typeof window.isMgrZoneHidden === 'function') && window.isMgrZoneHidden(pl.zone_id, mgrLayout.zones);
-                if (isHidden) {
+                const isZoneHidden = pl && pl.zone_id && (typeof window.isMgrZoneHidden === 'function') && window.isMgrZoneHidden(pl.zone_id, mgrLayout.zones);
+                const isBlockFramed = !!(pl && pl.zone_id && (mgrLayout.zones || []).some(z => z.id === pl.zone_id));
+                const isUnframedHidden = window.managerFramedOnlyActive && !isBlockFramed && !window.isManagerSortHelperActive;
+
+                if (isZoneHidden || isUnframedHidden) {
                     el.style.setProperty('display', 'none', 'important');
                 } else {
                     el.style.display = '';
