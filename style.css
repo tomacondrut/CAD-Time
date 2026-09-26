@@ -1980,16 +1980,52 @@ html, body {
  */
 
 /* Zentrierter Canvas-Modus Umschalter */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Kollisionsschutz für den zentralen Modus-Umschalter)
+ * ERSETZEN IN: style.css (Klasse .canvas-mode-switcher-container)
+ * Zeitstempel: 2026-09-26 10:15:00 CEST
+ * Breadcrumb: [2026-09-26 10:15:00 CEST] max-width und responsives Schrumpfen
+ *   integriert, um Überlappung mit den Top-Right-Icons (360px rechts) auszuschließen.
+ * =============================================================================
+ */
 .canvas-mode-switcher-container {
     position: absolute;
-    top: 16px;
+    top: 14px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 500;
+    z-index: 45; /* Hinter Tooltips und Dialogen, vor dem Canvas */
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     pointer-events: auto;
+    /* Schützt die fixierten Buttons rechts (360px) und die Sidebar links */
+    max-width: calc(100vw - 720px);
+    overflow: hidden;
+}
+
+@media (max-width: 1400px) {
+    .canvas-mode-switcher-container {
+        left: 340px;
+        transform: none;
+        max-width: calc(100vw - 720px);
+    }
+}
+
+.btn-manager-action {
+    background: #fff;
+    border: 1px solid #cbd5e0;
+    padding: 6px 10px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #2d3748;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .canvas-mode-switcher {

@@ -3702,14 +3702,22 @@ window.switchCanvasMode = function (mode) {
     if (typeof renderSidebarZones === 'function') renderSidebarZones();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Kompakter Fokus-Toggle)
+ * ERSETZEN IN: ui.js (Funktion window.toggleManagerFocusFilter)
+ * Zeitstempel: 2026-09-26 10:15:00 CEST
+ * =============================================================================
+ */
 window.toggleManagerFocusFilter = function () {
     window.managerFocusActive = !window.managerFocusActive;
     const btnFocus = document.getElementById('btnToggleManagerFocus');
     if (btnFocus) {
         btnFocus.classList.toggle('active', window.managerFocusActive);
-        btnFocus.textContent = window.managerFocusActive ? '🎯 Alle Blöcke zeigen' : '⚠️ Fokus: Kritische Pfade';
+        btnFocus.textContent = window.managerFocusActive ? '👁️ Alle' : '⚠️ Nur Kritische';
     }
-    showToast(window.managerFocusActive ? 'Fokus-Filter aktiv: Nur Überhänge & 2D-Übergaben' : 'Fokus-Filter deaktiviert: Alle Blöcke sichtbar', 'info');
+    showToast(window.managerFocusActive ? 'Fokus aktiv: Nur Überhänge & 2D-Übergaben sichtbar' : 'Alle Blöcke eingeblendet', 'info');
     if (typeof renderCanvas === 'function') renderCanvas();
 };
 

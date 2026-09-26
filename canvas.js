@@ -649,6 +649,18 @@ function renderCanvas() {
             //   - [2026-09-26 09:40:00 CEST]: Restpuffer (+/- Stunden) und Mini-Zähler
             //     (Erledigt, Überhang, 2D bereit) im Zonen-Header ergänzt.
             // =================================================================
+            /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Korrektur: Exakte Zonen-Mathematik ohne Rundungsfehler)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> Manager-Zonen Budgetbereich)
+ * Zeitstempel: 2026-09-26 10:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 09:40:00 CEST]: Zonen-Kompression.
+ *   - [2026-09-26 10:15:00 CEST]: BUGFIX: toFixed(1) Rundungsfehler beseitigt.
+ *     Restpuffer rechnet jetzt minutengenau (keine 42m statt 40m Differenz mehr).
+ * =============================================================================
+ */
             let zoneBudD = 0, zoneBudDr = 0, zoneSpentD = 0, zoneSpentDr = 0;
             const countedBudgetKeys = new Set();
 
@@ -672,15 +684,15 @@ function renderCanvas() {
                 }
             });
 
-            // Restaufwand / Puffer-Berechnung
+            // Exakte Differenz ohne Rundungsschnitt
             const zoneTotBud = zoneBudD + zoneBudDr;
             const zoneTotSpent = zoneSpentD + zoneSpentDr;
-            const zonePuffer = parseFloat((zoneTotBud - zoneTotSpent).toFixed(1));
-            const hasZoneOverhang = zonePuffer < 0;
+            const zonePufferExact = zoneTotBud - zoneTotSpent;
+            const hasZoneOverhang = zonePufferExact < -0.01;
             const pufferColor = hasZoneOverhang ? '#e53e3e' : '#38a169';
             const pufferText = hasZoneOverhang
-                ? `Überhang: -${typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.abs(zonePuffer)) : Math.abs(zonePuffer) + 'h'}`
-                : `Puffer: +${typeof formatHoursToHM === 'function' ? formatHoursToHM(zonePuffer) : zonePuffer + 'h'}`;
+                ? `Überhang: -${typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.abs(zonePufferExact)) : Math.abs(zonePufferExact).toFixed(1) + 'h'}`
+                : `Puffer: +${typeof formatHoursToHM === 'function' ? formatHoursToHM(zonePufferExact) : zonePufferExact.toFixed(1) + 'h'}`;
 
             // Baugruppen-Zähler nach Zustand
             let countDone = 0;
@@ -694,20 +706,19 @@ function renderCanvas() {
                 const pDr = isDone ? 100 : ((mObj.progress_drafting !== null && mObj.progress_drafting !== undefined) ? mObj.progress_drafting : 0);
                 const bTotProg = (pD * 0.5) + (pDr * 0.5);
 
+                const rIds = mObj.linked_id ? currentNodes.filter(x => x.linked_id === mObj.linked_id).map(x => x.id) : [mObj.id];
+                let bSpent = 0;
+                (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => rIds.includes(l.node_id)).forEach(l => {
+                    bSpent += parseFloat(l.hours) || 0;
+                });
+                const bBud = (parseFloat(mObj.budget_design_hours) || 0) + (parseFloat(mObj.budget_drafting_hours) || 0);
+
                 if (isDone || bTotProg === 100) {
                     countDone++;
+                    if (bBud > 0 && bSpent > bBud) countWarning++;
                 } else {
                     if (pD >= 85 && pDr === 0) countReady2D++;
-
-                    const rIds = mObj.linked_id ? currentNodes.filter(x => x.linked_id === mObj.linked_id).map(x => x.id) : [mObj.id];
-                    let bSpent = 0;
-                    (typeof currentTimeLogs !== 'undefined' ? currentTimeLogs : []).filter(l => rIds.includes(l.node_id)).forEach(l => {
-                        bSpent += parseFloat(l.hours) || 0;
-                    });
-                    const bBud = (parseFloat(mObj.budget_design_hours) || 0) + (parseFloat(mObj.budget_drafting_hours) || 0);
-                    if (bBud > 0 && bSpent > bBud) {
-                        countWarning++;
-                    }
+                    if (bBud > 0 && bSpent > bBud) countWarning++;
                 }
             });
 
@@ -1726,33 +1737,60 @@ function renderCanvas() {
         // ---------------------------------------------------------------------
         // EARNED VALUE / DRIFT BERECHNUNG & HEALTH-PILL
         // ---------------------------------------------------------------------
+        /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Korrektur: Echte Budget-Puffer- und Überhangslogik)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> Manager-Karten Health-Pill Bereich)
+ * Zeitstempel: 2026-09-26 10:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 09:40:00 CEST]: Health-Pill Basis.
+ *   - [2026-09-26 10:15:00 CEST]: BUGFIX: Bei 0% Fortschritt wird nicht mehr fälschlich
+ *     ein Überhang ausgewiesen. Überhang greift strikt nur bei Ist > Budget.
+ *     Fertige Baugruppen mit Budgetüberschreitung weisen ihren Überzug transparent aus.
+ * =============================================================================
+ */
         const totBudg = dBudg + drBudg;
         const totSpent = dSpentAgg + drSpentAgg;
-        let driftHrs = 0;
         let isCritical = false;
         let healthPillHtml = '';
 
         if (totBudg > 0) {
-            const expectedHrs = totBudg * (pTotal / 100);
-            driftHrs = parseFloat((expectedHrs - totSpent).toFixed(1));
+            const diffHours = totBudg - totSpent;
+            const isOverBudget = diffHours < -0.01;
+            const overHours = Math.abs(diffHours);
+            const overFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(overHours) : `${overHours.toFixed(1)}h`;
+            const restFormatted = typeof formatHoursToHM === 'function' ? formatHoursToHM(Math.max(0, diffHours)) : `${Math.max(0, diffHours).toFixed(1)}h`;
 
             if (isBlockDone || pTotal === 100) {
-                healthPillHtml = `<span class="mgr-health-pill green" title="Erfolgreich abgeschlossen">🟢 Fertig</span>`;
-            } else if (totSpent > totBudg || driftHrs <= -2) {
+                if (isOverBudget) {
+                    isCritical = true;
+                    healthPillHtml = `<span class="mgr-health-pill red" title="Abgeschlossen, aber Budget um ${overFormatted} überschritten">✅ -${overFormatted}</span>`;
+                } else {
+                    healthPillHtml = `<span class="mgr-health-pill green" title="Erfolgreich im Budget abgeschlossen">🟢 Fertig</span>`;
+                }
+            } else if (isOverBudget) {
+                // Echter Budget-Überhang
                 isCritical = true;
-                const overHrs = Math.abs(driftHrs);
-                const overStr = typeof formatHoursToHM === 'function' ? formatHoursToHM(overHrs) : `${overHrs}h`;
-                healthPillHtml = `<span class="mgr-health-pill red" title="Budget-Drift: ${totSpent.toFixed(1)}h verbraucht bei ${pTotal}% Fertigstellung">🔴 -${overStr} Überhang</span>`;
-            } else if (driftHrs < 0) {
-                isCritical = true;
-                const underHrs = Math.abs(driftHrs);
-                const underStr = typeof formatHoursToHM === 'function' ? formatHoursToHM(underHrs) : `${underHrs}h`;
-                healthPillHtml = `<span class="mgr-health-pill yellow" title="Leichter Budgetverzug">🟡 -${underStr}</span>`;
+                healthPillHtml = `<span class="mgr-health-pill red" title="Budget überschritten! ${totSpent.toFixed(1)}h von ${totBudg}h verbraucht">🔴 -${overFormatted} Überhang</span>`;
             } else {
-                healthPillHtml = `<span class="mgr-health-pill green" title="Im Plan (+${driftHrs}h Puffer)">🟢 Im Plan</span>`;
+                // Liegt noch im Budget -> Puffer vorhanden
+                const timePct = Math.round((totSpent / totBudg) * 100);
+
+                if (pTotal === 0 && totSpent >= 1) {
+                    // Zeit gebucht, aber Fortschritt noch 0%
+                    isCritical = true;
+                    healthPillHtml = `<span class="mgr-health-pill yellow" title="${totSpent.toFixed(1)}h gebucht, Fortschritt noch bei 0%. Bitte Slider aktualisieren.">🟡 0% (Rest: ${restFormatted})</span>`;
+                } else if (timePct > (pTotal + 25)) {
+                    // Zeitverbrauch hinkt dem Fortschritt deutlich voraus
+                    isCritical = true;
+                    healthPillHtml = `<span class="mgr-health-pill yellow" title="Verzug: ${timePct}% Budget verbraucht bei ${pTotal}% Fertigstellung">🟡 Verzug (${restFormatted})</span>`;
+                } else {
+                    healthPillHtml = `<span class="mgr-health-pill green" title="Im Plan (+${restFormatted} Puffer übrig)">🟢 +${restFormatted}</span>`;
+                }
             }
         } else {
-            healthPillHtml = `<span class="mgr-health-pill neutral" title="Kein Budget hinterlegt">⚪ Kein Budget</span>`;
+            healthPillHtml = `<span class="mgr-health-pill neutral" title="Kein Budget hinterlegt">⚪ ${typeof formatHoursToHM === 'function' ? formatHoursToHM(totSpent) : totSpent.toFixed(1) + 'h'}</span>`;
         }
 
         // ---------------------------------------------------------------------
