@@ -4420,12 +4420,78 @@ function renderColorCategoriesEditor() {
     });
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Kaskadierende Farb-Updates auf alle Blöcke & Rahmen)
+ * ERSETZEN IN: ui.js (Funktion handleUpdateColorCategory am Dateiende)
+ * Zeitstempel: 2026-09-26 13:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 10:45:00 CEST]: Baugruppen-Farbkategorien Verwaltung.
+ *   - [2026-09-26 13:20:00 CEST]: Automatische Kaskadierung: Wenn im Farbwähler
+ *     eine Farbe geändert wird, werden alle bisher zugewiesenen Blöcke und 
+ *     Rahmen sofort in RAM und Datenbank (project_nodes / project_zones) aktualisiert.
+ * =============================================================================
+ */
 window.handleUpdateColorCategory = async function (index, field, value) {
     const categories = [...(window.COLOR_PRESETS || [])];
     if (!categories[index]) return;
 
-    categories[index][field] = value.trim();
+    const oldHex = (categories[index].hex || '').trim();
+    const newVal = value.trim();
+
+    categories[index][field] = newVal;
     await saveColorCategories(categories);
+
+    // Kaskadierendes Farb-Update: Nur ausführen, wenn sich der Farbwert (Hex) geändert hat
+    if (field === 'hex' && oldHex && oldHex.toLowerCase() !== newVal.toLowerCase()) {
+        const newHex = newVal;
+
+        // 1. Lokale Blöcke im RAM sofort synchronisieren
+        let affectedNodesCount = 0;
+        (currentNodes || []).forEach(n => {
+            if (n.color_hex && n.color_hex.toLowerCase() === oldHex.toLowerCase()) {
+                n.color_hex = newHex;
+                affectedNodesCount++;
+            }
+        });
+
+        // 2. Lokale Zonen/Rahmen im RAM synchronisieren
+        (currentZones || []).forEach(z => {
+            if (z.color_hex && z.color_hex.toLowerCase() === oldHex.toLowerCase()) {
+                z.color_hex = newHex;
+            }
+        });
+
+        // 3. Datenbank-Update ausführen (Cloud vs. Lokal)
+        const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+        if (isLocalActive) {
+            if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+        } else {
+            try {
+                const client = (typeof realDb !== 'undefined') ? realDb : db;
+                // Aktualisiert alle Blöcke projektübergreifend, die die alte Farbe trugen
+                await client.from('project_nodes')
+                    .update({ color_hex: newHex })
+                    .ilike('color_hex', oldHex);
+
+                // Aktualisiert alle Rahmen/Zonen
+                await client.from('project_zones')
+                    .update({ color_hex: newHex })
+                    .ilike('color_hex', oldHex);
+            } catch (err) {
+                console.error("Fehler beim kaskadierenden Farb-Update in Supabase:", err);
+            }
+        }
+
+        // 4. Canvas & Sidebar sofort neu zeichnen
+        if (typeof renderCanvas === 'function') renderCanvas();
+        if (typeof renderSidebarZones === 'function') renderSidebarZones();
+
+        showToast(`Farbe aktualisiert: ${affectedNodesCount} Element(e) angepasst`, 'success');
+        return;
+    }
+
     showToast(`Baugruppe "${categories[index].name}" aktualisiert`, 'success');
 };
 

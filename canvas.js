@@ -605,16 +605,30 @@ function renderCanvas() {
             zoneEl.style.backgroundColor = depth > 0 ? 'rgba(237, 242, 247, 0.65)' : 'rgba(237, 242, 247, 0.35)';
             zoneEl.style.zIndex = `${10 + (depth * 5)}`;
 
+            /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Manager-Zonen: containedBlocks Ermittlung & Crash-Fix)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> sortedMgrZones.forEach)
+ * Zeitstempel: 2026-09-26 13:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:45:00 CEST]: Dedupliziertes Budget für Rahmen.
+ *   - [2026-09-26 10:15:00 CEST]: Zonen-Mathematik ohne Rundungsfehler.
+ *   - [2026-09-26 13:15:00 CEST]: BUGFIX: Versehentlichen centerViewOnVisible-
+ *     Schnipsel (updateBounds / isHiddenFn) entfernt. containedBlocks wird nun 
+ *     wieder korrekt mit den zugewiesenen project_nodes befüllt.
+ * =============================================================================
+ */
             const descendantZoneIds = getAllDescendantMgrZones(zone.id, mgrLayout.zones);
             const allIncludedZoneIds = [zone.id, ...descendantZoneIds];
 
+            // Ermittelt alle Baugruppen/Blöcke, die diesem Rahmen (oder Unterrahmen) zugeordnet sind
             const containedBlocks = [];
             Object.keys(mgrLayout.placements || {}).forEach(nId => {
-                const p = (window.isManagerSortHelperActive && window.managerHelperPlacements && window.managerHelperPlacements[nId])
-                    ? window.managerHelperPlacements[nId]
-                    : mgrLayout.placements[nId];
-                if (p && !(p.zone_id && isHiddenFn(p.zone_id, mgrLayout.zones))) {
-                    updateBounds(parseFloat(p.pos_x) || 0, parseFloat(p.pos_y) || 0, 290, 160);
+                const pl = mgrLayout.placements[nId];
+                if (pl && allIncludedZoneIds.includes(pl.zone_id)) {
+                    const blockNode = (currentNodes || []).find(n => n.id === nId);
+                    if (blockNode) containedBlocks.push(blockNode);
                 }
             });
 
