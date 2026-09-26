@@ -1415,6 +1415,20 @@ window.handleDeleteZone = async function (zoneId) {
 // =============================================================================
 // 6. ZEITERFASSUNG, FERTIGSTELLUNG, REVISION & LÖSCHEN
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Zeiterfassung Blöcke & Rahmen)
+ * ERSETZEN IN: ui.js (Abschnitt 6: handleLog & handleZoneLog)
+ * Zeitstempel: 2026-09-26 14:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-27 17:40:00 CEST]: Zonen-Logs mit zone_id Support.
+ *   - [2026-09-26 14:30:00 CEST]: BUGFIX: 1. fetchCanvasData() nach handleLog ergänzt
+ *     (behobene Ursache: Pie-Charts & Ist-Stunden wurden nach Buchung nicht neu gerendert).
+ *     2. Admin-Auto-Approval (finalStatus) für handleLog & handleZoneLog harmonisiert.
+ *     3. logged_at Timestamp explizit übergeben.
+ * =============================================================================
+ */
 window.handleLog = async function (e, nodeId) {
     e.preventDefault();
     const form = e.target;
@@ -1434,6 +1448,7 @@ window.handleLog = async function (e, nodeId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+    const finalStatus = (typeof isAdmin !== 'undefined' && isAdmin) ? 'approved' : 'pending';
 
     const { error } = await db.from('time_logs').insert([{
         project_id: activeProjectId,
@@ -1442,7 +1457,8 @@ window.handleLog = async function (e, nodeId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: 'pending'
+        status: finalStatus,
+        logged_at: new Date().toISOString()
     }]);
 
     if (error) {
@@ -1453,7 +1469,19 @@ window.handleLog = async function (e, nodeId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-    showToast(`${hours}h ${mins}m erfasst (wartet auf Freigabe)`, 'success');
+
+    const msg = finalStatus === 'approved'
+        ? `${hours}h ${mins}m erfasst (direkt freigegeben)`
+        : `${hours}h ${mins}m erfasst (wartet auf Freigabe)`;
+    showToast(msg, 'success');
+
+    // Aktualisiert Canvas, Diagramme und Sidebar sofort
+    if (typeof fetchCanvasData === 'function') {
+        fetchCanvasData();
+    } else {
+        if (typeof renderCanvas === 'function') renderCanvas();
+        if (typeof updateSidebarStats === 'function') updateSidebarStats();
+    }
 };
 
 window.handleRequestCompletion = async function (nodeId) {
@@ -2464,7 +2492,7 @@ window.toggleZoneLogs = function (e, zoneId) {
  *     und verständliche Fehlerbehandlung bei fehlender Schema-Spalte.
  * =============================================================================
  */
-window.handleZoneLog = async function(e, zoneId) {
+window.handleZoneLog = async function (e, zoneId) {
     e.preventDefault();
     const form = e.target;
     const taskType = form.elements[1].value;
@@ -2483,6 +2511,7 @@ window.handleZoneLog = async function(e, zoneId) {
     }
 
     const decimalHours = parseFloat((hours + (mins / 60)).toFixed(4));
+    const finalStatus = (typeof isAdmin !== 'undefined' && isAdmin) ? 'approved' : 'pending';
 
     const payload = {
         project_id: activeProjectId,
@@ -2490,9 +2519,10 @@ window.handleZoneLog = async function(e, zoneId) {
         task_type: taskType,
         hours: decimalHours,
         note: note,
-        status: 'pending',
+        status: finalStatus,
         zone_id: zoneId,
-        node_id: null
+        node_id: null,
+        logged_at: new Date().toISOString()
     };
 
     const { error } = await db.from('time_logs').insert([payload]);
@@ -2510,7 +2540,11 @@ window.handleZoneLog = async function(e, zoneId) {
     form.elements[2].value = '0';
     form.elements[3].value = '30';
     form.elements[4].value = '';
-    showToast(`${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`, 'success');
+
+    const msg = finalStatus === 'approved'
+        ? `${hours}h ${mins}m für Kasten erfasst (direkt freigegeben)`
+        : `${hours}h ${mins}m für Kasten erfasst (wartet auf Freigabe)`;
+    showToast(msg, 'success');
     if (typeof fetchCanvasData === 'function') fetchCanvasData();
 };
 
@@ -2884,6 +2918,18 @@ document.addEventListener('click', (e) => {
 // =============================================================================
 // 9. MOBILE TOUCH-WHEEL (Zeiterfassung durch Wischen)
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Mobile Touch-Wheel Zeiterfassung mit Event-Dispatch)
+ * ERSETZEN IN: ui.js (Abschnitt 9: MOBILE TOUCH-WHEEL)
+ * Zeitstempel: 2026-09-26 14:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 12:40:00 CEST]: Touchmove-Geste mit Trunc-Schritten.
+ *   - [2026-09-26 14:30:00 CEST]: BUGFIX: input-Event bei Touch-Wischgesten dispatcht,
+ *     damit händische Wischänderungen im Live-Timer-Puffer sofort synchronisiert werden.
+ * =============================================================================
+ */
 let timeSwipeStartY = 0;
 let timeSwipeStartVal = 0;
 let timeSwipeType = '';
@@ -2915,6 +2961,7 @@ document.addEventListener('touchmove', (e) => {
         if (timeSwipeType === 'min' && newVal > 55) newVal = 55;
 
         timeSwipeInput.value = (timeSwipeType === 'min') ? newVal.toString().padStart(2, '0') : newVal;
+        timeSwipeInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
 }, { passive: false });
 
@@ -4176,6 +4223,23 @@ document.addEventListener('DOMContentLoaded', () => {
 * =============================================================================
 */
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Live-Zeiterfassungs Engine, Stoppuhr & Zuweisungs-Logik)
+ * ERSETZEN IN: ui.js (Vor Abschnitt Farbkategorien)
+ * Zeitstempel: 2026-09-26 14:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 09:35:00 CEST]: Live-Timer Dock Engine mit Start/Pause/Stop/Zuweisen.
+ *   - [2026-09-26 13:50:00 CEST]: 5-Minuten Rasterung nach Stopp integriert.
+ *   - [2026-09-26 14:30:00 CEST]: BUGFIX: Fehlende Funktionen window.startLiveTimer,
+ *     window.pauseLiveTimer, window.startLiveTimeAssignment und window.cancelLiveTimeAssignment
+ *     wiederhergestellt (behob TypeError beim Starten/Zuweisen).
+ *   - [2026-09-26 14:30:00 CEST]: UI-Fix: controlsRow bleibt im Review-Status sichtbar,
+ *     damit Kategorie (CAD/Zeichn.) und Notiz vor dem Zuweisen anpassbar bleiben.
+ *   - [2026-09-26 14:30:00 CEST]: Zuweisung normalisiert Instanzen automatisch auf masterNode.id.
+ * =============================================================================
+ */
 window.liveTimerState = {
     isRunning: false,
     isPaused: false,
@@ -4186,7 +4250,6 @@ window.liveTimerState = {
 
 window.isAssigningLiveTime = false;
 
-// Formatierung Sekunden -> HH:MM:SS
 function formatSecondsToHMS(totalSec) {
     const s = Math.max(0, Math.floor(totalSec));
     const hours = Math.floor(s / 3600);
@@ -4195,25 +4258,13 @@ function formatSecondsToHMS(totalSec) {
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: UI Controller (Live-Timer Stopp-Anpassung mit 5-Minuten-Raster)
- * ERSETZEN IN: ui.js (Funktionen updateLiveTimerUI, stopLiveTimer, resumeLiveTimer, discardLiveTimer und Klick-Interceptor)
- * Zeitstempel: 2026-09-26 13:50:00 CEST
- * Breadcrumbs:
- *   - [2026-09-26 09:35:00 CEST]: Live-Timer Dock Engine.
- *   - [2026-09-26 13:50:00 CEST]: Zeit nach Stopp editierbar gemacht (händisch 
- *     sowie per Mousewheel). Runden beim Stoppen automatisch auf 5-Minuten-Schritte.
- * =============================================================================
- */
-
 function updateLiveTimerUI() {
     const display = document.getElementById('liveTimerDisplay');
     const pulse = document.getElementById('liveTimerPulse');
     const btnStart = document.getElementById('btnLiveTimerStart');
     const btnPause = document.getElementById('btnLiveTimerPause');
     const btnStop = document.getElementById('btnLiveTimerStop');
+    const btnGroup = document.getElementById('liveTimerBtnGroup');
     const controlsRow = document.getElementById('liveTimerControlsRow');
     const reviewRow = document.getElementById('liveTimerReviewRow');
     const assignHint = document.getElementById('liveTimerAssignHint');
@@ -4227,11 +4278,16 @@ function updateLiveTimerUI() {
 
     display.textContent = formatSecondsToHMS(currentSec);
 
-    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
+    if (window.isAssigningLiveTime) {
+        controlsRow.style.display = 'none';
+        reviewRow.style.display = 'none';
+        assignHint.style.display = 'flex';
+    } else if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
         pulse.className = 'live-timer-pulse running';
         btnStart.style.display = 'none';
         btnPause.style.display = 'inline-flex';
         btnStop.style.display = 'inline-flex';
+        if (btnGroup) btnGroup.style.display = 'flex';
         controlsRow.style.display = 'flex';
         reviewRow.style.display = 'none';
         assignHint.style.display = 'none';
@@ -4241,17 +4297,15 @@ function updateLiveTimerUI() {
         btnStart.textContent = '▶ Weiter';
         btnPause.style.display = 'none';
         btnStop.style.display = 'inline-flex';
+        if (btnGroup) btnGroup.style.display = 'flex';
         controlsRow.style.display = 'flex';
         reviewRow.style.display = 'none';
         assignHint.style.display = 'none';
-    } else if (window.isAssigningLiveTime) {
-        controlsRow.style.display = 'none';
-        reviewRow.style.display = 'none';
-        assignHint.style.display = 'flex';
     } else if (window.liveTimerState.accumulatedSeconds > 0) {
-        // Gestoppt: Eingabefelder mit gerundeter Zeit anzeigen
+        // Gestoppt: controlsRow bleibt für Kategorie & Notiz aktiv, reviewRow zeigt Zeitanpassung & Aktionen
         pulse.className = 'live-timer-pulse';
-        controlsRow.style.display = 'none';
+        if (btnGroup) btnGroup.style.display = 'none';
+        controlsRow.style.display = 'flex';
         reviewRow.style.display = 'flex';
         assignHint.style.display = 'none';
 
@@ -4264,17 +4318,54 @@ function updateLiveTimerUI() {
             mInput.value = (totalMins % 60).toString().padStart(2, '0');
         }
     } else {
-        // Idle
+        // Leerlauf (Idle)
         pulse.className = 'live-timer-pulse';
         btnStart.style.display = 'inline-flex';
         btnStart.textContent = '▶ Start';
         btnPause.style.display = 'none';
         btnStop.style.display = 'none';
+        if (btnGroup) btnGroup.style.display = 'flex';
         controlsRow.style.display = 'flex';
         reviewRow.style.display = 'none';
         assignHint.style.display = 'none';
     }
 }
+
+window.startLiveTimer = function () {
+    if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) return;
+
+    if (window.liveTimerState.isPaused) {
+        window.liveTimerState.isPaused = false;
+        window.liveTimerState.startTime = Date.now();
+    } else {
+        window.liveTimerState.isRunning = true;
+        window.liveTimerState.isPaused = false;
+        window.liveTimerState.startTime = Date.now();
+    }
+
+    if (window.liveTimerState.intervalId) {
+        clearInterval(window.liveTimerState.intervalId);
+    }
+    window.liveTimerState.intervalId = setInterval(updateLiveTimerUI, 1000);
+
+    updateLiveTimerUI();
+    showToast(window.liveTimerState.accumulatedSeconds > 0 ? 'Zeiterfassung fortgesetzt' : 'Live-Zeiterfassung gestartet', 'info');
+};
+
+window.pauseLiveTimer = function () {
+    if (!window.liveTimerState.isRunning || window.liveTimerState.isPaused) return;
+
+    window.liveTimerState.accumulatedSeconds += (Date.now() - window.liveTimerState.startTime) / 1000;
+    window.liveTimerState.isPaused = true;
+
+    if (window.liveTimerState.intervalId) {
+        clearInterval(window.liveTimerState.intervalId);
+        window.liveTimerState.intervalId = null;
+    }
+
+    updateLiveTimerUI();
+    showToast('Zeiterfassung pausiert', 'info');
+};
 
 window.stopLiveTimer = function () {
     if (window.liveTimerState.isRunning && !window.liveTimerState.isPaused) {
@@ -4289,14 +4380,13 @@ window.stopLiveTimer = function () {
         window.liveTimerState.intervalId = null;
     }
 
-    // Beim Stoppen automatisch auf 5-Minuten-Schritte runden (mindestens 5m, falls Zeit lief)
+    // Beim Stoppen automatisch auf 5-Minuten-Schritte runden (mindestens 5m)
     if (window.liveTimerState.accumulatedSeconds > 0) {
         const rawMinutes = window.liveTimerState.accumulatedSeconds / 60;
         const roundedMins = Math.max(5, Math.round(rawMinutes / 5) * 5);
         window.liveTimerState.accumulatedSeconds = roundedMins * 60;
     }
 
-    // Edit-Flag zurücksetzen und Felder befüllen
     const hInput = document.getElementById('liveTimerReviewHours');
     const mInput = document.getElementById('liveTimerReviewMins');
     if (hInput && mInput) {
@@ -4310,7 +4400,6 @@ window.stopLiveTimer = function () {
 };
 
 window.resumeLiveTimer = function () {
-    // Falls vor dem Fortsetzen Werte manuell geändert wurden, diese als Startwert übernehmen
     const hInput = document.getElementById('liveTimerReviewHours');
     const mInput = document.getElementById('liveTimerReviewMins');
     if (hInput && mInput) {
@@ -4319,6 +4408,32 @@ window.resumeLiveTimer = function () {
         window.liveTimerState.accumulatedSeconds = (h * 3600) + (m * 60);
     }
     window.startLiveTimer();
+};
+
+window.startLiveTimeAssignment = function () {
+    const hInput = document.getElementById('liveTimerReviewHours');
+    const mInput = document.getElementById('liveTimerReviewMins');
+    if (hInput && mInput) {
+        const h = parseInt(hInput.value, 10) || 0;
+        const m = parseInt(mInput.value, 10) || 0;
+        window.liveTimerState.accumulatedSeconds = (h * 3600) + (m * 60);
+    }
+
+    if (window.liveTimerState.accumulatedSeconds <= 0) {
+        showToast('Bitte zuerst eine Zeit erfassen (mindestens 5 Minuten).', 'error');
+        return;
+    }
+
+    window.isAssigningLiveTime = true;
+    document.body.classList.add('assigning-live-time');
+    updateLiveTimerUI();
+    showToast('Klicke auf einen Block oder einen Rahmen zum Zuweisen', 'info');
+};
+
+window.cancelLiveTimeAssignment = function () {
+    window.isAssigningLiveTime = false;
+    document.body.classList.remove('assigning-live-time');
+    updateLiveTimerUI();
 };
 
 window.discardLiveTimer = async function () {
@@ -4343,7 +4458,7 @@ window.discardLiveTimer = async function () {
     }
 };
 
-// Händische Eingabe & Wheel-Änderungen sofort im State puffern
+// Händische Eingabe & Wheel-Änderungen im State puffern
 document.addEventListener('input', (e) => {
     if (e.target.closest('#liveTimerReviewInputs')) {
         const hInput = document.getElementById('liveTimerReviewHours');
@@ -4357,7 +4472,7 @@ document.addEventListener('input', (e) => {
     }
 });
 
-// Globaler Klick-Interceptor im Zuweisungsmodus
+// Globaler Klick-Interceptor im Zuweisungsmodus (Capture-Phase)
 document.addEventListener('click', async (e) => {
     if (!window.isAssigningLiveTime) return;
 
@@ -4377,7 +4492,6 @@ document.addEventListener('click', async (e) => {
     const taskType = taskTypeSelect ? taskTypeSelect.value : 'drafting';
     const note = noteInput ? noteInput.value.trim() : '';
 
-    // Liest exakt die (per Tastatur oder Mausrad) angepassten Werte aus den Eingabefeldern
     const hInput = document.getElementById('liveTimerReviewHours');
     const mInput = document.getElementById('liveTimerReviewMins');
     let totalSeconds = window.liveTimerState.accumulatedSeconds || 0;
@@ -4399,18 +4513,23 @@ document.addEventListener('click', async (e) => {
     let identifierLabel = '';
 
     if (blockCard) {
-        targetId = blockCard.id;
-        const node = (currentNodes || []).find(n => n.id === targetId);
+        const clickedNodeId = blockCard.id;
+        const node = (currentNodes || []).find(n => n.id === clickedNodeId);
         if (!node) return;
 
-        const docPart = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
-        identifierLabel = docPart ? `${docPart} - ${node.name}` : node.name;
+        // Normalisiert Referenz-Instanzen direkt auf den Master-Block
+        const masterNode = node.linked_id
+            ? (currentNodes.find(n => n.linked_id === node.linked_id) || node)
+            : node;
+        targetId = masterNode.id;
+
+        const docPart = masterNode.doc_number || (masterNode.article_number ? `ART-${masterNode.article_number}` : '');
+        identifierLabel = docPart ? `${docPart} - ${masterNode.name}` : masterNode.name;
     } else if (zoneHeader) {
         const zoneEl = zoneHeader.closest('.project-zone');
         if (!zoneEl) return;
         targetZoneId = zoneEl.id;
 
-        // Sucht die Zone in CAD-Zonen ODER Manager-Zonen
         const zone = (currentZones || []).find(z => z.id === targetZoneId)
             || ((typeof getManagerLayout === 'function') ? (getManagerLayout().zones || []).find(z => z.id === targetZoneId) : null);
         if (!zone) return;
@@ -4428,7 +4547,7 @@ document.addEventListener('click', async (e) => {
     if (!confirmed) return;
 
     const uCode = (typeof activeUserCode !== 'undefined' && activeUserCode) ? activeUserCode : 'COT';
-    const pId = typeof activeProjectId !== 'undefined' ? activeProjectId : null;
+    const pId = (typeof activeProjectId !== 'undefined' && activeProjectId) ? activeProjectId : localStorage.getItem('cad_tm_project');
     const finalStatus = (typeof isAdmin !== 'undefined' && isAdmin) ? 'approved' : 'pending';
 
     const payload = {
@@ -4469,7 +4588,7 @@ document.addEventListener('click', async (e) => {
         if (typeof renderCanvas === 'function') renderCanvas();
         if (typeof updateSidebarStats === 'function') updateSidebarStats();
     }
-}, true);// Capture-Phase: fängt den Klick vor allen anderen Canvas-Karten ab
+}, true);
 
 // ESC-Handler zum Abbrechen des Zuweisungs-Modus
 window.addEventListener('keydown', (e) => {
@@ -4480,6 +4599,13 @@ window.addEventListener('keydown', (e) => {
         showToast('Zuweisung abgebrochen (Zeit bleibt im Widget)', 'info');
     }
 }, true);
+
+// Initialen Status beim Laden sicherstellen
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { if (typeof updateLiveTimerUI === 'function') updateLiveTimerUI(); });
+} else {
+    updateLiveTimerUI();
+}
 
 /**
 * =============================================================================
