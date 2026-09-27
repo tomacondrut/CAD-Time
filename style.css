@@ -1017,9 +1017,33 @@ html, body {
  * Breadcrumb: [2026-08-30] Konsolidierte .top-right-btn Klasse für alle Menü-Icons.
  * =============================================================================
  */
-.top-right-btn {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Top-Right Actions & Flex-Dock)
+ * ERSETZEN IN: style.css (Im Bereich .top-right-btn und #adminLockBtn)
+ * Zeitstempel: 2026-09-27 10:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 09:54:00 CEST]: Konsolidierte .top-right-btn Klasse.
+ *   - [2026-09-27 10:55:00 CEST]: .top-actions-container als Flex-Leiste integriert.
+ * =============================================================================
+ */
+.top-actions-container {
     position: absolute;
-    top: 16px;
+    top: 14px;
+    right: 20px;
+    z-index: 100;
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: center;
+    pointer-events: auto;
+}
+
+.top-right-btn {
+    position: relative;
+    top: auto;
+    right: auto;
     z-index: 50;
     background: #fff;
     border: 1px solid var(--border-color);
@@ -1032,11 +1056,17 @@ html, body {
     cursor: pointer;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     font-size: 16px;
-    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    flex-shrink: 0;
 }
 
     .top-right-btn:hover {
         background: #edf2f7;
+        transform: scale(1.06);
+    }
+
+    .top-right-btn:active {
+        transform: scale(0.94);
     }
 
 #adminLockBtn.logged-in {
@@ -1631,7 +1661,7 @@ html, body {
         contain: none !important;
     }
 
-    #sidebar, #mobileMenuBtn, .top-right-btn, .zoom-controls,
+    #sidebar, #mobileMenuBtn, .top-right-btn, .top-actions-container, .zoom-controls,
     #canvasContextMenu, .modal-backdrop, #toast, #app-container {
         display: none !important;
     }
@@ -2017,19 +2047,115 @@ html, body {
  *   Abstand zu den oberen rechten Dateibuttons.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Canvas-Modus Switcher & Mobile Portrait Entzerrung)
+ * ERSETZEN IN: style.css (Bereich .canvas-mode-switcher-container und nachfolgende Media-Queries)
+ * Zeitstempel: 2026-09-27 10:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 10:25:00 CEST]: Linksbündige Verankerung des Modus-Umschalters.
+ *   - [2026-09-27 10:55:00 CEST]: BUGFIX: Portrait-Modus (iOS / Android):
+ *     1. Aktions-Buttons werden vertikal an der rechten Bildschirmkante gestapelt.
+ *     2. Umschalter (Konstruktion / Status-Board) erhält links & rechts Freiraum
+ *        ohne jede Überlagerung (max-width calc & touch scrollbar).
+ *     3. Safe-Area-Insets (Notch / Dynamic Island) berücksichtigt.
+ * =============================================================================
+ */
 .canvas-mode-switcher-container {
     position: absolute;
     top: 14px;
     left: 20px;
-    transform: none; /* Zentrierung aufgehoben */
+    transform: none;
     z-index: 45;
     display: flex;
     align-items: center;
     gap: 8px;
     pointer-events: auto;
-    /* Verhindert Kollision mit den 7 Buttons oben rechts (360px Breite) */
     max-width: calc(100% - 370px);
     overflow: hidden;
+}
+
+/* -----------------------------------------------------------------------------
+ * PORTRAIT-MODUS (Smartphones & Tablets im Hochformat)
+ * ----------------------------------------------------------------------------- */
+@media (orientation: portrait) {
+    /* 1. Vertikales Action-Dock an der rechten Screen-Kante */
+    .top-actions-container {
+        flex-direction: column !important;
+        right: max(10px, env(safe-area-inset-right)) !important;
+        top: max(14px, env(safe-area-inset-top)) !important;
+        gap: 6px !important;
+        z-index: 150 !important;
+    }
+
+        .top-actions-container .top-right-btn {
+            position: static !important;
+            right: auto !important;
+            top: auto !important;
+            width: 36px !important;
+            height: 36px !important;
+            font-size: 15px !important;
+        }
+
+    /* Fallback falls Buttons ohne Container im DOM liegen */
+    #viewport > .top-right-btn {
+        position: absolute !important;
+        right: max(10px, env(safe-area-inset-right)) !important;
+        width: 36px !important;
+        height: 36px !important;
+    }
+
+    #viewport > #newFileBtn.top-right-btn {
+        top: max(14px, env(safe-area-inset-top)) !important;
+    }
+
+    #viewport > #saveFileBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 42px) !important;
+    }
+
+    #viewport > #loadFileBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 84px) !important;
+    }
+
+    #viewport > #reportBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 126px) !important;
+    }
+
+    #viewport > #printBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 168px) !important;
+    }
+
+    #viewport > #infoGuideBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 210px) !important;
+    }
+
+    #viewport > #adminLockBtn.top-right-btn {
+        top: calc(max(14px, env(safe-area-inset-top)) + 252px) !important;
+    }
+
+    /* 2. Modus-Umschalter: Kollisionsfrei zwischen ☰ (links) und Vertikal-Palette (rechts) */
+    .canvas-mode-switcher-container {
+        left: 60px !important;
+        max-width: calc(100% - 116px) !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+        .canvas-mode-switcher-container::-webkit-scrollbar {
+            display: none;
+        }
+
+    .canvas-mode-switcher .mode-btn {
+        padding: 5px 8px !important;
+        font-size: 10.5px !important;
+    }
+
+    .btn-manager-action {
+        padding: 5px 8px !important;
+        font-size: 10px !important;
+    }
 }
 
 @media (max-width: 768px) {
