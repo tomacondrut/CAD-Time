@@ -1945,6 +1945,49 @@ html, body {
     font-weight: bold;
 }
 
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Status-Board Zoom-Booster & GPU-Entlastung)
+ * EINFÜGEN IN: style.css (Im Bereich Manager-Board Styles)
+ * Zeitstempel: 2026-09-27 12:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:40:00 CEST]: 1. livePulseAnim auf reines Opacity-Pulsieren
+ *     umgestellt (eliminiert GPU-Invalidierung durch transform: scale).
+ *     2. Während #viewport.is-zooming werden Range-Slider und Popovers
+ *        temporär von Paint-Events entkoppelt (120 FPS im Status-Board).
+ * =============================================================================
+ */
+
+/* 1. GPU-freundlicher Puls ohne transform:scale() */
+@keyframes livePulseSoft {
+    0%, 100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.55;
+    }
+}
+
+.mgr-handoff-badge.ready-2d {
+    animation: livePulseSoft 2s infinite ease-in-out !important;
+}
+
+/* 2. Während der Zoomfahrt (LERP): Range-Slider und Hover-Prüfungen pausieren */
+#viewport.is-zooming .mgr-prog-slider {
+    pointer-events: none !important;
+}
+
+#viewport.is-zooming .mgr-status-popover {
+    display: none !important;
+}
+
+#viewport.is-zooming .manager-card {
+    box-shadow: none !important;
+}
+
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
