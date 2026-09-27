@@ -468,6 +468,19 @@ window.loadedLocalProjectId = null;
  *     bei Cloud-Syncs entfernt. Admin-Status bleibt über Aktionen hinweg aktiv.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank (Crash-Proof Cloud-Abruf mit isoliertem Snapshot-Laden)
+ * ERSETZEN IN: db.js (Funktion window.fetchCanvasData komplett ersetzen)
+ * Zeitstempel: 2026-09-27 16:30:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 16:15:00 CEST]: project_snapshots in Promise.all aufgenommen.
+ *   - [2026-09-27 16:30:00 CEST]: CRASH-FIX: project_snapshots aus Promise.all 
+ *     entkoppelt und in eigenen try/catch gelegt. Verhindert, dass eine fehlende 
+ *     Supabase-Tabelle das Laden von Baugruppen und Rahmen blockiert.
+ * =============================================================================
+ */
 window.fetchCanvasData = async function () {
     if (!activeProjectId) return;
 
@@ -527,6 +540,53 @@ window.fetchCanvasData = async function () {
         if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
         return;
     }
+
+    // 2. Cloud-Modus: Lokale Handles entkoppeln
+    window.isLocalFileOpen = false;
+    window.localFileHandle = null;
+    window.loadedLocalProjectId = null;
+
+    // A. Kern-Elemente laden (geschützt gegen Abbrüche)
+    try {
+        const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
+            realDb.from('project_nodes').select('*').eq('project_id', activeProjectId),
+            realDb.from('project_edges').select('*').eq('project_id', activeProjectId),
+            realDb.from('project_zones').select('*').eq('project_id', activeProjectId),
+            realDb.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false }),
+            realDb.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId)
+        ]);
+
+        if (arrowsRes && arrowsRes.error) console.error("Supabase Fehler beim Pfeile laden:", arrowsRes.error);
+        if (window.isDraggingAnything) {
+            window.pendingCanvasUpdate = true;
+            return;
+        }
+
+        currentNodes = (nodesRes && nodesRes.data) ? nodesRes.data : [];
+        currentEdges = (edgesRes && edgesRes.data) ? edgesRes.data : [];
+        currentZones = (zonesRes && zonesRes.data) ? zonesRes.data : [];
+        currentTimeLogs = (logsRes && logsRes.data) ? logsRes.data : [];
+        window.currentFlowArrows = (arrowsRes && arrowsRes.data) ? arrowsRes.data : [];
+    } catch (err) {
+        console.error("Fehler beim Laden der Canvas-Daten aus Supabase:", err);
+    }
+
+    // B. Snapshots separat & defensiv abfragen (blockiert niemals das Canvas-Rendering)
+    try {
+        const snapsRes = await realDb.from('project_snapshots').select('*').eq('project_id', activeProjectId).order('review_date', { ascending: false });
+        if (snapsRes && snapsRes.data) {
+            window.currentSnapshots = snapsRes.data;
+        }
+    } catch (e) {
+        console.warn("project_snapshots in Supabase noch nicht vorhanden (Offline-/RAM-Snapshots aktiv):", e);
+        if (!window.currentSnapshots) window.currentSnapshots = [];
+    }
+
+    if (window.renderCanvas) window.renderCanvas();
+    if (window.updateSidebarStats) window.updateSidebarStats();
+    if (window.renderSidebarZones) window.renderSidebarZones();
+    if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
+};
 
 
     /**

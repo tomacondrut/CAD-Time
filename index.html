@@ -92,82 +92,124 @@
     </div>
 
     <!-- Info & Leitfaden Modal -->
+    <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Modals (Vollständiger Leitfaden & System-Dokumentation)
+    ERSETZEN IN: index.html (Block #infoGuideModal komplett ersetzen)
+    Zeitstempel: 2026-09-27 16:10:00 CEST
+    Breadcrumbs:
+      - [2026-08-30 11:35:00 CEST]: Basis Tab-Navigation.
+      - [2026-09-27 16:10:00 CEST]: Umfassende Dokumentation: 6 Themenbereiche
+        inkl. Review-Snapshots, hierarchischem Rollup ab oberstem Rahmen,
+        Status-Board (50/50 & Drift), Live-Timer Zuweisungs-Dock und DIN-Druckengine.
+    =============================================================================
+    -->
     <div id="infoGuideModal" class="modal-backdrop">
-        <div class="modal-content" style="width: 720px; max-width: 95%;">
-            <div class="modal-header" style="margin-bottom: 10px;">ℹ️ CAD Time Manager – Bedienung & Funktionen</div>
+        <div class="modal-content" style="width: 780px; max-width: 95%;">
+            <div class="modal-header" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span>ℹ️ CAD Time Manager – Leitfaden & Dokumentation</span>
+                <span style="font-size: 10px; color: #a0aec0; font-family: monospace;">v2.6 Anlagenbau-Edition</span>
+            </div>
 
-            <!-- Tab Navigation -->
+            <!-- Tab Navigation (Horizontal scrollbar auf mobilen Bildschirmen) -->
             <div class="info-tabs-header">
                 <button class="info-tab-btn active" onclick="switchInfoTab('tabNav')">🧭 Navigation</button>
-                <button class="info-tab-btn" onclick="switchInfoTab('tabElements')">⬚ Elemente</button>
-                <button class="info-tab-btn" onclick="switchInfoTab('tabStorage')">💾 Speichern & Lokal</button>
-                <button class="info-tab-btn" onclick="switchInfoTab('tabTimes')">⏱️ Zeiten</button>
-                <button class="info-tab-btn" onclick="switchInfoTab('tabNotes')">📝 Notizen</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabElements')">⬚ Blöcke & Rahmen</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabCockpit')">📊 Status-Board</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabTimes')">⏱️ Zeiterfassung</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabReview')">🚩 Reviews & Snapshots</button>
+                <button class="info-tab-btn" onclick="switchInfoTab('tabStorage')">💾 Speicher & Druck</button>
             </div>
 
-            <div class="info-tabs-content" style="font-size: 13px; color: #4a5568; line-height: 1.6; min-height: 280px; max-height: 480px; overflow-y: auto; padding-right: 8px;">
+            <div class="info-tabs-content" style="font-size: 12.5px; color: #4a5568; line-height: 1.55; min-height: 310px; max-height: 520px; overflow-y: auto; padding-right: 8px;">
 
-                <!-- TAB 1: NAVIGATION -->
+                <!-- TAB 1: NAVIGATION & GESTEN -->
                 <div id="tabNav" class="info-tab-pane" style="display: block;">
-                    <strong style="color: #2b6cb0; font-size: 14px;">Navigation & Grundlagen</strong>
-                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
-                        <li><strong>Pan & Zoom:</strong> Bewege dich mit gedrückter linker Maustaste über das Raster. Zoomen erfolgt über das Mausrad oder die Buttons (unten rechts).</li>
-                        <li><strong>Mobile Steuerung:</strong> Auf Touchscreens kannst du mit zwei Fingern zoomen (Pinch) und mit einem Finger scrollen. Halte den Finger lange auf einen Block, um das Rechtsklick-Menü zu öffnen.</li>
-                        <li><strong>Persönlicher Filter:</strong> Ein Klick auf dein Kürzel oben links in der Sidebar dimmt alle Blöcke ab, die nicht dir zugewiesen sind (oder die du nicht erstellt hast).</li>
-                        <li><strong>Isolation (Sidebar):</strong> Das 🎯-Icon in der Sidebar isoliert einen Rahmen – alle anderen werden ausgeblendet. Über 👁️ kann die Sichtbarkeit einzeln gesteuert werden.</li>
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Navigation, Gesten & Sichtbarkeit</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Flüssiges Pan & Zoom:</strong> Bewege dich mit gedrückter linker Maustaste über das Punktraster. Der Zoom arbeitet über ein exponentielles LERP-Verfahren mit fixiertem Cursor-Anker – optimiert für Freilauf-Mausräder (z.B. Logitech MX Master) und Trackpads.</li>
+                        <li><strong>Mobile Endgeräte (iPhone & Android):</strong> 1-Finger-Wischen verschiebt den Canvas, 2-Finger-Pinch zoomt stufenlos mit dynamischem Berührungszentrum. Ein Berührungsschutz blockiert unbeabsichtigtes Block-Verschieben während des Pinchens.</li>
+                        <li><strong>Persönlicher Filter:</strong> Ein Klick auf dein Mitarbeiterkürzel oben links in der Sidebar dimmt alle fremden Baugruppen und Rahmen ab – nur deine eigenen zugewiesenen Aufgaben bleiben hervorgehoben.</li>
+                        <li><strong>Zonen-Isolation (Sidebar):</strong> Das 🎯-Icon in der Sidebar isoliert einen Rahmenbaum inklusive aller Unterrahmen und Bauteile; alle anderen Bereiche werden ausgeblendet. Über 👁️ kann jeder Rahmen einzeln ein-/ausgeblendet werden.</li>
+                        <li><strong>Kamera-Fokus:</strong> Ein Klick auf die Bezeichnung eines Rahmens in der Sidebar zentriert die Kamera automatisch auf den gewählten Bereich und passt den Zoomfaktor optimal an.</li>
                     </ul>
                 </div>
 
-                <!-- TAB 2: ELEMENTE -->
+                <!-- TAB 2: BLÖCKE, RAHMEN & HIERARCHIE -->
                 <div id="tabElements" class="info-tab-pane" style="display: none;">
-                    <strong style="color: #2b6cb0; font-size: 14px;">Blöcke, Rahmen & Verbindungen</strong>
-                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
-                        <li><strong>Erstellen:</strong> Ein Rechtsklick auf eine leere Stelle öffnet das Menü für neue Blöcke oder Rahmen.</li>
-                        <li><strong>Hierarchien (Splines):</strong> Klicke auf einen der 4 Knotenpunkte (🔌) eines Blocks und danach auf ein Ziel, um eine Verknüpfung zu ziehen. (Ausblendbar über das Kontextmenü).</li>
-                        <li><strong>Referenz-Instanzen:</strong> Über Rechtsklick auf einen Block kann dieser "Als Instanz dupliziert" werden. Das Original fungiert als Master (durchgezogener Rand). Referenzen (gestrichelter Rand) leiten alle gebuchten Zeiten an den Master weiter. Strg+C / Strg+V kopiert Blöcke ebenfalls als Instanz.</li>
-                        <li><strong>Verschachtelung:</strong> Blöcke und kleinere Rahmen ordnen sich beim Hineinziehen automatisch dem Rahmen zu, in dem sie liegen (bis zu 5 Ebenen tief).</li>
-                        <li><strong>Materialfluss:</strong> Klicke auf "➔ Fluss" im Header eines Rahmens und wähle einen Ziel-Rahmen an, um einen dynamischen Materialfluss-Pfeil zu zeichnen.</li>
-                        <li><strong>Sperren (🔒):</strong> Fixiert die Position des Rahmens, damit du per Klick und Ziehen durch ihn hindurch auf dem Canvas navigieren kannst.</li>
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Baugruppen, Rahmen & Hierarchie-Verknüpfung</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Elemente anlegen:</strong> Ein Rechtsklick auf eine freie Stelle öffnet das Canvas-Kontextmenü für neue Bauteile/Baugruppen, Rahmen oder Notizen.</li>
+                        <li><strong>Automatische Rahmen-Verschachtelung:</strong> Ziehst du einen Block oder einen kleineren Rahmen in einen übergeordneten Rahmen, wird er diesem automatisch untergeordnet (bis zu 5 Ebenen tief). Beim Verschieben des Elternrahmens wandert der gesamte Inhalt synchron mit.</li>
+                        <li><strong>Hierarchie-Splines:</strong> Über die 4 Knotenpunkte (🔌 oben, unten, links, rechts) können übergeordnete und untergeordnete Baugruppen verknüpft werden. Im Kontextmenü lassen sich die Punkte zur visuellen Entlastung jederzeit ausblenden.</li>
+                        <li><strong>Instanz-Duplizierung (Strg+C / Strg+V):</strong> Erstellt eine verknüpfte Referenz-Instanz. Das Original bleibt der Master (durchgezogener Rand), Kopien sind Referenzen (gestrichelter Rand). Alle auf Referenzen gebuchten Stunden fließen automatisch im Master zusammen.</li>
+                        <li><strong>Materialfluss-Pfeile:</strong> Ein Klick auf <em>„➔ Fluss“</em> im Rahmen-Header und die Auswahl eines Zielrahmens zeichnet einen animierten Fluss-Pfeil (auf eigener GPU-Ebene für 0% CPU-Last gerendert).</li>
+                        <li><strong>Positions-Sperre (🔒):</strong> Fixiert die Lage eines Rahmens. Dadurch gehen Klicks durch den Rahmenkörper direkt auf den Canvas durch – Panning und Navigation werden nicht blockiert.</li>
                     </ul>
                 </div>
 
-                <!-- TAB 3: SPEICHERN & LOKAL -->
-                <div id="tabStorage" class="info-tab-pane" style="display: none;">
-                    <strong style="color: #2b6cb0; font-size: 14px;">Lokal arbeiten, Backups & Supabase</strong>
-                    <p style="margin-top: 6px; margin-bottom: 12px;">Das System trennt strikt zwischen Cloud-Projekten (gesynct mit Supabase) und Offline-Projekten, die rein lokal in deinem Browser existieren.</p>
-                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
-                        <li><strong>Erkennen (☁️ vs. 💾):</strong> Im Projekt-Dropdown siehst du sofort, ob ein Projekt in der Cloud (☁️) oder lokal im Browser-Cache (💾 [LOKAL]) liegt.</li>
-                        <li><strong>Neues lokales Projekt (📄):</strong> Startet ein neues Offline-Projekt. Änderungen hierin werden im Hintergrund automatisch in deinem Browser gesichert. Supabase erfährt hiervon nichts.</li>
-                        <li><strong>Backup erstellen (💾):</strong> Bist du in einem Cloud-Projekt (☁️), lädt ein Klick auf Speichern ein komplettes Backup als HTML-Datei herunter (inkl. Zeitstempel). In einem lokalen Projekt überschreibt dieser Button die zuvor geladene oder erstellte Datei direkt (In-Place Save).</li>
-                        <li><strong>Datei laden / Wiederherstellen (📂):</strong> Lädst du eine gesicherte HTML-Datei, wird diese <strong>zwingend</strong> als neues lokales Projekt (💾 [LOKAL]) geöffnet. Das verhindert, dass du aus Versehen ein Backup über eine aktive Cloud-Datenbank drüberbügelst.</li>
+                <!-- TAB 3: STATUS-BOARD & COCKPIT -->
+                <div id="tabCockpit" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Status-Board & Management-Cockpit</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Dual-Canvas Architektur:</strong> Über den oberen Modus-Schalter wechselst du zwischen dem <em>Konstruktionsplan</em> (Zeichnungshierarchie) und dem <em>Status-Board</em> (Controlling-Karten). Beide Modi besitzen getrennte Kamerapositionen.</li>
+                        <li><strong>50/50 Fertigstellungsgrad:</strong> Berechnet sich aus 50% CAD (3D) und 50% 2D-Zeichnungsableitung. Die Schieberegler sind rollenbasiert geschützt (nur zugewiesene Bearbeiter oder Admins dürfen verstellen).</li>
+                        <li>
+                            <strong>Earned-Value Health-Pills:</strong> Zeigt Budget-Gesundheit in Echtzeit an:
+                            <br />• 🟢 <em>+Xh Puffer</em>: Im Budget und Zeitplan.
+                            <br />• 🟡 <em>Verzug</em>: Hoher Stundenverbrauch bei geringem Fertigstellungsgrad.
+                            <br />• 🔴 <em>-Xh Überhang</em>: Freigegebenes Budget überschritten.
+                        </li>
+                        <li><strong>Workflow-Übergabe (📄 Bereit für 2D):</strong> Erreicht die 3D-Konstruktion $\ge 85\%$ und die Zeichnung steht noch bei $0\%$, blinkt die Karte auf – Signal für die Konstruktionsleitung zur Zeichnungsfreigabe.</li>
+                        <li><strong>Sortier-Hilfe (🗂️):</strong> Ordnet alle Baugruppen temporär nach Farbgruppen und Alphabet in übersichtlichen Spalten an. Gespeicherte Positionen werden dabei nicht überschrieben.</li>
+                        <li><strong>Nur-in-Rahmen Filter (🔲):</strong> Blendet alle ungebundenen Freiform-Blöcke aus, um den Fokus auf strukturierte Hallen- und Anlagenbereiche zu richten.</li>
                     </ul>
                 </div>
 
-                <!-- TAB 4: ZEITEN & STATUS -->
+                <!-- TAB 4: ZEITERFASSUNG & LIVE-TIMER -->
                 <div id="tabTimes" class="info-tab-pane" style="display: none;">
-                    <strong style="color: #2b6cb0; font-size: 14px;">Zeiterfassung & Status-Workflow</strong>
-                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
-                        <li><strong>Schnelleingabe:</strong> Nutze das Mausrad über den Stunden- (+/- 1h) und Minuten-Feldern (+/- 5m), um Zeiten auf Touchpads oder mit der Maus rasend schnell anzupassen. Oder wische auf dem Handy einfach nach oben/unten.</li>
-                        <li><strong>Direktbuchung auf Rahmen:</strong> Über "⏱️ Zeiten" im Rahmen-Header können Stunden auch allgemein auf ganze Zonen/Hallen gebucht werden.</li>
-                        <li><strong>Rückwirkend Eintragen:</strong> Im Bearbeitungsmenü (Doppelklick auf Block) kann nachträglich Zeit erfasst werden. Admins geben diese direkt frei, für Kollegen landen sie vorerst im Status "Wartend".</li>
-                        <li><strong>Fertigmelden:</strong> Klick auf "✔ Fertigmelden" am Block reicht diesen zur Freigabe ein (Status ⏳). Nach Admin-Freigabe gilt er als erledigt (✅).</li>
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Zeiterfassung, Live-Timer & Workflows</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Mausrad-Schnelleingabe:</strong> Drehe das Mausrad über den Stunden- (+/- 1h) oder Minutenfeldern (+/- 5m) für sekundenschnelle Eingabe mit automatischem 60-Minuten-Übertrag. Auf Smartphones genügt vertikales Wischen auf den Zahlenfeldern.</li>
+                        <li><strong>Schwebendes Live-Timer Dock:</strong> Unten zentrierte Stoppuhr mit Start / Pause / Stop. Beim Beenden wird die gemessene Zeit automatisch auf praxisnahe 5-Minuten-Schritte gerundet (mind. 5m) und kann vor der Buchung editiert werden.</li>
+                        <li><strong>Klick-Zuweisung (🎯):</strong> Nach dem Stoppen klickst du auf <em>Zuweisen</em>. Im Canvas leuchten Blöcke vollflächig auf, Rahmen leuchten gezielt nur im Header auf. Ein Klick bucht die Zeit nach Bestätigung ein.</li>
+                        <li><strong>Direktbuchung auf Rahmen:</strong> Über <em>„⏱️ Zeiten“</em> im Rahmen-Header können Stunden direkt pauschal auf Bereiche verbucht werden. Pro Rahmen klappt exklusiv immer nur ein Log auf, um den Canvas übersichtlich zu halten.</li>
+                        <li><strong>Rückwirkende Buchungen:</strong> Im Block- oder Rahmenmenü können nachträglich Zeiten erfasst werden (von Admins sofort freigegeben, von Mitarbeitern zur Freigabe eingereicht).</li>
+                        <li><strong>Fertigmelden & Revision:</strong> Klick auf <em>„✔ Fertigmelden“</em> reicht Baugruppen zur Freigabe ein (⏳). Nach Freigabe springt der Status auf erledigt (✅ 100%). Admins können Bauteile jederzeit wieder auf Revision setzen.</li>
                     </ul>
                 </div>
 
-                <!-- TAB 5: NOTIZEN -->
-                <div id="tabNotes" class="info-tab-pane" style="display: none;">
-                    <strong style="color: #2b6cb0; font-size: 14px;">Notizen & To-Do Listen</strong>
-                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 6px; display: flex; flex-direction: column;">
-                        <li><strong>Sticky Notes (📝):</strong> Frei auf dem Canvas platzierbar und genau wie Blöcke einem Rahmen zuordnungsbar.</li>
-                        <li><strong>To-Do Listen (☑️):</strong> Enthalten eine Checkliste. Der rote Warn-Rand fängt an zu pulsieren, wenn das Fälligkeitsdatum überschritten wurde und noch nicht alle Punkte abgehakt sind.</li>
-                        <li><strong>Sichtbarkeit:</strong> Du kannst beim Erstellen entscheiden, ob eine Notiz öffentlich (für alle) oder privat (🔒 nur für dich und Admins sichtbar) sein soll.</li>
-                        <li><strong>Zuklappen:</strong> Klick auf das Minus (−) im Header der Notiz klappt diese auf Icon-Größe zusammen.</li>
+                <!-- TAB 5: REVIEWS & SNAPSHOTS -->
+                <div id="tabReview" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Review-Snapshots, Deltas & Auswertung</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Review-Snapshots setzen (🚩):</strong> Friert den vollständigen Projektstatus (Budgets, Ist-Stunden aller Elemente, 50/50 Fortschritte) zu einem frei wählbaren Stichtag ein – auch rückwirkend für vergangene Reviews.</li>
+                        <li><strong>Intervall-Vergleich (Auswertung 📊):</strong> Im Reporting-Modal wählst du unter <em>Zeitraum / Modus</em> die Option <em>🚩 Review-Vergleich (Snapshots)</em> und stellst Snapshot A gegen Snapshot B (oder den aktuellen Live-Stand).</li>
+                        <li><strong>Hierarchischer Bottom-Up Rollup:</strong> Alle verbuchten Stunden einzelner Bauteile und Unterrahmen fließen mathematisch in den jeweils übergeordneten Rahmen ein. Jeder oberste Hauptrahmen kennt somit die exakte Gesamtsumme seines Teilbaums.</li>
+                        <li><strong>Top-Down Sortierung (Vom obersten Rahmen weg):</strong> Die Auswertung sortiert die obersten Hauptrahmen absteigend nach Intervall-Aufwand (der Bereich mit den meisten Arbeitsstunden steht ganz oben). Innerhalb jedes Rahmens sind auch die Bauteile absteigend sortiert.</li>
+                        <li><strong>Budget-Delta Matrix:</strong> Erkennt automatisch, welche Soll-Budgets zwischen den Reviews erhöht (🔺), gekürzt (🔻) oder neu hinzugefügt (➕) wurden.</li>
+                        <li><strong>Controlling-PDF:</strong> Erzeugt druckfertige Berichte inklusive Kalenderwochen-Aufschlüsselung, Gesamtprojekt-Donuts und detailliertem Buchungsprotokoll.</li>
+                    </ul>
+                </div>
+
+                <!-- TAB 6: SPEICHER, DRUCK & SYSTEM -->
+                <div id="tabStorage" class="info-tab-pane" style="display: none;">
+                    <strong style="color: #2b6cb0; font-size: 13.5px;">Lokale Offline-Dateien, DIN-Druck & Farbsystem</strong>
+                    <ul style="margin-top: 8px; padding-left: 18px; margin-bottom: 12px; gap: 8px; display: flex; flex-direction: column;">
+                        <li><strong>Cloud vs. Offline-Dateien:</strong> Das System trennt strikt zwischen Cloud-Projekten (☁️ gesynct mit Supabase) und Offline-Projekten (💾 [LOKAL]). Lokale Projekte bleiben im Browser isoliert und synchronisieren nicht mit dem Server.</li>
+                        <li><strong>Direktes Überschreiben (In-Place Save):</strong> In lokalen Dateien überschreibt der Klick auf 💾 direkt die zuvor geöffnete HTML-Datei auf der Festplatte (kein Download-Spam). In Cloud-Projekten wird ein HTML-Backup heruntergeladen.</li>
+                        <li><strong>Technischer Zeichnungsdruck (🖨️):</strong> Druckt den Canvas maßstabsgetreu eingepasst auf DIN A4 bis DIN A0 mit normgerechtem 185 mm x 35 mm Plankopf unten rechts oder exportiert einen hierarchischen Strukturbaum.</li>
+                        <li><strong>Baugruppen-Farbkategorien:</strong> Farben sind spezifischen Baugruppentypen zugeordnet (z.B. Förderbänder, Bandelemente, Knicke, Schurren). Farbänderungen im Admin-Menü kaskadieren automatisch auf alle bestehenden Blöcke und Rahmen.</li>
+                        <li><strong>Audit-Protokoll:</strong> Jede Änderung an Projektbudgets oder Projektbezeichnungen wird mit Benutzerkürzel, Timestamp und Vorher-Nachher-Werten revisionssicher protokolliert.</li>
                     </ul>
                 </div>
 
             </div>
-            <div class="modal-actions" style="margin-top: 15px; border-top: 1px solid #edf2f7; padding-top: 15px;">
-                <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Verstanden, los geht's!</button>
+
+            <div class="modal-actions" style="margin-top: 14px; border-top: 1px solid #edf2f7; padding-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; color: #718096;">Tipp: Über die Taste <kbd style="background:#edf2f7; padding:1px 5px; border-radius:3px; border:1px solid #cbd5e0;">ESC</kbd> schließt du jedes Fenster sofort.</span>
+                <button type="button" class="btn-prim" onclick="closeModal('infoGuideModal')">Schließen</button>
             </div>
         </div>
     </div>
@@ -512,14 +554,14 @@
                     </div>
 
                     <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Reporting UI (Snapshot-Vergleichsauswahl)
-    ERSETZEN IN: index.html (Im #reportModal -> Form-Group repTimeframe)
-    Zeitstempel: 2026-09-27 15:45:00 CEST
-    Breadcrumb: [2026-09-27] Option 'snapshot_compare' und Auswahldropdowns für Snapshots integriert.
-    =============================================================================
-    -->
+                    =============================================================================
+                    Projekt: CAD Time Manager
+                    Domain: Reporting UI (Snapshot-Vergleichsauswahl)
+                    ERSETZEN IN: index.html (Im #reportModal -> Form-Group repTimeframe)
+                    Zeitstempel: 2026-09-27 15:45:00 CEST
+                    Breadcrumb: [2026-09-27] Option 'snapshot_compare' und Auswahldropdowns für Snapshots integriert.
+                    =============================================================================
+                    -->
                     <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
                         <label>Zeitraum / Modus:</label>
                         <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
