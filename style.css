@@ -1288,11 +1288,18 @@ html, body {
  * Breadcrumb: [2026-08-26] Styling für Sticky Notes (Zuklappbar & Resizable)
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Flat Sticky Notes ohne Schatten)
+ * ERSETZEN IN: style.css (Block .note-card und .note-card:hover)
+ * Zeitstempel: 2026-09-27 12:20:00 CEST
+ * =============================================================================
+ */
 .note-card {
     position: absolute !important;
-    /* !important für width und height entfernt, damit JS die dynamische Größe setzen kann */
     border-radius: 4px 4px 16px 4px !important;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12) !important;
+    box-shadow: none !important; /* Schatten vollständig entfernt */
     z-index: 15 !important;
     user-select: none !important;
     box-sizing: border-box !important;
@@ -1310,7 +1317,12 @@ html, body {
     }
 
     .note-card:hover {
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18) !important;
+        box-shadow: none !important; /* Kein Hover-Schatten */
+    }
+
+    .note-card.selected-node {
+        box-shadow: none !important;
+        outline: 3px solid #ecc94b !important;
     }
 
 /* Resize-Handle unten rechts an der Notiz */
@@ -1624,24 +1636,35 @@ html, body {
     contain: layout style;
 }
 
-/* 
- * Offscreen-Culling: Elemente, die außerhalb des sichtbaren Fensters liegen,
- * belasten weder CPU noch GPU, solange sie nicht im Sichtfeld sind.
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Badge-Überstand freigegeben & Zoom-Schutz)
+ * ERSETZEN IN: style.css (Zeile ~800 bis ~825)
+ * Zeitstempel: 2026-09-27 12:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:05:00 CEST]: Culling-Versuch.
+ *   - [2026-09-27 12:20:00 CEST]: BUGFIX: content-visibility & contain:layout 
+ *     restlos entfernt (verhindert das Abschneiden von top: -12px Badges 
+ *     entlang der Oberkante). overflow: visible für Karten und Rahmen garantiert.
+ * =============================================================================
  */
-.assembly-card, .project-zone, .note-card {
-    content-visibility: auto;
-    contain-intrinsic-size: 320px 200px;
-    contain: layout style;
+
+/* 
+ * Strikte Freigabe des Überstands:
+ * Verhindert jedes Clipping von .assembly-id-badge (top: -12px) und .ep-top (top: -9px)
+ */
+.assembly-card,
+.project-zone {
+    overflow: visible !important;
 }
 
 /* 
- * Während der schnellen Zoomfahrt (LERP) werden nur rechenintensive
- * Schatten gedämpft, um 120-144 FPS ohne Frame-Drops zu liefern.
- * Badges und Rahmen bleiben dabei zu 100% sichtbar und unbeschnitten!
+ * Während der schnellen Zoomfahrt (LERP) werden nur bei Karten die Schatten
+ * temporär gedämpft, um 120-144 FPS zu sichern.
  */
 #viewport.is-zooming .assembly-card,
-#viewport.is-zooming .project-zone,
-#viewport.is-zooming .note-card {
+#viewport.is-zooming .project-zone {
     box-shadow: none !important;
 }
 
