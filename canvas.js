@@ -72,7 +72,21 @@ window.contextTargetZoneId = null;
  *     die Rasterpunkte beim Pannen/Zoomen millimetergenau mitwandern.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (GPU-Schonender Grid-Sync ohne Dauer-Repaint)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 13:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:45:00 CEST]: Viewport-Grid-Sync.
+ *   - [2026-09-27 13:10:00 CEST]: PERF-FIX MOBILE: backgroundSize wird strikt
+ *     NUR noch neu berechnet, wenn sich window.currentScale tatsächlich ändert.
+ *     1-Finger-Panning löst keine teure Gradient-Neuberechnung mehr aus.
+ * =============================================================================
+ */
 let saveTransformTimeout = null;
+let lastRenderedGridScale = -1;
 
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
@@ -96,14 +110,17 @@ function applyCanvasTransform(animate = false) {
     canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    // Raster synchron zum Fadenkreuz mitgleiten lassen
+    // Raster synchron mitgleiten lassen (backgroundSize nur bei echtem Zoom-Wechsel anfassen)
     if (viewportEl) {
-        const scaledGridSize = 24 * window.currentScale;
-        viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
+        if (Math.abs(lastRenderedGridScale - window.currentScale) > 0.001) {
+            const scaledGridSize = 24 * window.currentScale;
+            viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
+            lastRenderedGridScale = window.currentScale;
+        }
         viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
     }
 
-    // Debounced LocalStorage (keine I/O-Blockaden während der 120-FPS-Fahrt)
+    // Debounced LocalStorage (keine I/O-Blockaden während der Fahrt)
     clearTimeout(saveTransformTimeout);
     saveTransformTimeout = setTimeout(() => {
         localStorage.setItem('cad_tm_panX', window.currentPanX);
@@ -277,6 +294,32 @@ function initNativeCanvasEngine() {
         }
     });
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (rAF Touch-Pipeline & .is-zooming Aktivierung)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> TOUCH-EVENTS Bereich)
+ * Zeitstempel: 2026-09-27 13:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:45:00 CEST]: Basis Multi-Touch.
+ *   - [2026-09-27 13:15:00 CEST]: PERF-FIX MOBILE: 1. touchmove entkoppelt via 
+ *     requestAnimationFrame (verhindert Event-Stau bei 120Hz). 2. Viewport erhält
+ *     während Pan & Pinch die Klasse .is-zooming, um teure Schatten und SVGs
+ *     temporär abzuschalten (stoppt Kachel-Flackern und Ausblenden).
+ * =============================================================================
+ */
+
+    let touchRafPending = false;
+    const requestTouchTransform = () => {
+        if (!touchRafPending) {
+            touchRafPending = true;
+            requestAnimationFrame(() => {
+                applyCanvasTransform(false);
+                touchRafPending = false;
+            });
+        }
+    };
+
     // ---------------------------------------------------------
     // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
     // ---------------------------------------------------------
@@ -286,6 +329,7 @@ function initNativeCanvasEngine() {
             window.isPinching = true;
             window.isDraggingAnything = false;
             isPanning = false;
+            viewport.classList.add('is-zooming');
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
@@ -313,28 +357,20 @@ function initNativeCanvasEngine() {
 
         if (e.touches.length === 1 && !window.isPinching) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
+            viewport.classList.add('is-zooming');
         }
     }, { capture: true, passive: false });
-
-    window.addEventListener('mousemove', (e) => {
-        if (!isPanning) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        window.currentPanX = startPanX + dx;
-        window.currentPanY = startPanY + dy;
-        applyCanvasTransform(false);
-    });
 
     window.addEventListener('touchmove', (e) => {
         // 2-Finger Pinch Zooming
         if (e.touches.length === 2) {
             if (e.cancelable) e.preventDefault();
 
-            // On-the-fly Initialisierung falls der 2. Finger ohne separates touchstart aktiv wurde
             if (!window.isPinching || pinchStartDist <= 0) {
                 window.isPinching = true;
                 window.isDraggingAnything = false;
                 isPanning = false;
+                viewport.classList.add('is-zooming');
 
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
@@ -365,7 +401,8 @@ function initNativeCanvasEngine() {
             window.currentScale = newScale;
             window.currentPanX = curMidX - (pinchWorldX * newScale);
             window.currentPanY = curMidY - (pinchWorldY * newScale);
-            applyCanvasTransform(false);
+
+            requestTouchTransform();
             return;
         }
 
@@ -376,7 +413,8 @@ function initNativeCanvasEngine() {
             const dy = e.touches[0].clientY - startY;
             window.currentPanX = startPanX + dx;
             window.currentPanY = startPanY + dy;
-            applyCanvasTransform(false);
+
+            requestTouchTransform();
         }
     }, { passive: false });
 
@@ -396,6 +434,12 @@ function initNativeCanvasEngine() {
         if (isPanning && (!e.touches || e.touches.length === 0)) {
             isPanning = false;
             viewport.style.cursor = 'default';
+        }
+
+        // Sobald keine Finger mehr aufliegen: Schutzklasse entfernen
+        if (!e.touches || e.touches.length === 0) {
+            viewport.classList.remove('is-zooming');
+            applyCanvasTransform(false); // Letzte Position synchron festschreiben
         }
     };
 
