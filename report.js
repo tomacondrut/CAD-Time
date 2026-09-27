@@ -875,6 +875,20 @@ function renderReportDetailsTable(logs) {
  *     2. Summenkacheln im PDF einheitlich 3-spaltig (CAD, Zeichnung, Gesamt) ausgerichtet.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting & PDF Export (Snapshot-Vergleich & Hierarchische Matrix)
+ * ERSETZEN IN: report.js (Funktion window.generatePDF komplett ersetzen)
+ * Zeitstempel: 2026-09-27 16:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 19:00:00 CEST]: KW-Wochenaufschlüsselung & 3-spaltige Summenkacheln.
+ *   - [2026-09-27 16:35:00 CEST]: BUGFIX: Weiche für 'snapshot_compare' integriert.
+ *     Im Review-Modus exportiert das PDF nun exakt die hierarchische Aufstellung
+ *     (Soll/Ist, Budget-Deltas, absteigend vom obersten Rahmen sortiert) inklusive
+ *     Review-Intervall-Banner und Stichtags-Donuts statt des einfachen Logbuchs.
+ * =============================================================================
+ */
 window.generatePDF = async function () {
     const btn = document.getElementById('btnExportPDF');
     if (!btn) return;
@@ -886,14 +900,14 @@ window.generatePDF = async function () {
     try {
         const pData = reportState.projData;
         const selUser = document.getElementById('repFilterUser');
-        const filterUserName = selUser.options[selUser.selectedIndex].text;
+        const filterUserName = selUser ? selUser.options[selUser.selectedIndex].text : 'Alle Mitarbeiter';
         const timeframe = document.getElementById('repTimeframe').value;
 
-        const dStart = `${reportState.startDate.getDate().toString().padStart(2, '0')}.${(reportState.startDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.startDate.getFullYear()}`;
-        const dEnd = `${reportState.endDate.getDate().toString().padStart(2, '0')}.${(reportState.endDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.endDate.getFullYear()}`;
+        const dStart = reportState.startDate ? `${reportState.startDate.getDate().toString().padStart(2, '0')}.${(reportState.startDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.startDate.getFullYear()}` : '';
+        const dEnd = reportState.endDate ? `${reportState.endDate.getDate().toString().padStart(2, '0')}.${(reportState.endDate.getMonth() + 1).toString().padStart(2, '0')}.${reportState.endDate.getFullYear()}` : '';
 
-        const safeProjName = pData.name.replace(/[^a-zA-Z0-9\-_ÄÖÜäöü]/g, '_');
-        const exportFileName = `Auswertung_${pData.obj}_${safeProjName}_${dEnd}.pdf`;
+        const safeProjName = (pData.name || 'Projekt').replace(/[^a-zA-Z0-9\-_ÄÖÜäöü]/g, '_');
+        let exportFileName = `Auswertung_${pData.obj}_${safeProjName}_${dEnd}.pdf`;
 
         const pieDUrl = createPieChartImage(pData.spentD, pData.budD, '#3182ce');
         const pieDrUrl = createPieChartImage(pData.spentDr, pData.budDr, '#38a169');
@@ -905,172 +919,246 @@ window.generatePDF = async function () {
 
         const pdfCss = `
             <style>
-                .pdf-page { background: white; padding: 30px; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.5; color: #333; }
-                .pdf-header { border-bottom: 2px solid #3182ce; padding-bottom: 10px; margin-bottom: 15px; }
-                .pdf-header h1 { color: #2c3e50; margin: 0 0 4px 0; font-size: 20px; }
+                .pdf-page { background: white; padding: 25px 30px; box-sizing: border-box; font-family: Arial, sans-serif; font-size: 11px; line-height: 1.5; color: #333; }
+                .pdf-header { border-bottom: 2px solid #3182ce; padding-bottom: 10px; margin-bottom: 12px; }
+                .pdf-header h1 { color: #2c3e50; margin: 0 0 4px 0; font-size: 18px; }
                 .pdf-header-meta { display: flex; justify-content: space-between; font-size: 10px; color: #666; }
-                .pdf-section-title { background: #f4f4f9; padding: 6px 10px; font-size: 12px; border-left: 4px solid; margin: 0 0 10px 0; color: #2c3e50; font-weight: bold; }
-                .pdf-box { background: #f9f9f9; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; border: 1px solid #edf2f7; }
-                table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                th, td { border-bottom: 1px solid #edf2f7; padding: 6px 4px; text-align: left; }
+                .pdf-section-title { background: #f4f4f9; padding: 6px 10px; font-size: 11px; border-left: 4px solid #3182ce; margin: 14px 0 8px 0; color: #2c3e50; font-weight: bold; }
+                .pdf-box { background: #f9f9f9; padding: 10px 14px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #edf2f7; }
+                table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+                th, td { border-bottom: 1px solid #edf2f7; padding: 5px 4px; text-align: left; }
                 th { background: #f7fafc; color: #4a5568; font-weight: bold; }
+                tr { page-break-inside: avoid; }
+                .log-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+                .log-table th { background: #edf2f7; color: #2d3748; font-weight: bold; padding: 6px 4px; border-bottom: 2px solid #cbd5e0; }
+                .log-table td { padding: 4px; border-bottom: 1px solid #edf2f7; }
             </style>
         `;
 
-        const pageHeader = `
-            <div class="pdf-header">
-                <h1>Projekt-Controlling & Zeitauswertung</h1>
-                <div class="pdf-header-meta">
-                    <div><strong>Projekt:</strong> ${pData.obj} - ${pData.name}</div>
-                    <div><strong>Auswertungszeitraum:</strong> ${dStart} bis ${dEnd}</div>
-                    <div><strong>Generiert am:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
+        // ---------------------------------------------------------------------
+        // FALL A: REVIEW-VERGLEICH (SNAPSHOTS)
+        // ---------------------------------------------------------------------
+        if (timeframe === 'snapshot_compare') {
+            const selAId = document.getElementById('repSelectSnapshotA')?.value;
+            const selBId = document.getElementById('repSelectSnapshotB')?.value;
+
+            const snapA = (window.currentSnapshots || []).find(s => s.id === selAId) || null;
+            const snapB = (window.currentSnapshots || []).find(s => s.id === selBId) || null;
+
+            const sADateStr = snapA ? new Date(snapA.review_date).toLocaleDateString('de-DE') : dStart;
+            const sBDateStr = snapB ? new Date(snapB.review_date).toLocaleDateString('de-DE') : 'Heute (Live)';
+            const sBTitle = snapB ? snapB.title : 'Live-Stand';
+            const sATitle = snapA ? snapA.title : 'Snapshot';
+
+            exportFileName = `Review_Vergleich_${pData.obj}_${safeProjName}_${dEnd}.pdf`;
+
+            const summaryHtml = document.getElementById('repSummaryContainer')?.innerHTML || '';
+            const detailsHtml = document.getElementById('repDetailsContainer')?.innerHTML || '';
+
+            pdfContainer.innerHTML = pdfCss + `
+                <div class="pdf-page">
+                    <div class="pdf-header">
+                        <h1>Review-Vergleich &amp; Controlling-Bericht</h1>
+                        <div class="pdf-header-meta">
+                            <div><strong>Projekt:</strong> ${escapeHtml(pData.obj)} – ${escapeHtml(pData.name)}</div>
+                            <div><strong>Intervall:</strong> ${escapeHtml(sATitle)} (${sADateStr}) ➔ ${escapeHtml(sBTitle)} (${sBDateStr})</div>
+                            <div><strong>Generiert am:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
+                        </div>
+                    </div>
+
+                    <div class="pdf-section-title" style="border-color: #3182ce;">Gesamtprojekt-Status zum Stichtag (${dEnd})</div>
+                    <div class="pdf-box" style="display: flex; gap: 40px; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img src="${pieDUrl}" style="width: 50px; height: 50px;">
+                            <div>
+                                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total CAD</div>
+                                <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentD)}</strong> von ${formatHoursToHM(pData.budD)}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
+                            <div>
+                                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total Zeichnung</div>
+                                <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentDr)}</strong> von ${formatHoursToHM(pData.budDr)}</div>
+                            </div>
+                        </div>
+                        ${filterUserName !== 'Alle Mitarbeiter' ? `
+                            <div style="margin-left: auto; font-size: 11px;">
+                                <strong>Mitarbeiter:</strong> <span style="background:#2b6cb0; color:#fff; padding:2px 6px; border-radius:3px; font-weight:bold;">${escapeHtml(filterUserName)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="pdf-section-title" style="border-color: #e67e22; margin-top: 15px;">Intervall-Aufwand &amp; Delta</div>
+                    <div style="margin-bottom: 10px;">
+                        ${summaryHtml}
+                    </div>
+
+                    <div class="pdf-section-title" style="border-color: #2b6cb0; margin-top: 15px;">Hierarchischer Soll-/Ist-Vergleich (Vom obersten Bereich absteigend)</div>
+                    <div style="width: 100%;">
+                        ${detailsHtml || '<div style="padding:10px; color:#718096;">Keine Daten für dieses Intervall vorhanden.</div>'}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            // -----------------------------------------------------------------
+            // FALL B: STANDARD-REPORT (Heute, Gestern, Woche, Monat, Custom)
+            // -----------------------------------------------------------------
+            const pageHeader = `
+                <div class="pdf-header">
+                    <h1>Projekt-Controlling & Zeitauswertung</h1>
+                    <div class="pdf-header-meta">
+                        <div><strong>Projekt:</strong> ${escapeHtml(pData.obj)} – ${escapeHtml(pData.name)}</div>
+                        <div><strong>Auswertungszeitraum:</strong> ${dStart} bis ${dEnd}</div>
+                        <div><strong>Generiert am:</strong> ${new Date().toLocaleDateString('de-DE')}</div>
+                    </div>
+                </div>
+            `;
 
-        let tableRows = '';
-        let filterTotalD = 0, filterTotalDr = 0;
-        const weeklyData = {};
+            let tableRows = '';
+            let filterTotalD = 0, filterTotalDr = 0;
+            const weeklyData = {};
 
-        reportState.logs.forEach(log => {
-            let nodeName = 'Unbekannt';
-            let zoneName = '-';
+            reportState.logs.forEach(log => {
+                let nodeName = 'Unbekannt';
+                let zoneName = '-';
 
-            if (log.node_id) {
-                const node = currentNodes.find(n => n.id === log.node_id);
-                if (node) {
-                    nodeName = node.name;
-                    if (node.zone_id) {
-                        const zone = currentZones.find(z => z.id === node.zone_id);
-                        if (zone) zoneName = zone.title;
+                if (log.node_id) {
+                    const node = currentNodes.find(n => n.id === log.node_id);
+                    if (node) {
+                        nodeName = node.name;
+                        if (node.zone_id) {
+                            const zone = currentZones.find(z => z.id === node.zone_id);
+                            if (zone) zoneName = zone.title;
+                        }
+                    }
+                } else if (log.zone_id) {
+                    const zone = currentZones.find(z => z.id === log.zone_id);
+                    if (zone) {
+                        zoneName = zone.title;
+                        nodeName = zone.title;
                     }
                 }
-            } else if (log.zone_id) {
-                const zone = currentZones.find(z => z.id === log.zone_id);
-                if (zone) {
-                    zoneName = zone.title;
-                    nodeName = zone.title;
+
+                const d = new Date(log.logged_at);
+                const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+                let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichnung' : 'Status');
+                let timeStr = formatHoursToHM(log.hours);
+
+                const hrs = parseFloat(log.hours) || 0;
+                if (log.task_type === 'completion') {
+                    timeStr = 'Status-Flag';
+                } else {
+                    if (log.task_type === 'design') filterTotalD += hrs;
+                    if (log.task_type === 'drafting') filterTotalDr += hrs;
+
+                    if (timeframe === 'month' || timeframe === 'custom') {
+                        const kw = getISOWeekNumber(d);
+                        if (!weeklyData[kw]) weeklyData[kw] = { cad: 0, draft: 0 };
+                        if (log.task_type === 'design') weeklyData[kw].cad += hrs;
+                        if (log.task_type === 'drafting') weeklyData[kw].draft += hrs;
+                    }
                 }
-            }
 
-            const d = new Date(log.logged_at);
-            const dateStr = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-            let kat = log.task_type === 'design' ? 'CAD' : (log.task_type === 'drafting' ? 'Zeichnung' : 'Status');
-            let timeStr = formatHoursToHM(log.hours);
-
-            const hrs = parseFloat(log.hours) || 0;
-            if (log.task_type === 'completion') {
-                timeStr = 'Status-Flag';
-            } else {
-                if (log.task_type === 'design') filterTotalD += hrs;
-                if (log.task_type === 'drafting') filterTotalDr += hrs;
-
-                if (timeframe === 'month' || timeframe === 'custom') {
-                    const kw = getISOWeekNumber(d);
-                    if (!weeklyData[kw]) weeklyData[kw] = { cad: 0, draft: 0 };
-                    if (log.task_type === 'design') weeklyData[kw].cad += hrs;
-                    if (log.task_type === 'drafting') weeklyData[kw].draft += hrs;
-                }
-            }
-
-            tableRows += `
-                <tr>
-                    <td>${dateStr}</td>
-                    <td><strong>${escapeHtml(log.user_code)}</strong></td>
-                    <td style="color:#718096;">${escapeHtml(zoneName)}</td>
-                    <td>${escapeHtml(nodeName)}</td>
-                    <td>${kat}</td>
-                    <td><strong>${timeStr}</strong></td>
-                    <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
-                </tr>
-            `;
-        });
-
-        // Kalenderwochen-Tabelle für das PDF aufbereiten
-        let pdfWeeklyHtml = '';
-        if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
-            pdfWeeklyHtml = `
-                <div class="pdf-section-title" style="border-color: #3182ce; margin-top: 15px;">Wochenaufschlüsselung (Kalenderwochen)</div>
-                <table style="margin-bottom: 15px;">
-                    <thead>
-                        <tr>
-                            <th style="width: 25%;">Kalenderwoche</th>
-                            <th style="width: 25%;">CAD</th>
-                            <th style="width: 25%;">Zeichnung</th>
-                            <th style="width: 25%;">Summe KW</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
-            sortedKWs.forEach(kw => {
-                const wCAD = weeklyData[kw].cad;
-                const wDraft = weeklyData[kw].draft;
-                pdfWeeklyHtml += `
+                tableRows += `
                     <tr>
-                        <td><strong>KW ${kw}</strong></td>
-                        <td style="color:#2b6cb0;">${formatHoursToHM(wCAD)}</td>
-                        <td style="color:#38a169;">${formatHoursToHM(wDraft)}</td>
-                        <td><strong>${formatHoursToHM(wCAD + wDraft)}</strong></td>
+                        <td>${dateStr}</td>
+                        <td><strong>${escapeHtml(log.user_code)}</strong></td>
+                        <td style="color:#718096;">${escapeHtml(zoneName)}</td>
+                        <td>${escapeHtml(nodeName)}</td>
+                        <td>${kat}</td>
+                        <td><strong>${timeStr}</strong></td>
+                        <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
                     </tr>
                 `;
             });
 
-            pdfWeeklyHtml += `</tbody></table>`;
-        }
+            let pdfWeeklyHtml = '';
+            if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
+                pdfWeeklyHtml = `
+                    <div class="pdf-section-title" style="border-color: #3182ce; margin-top: 15px;">Wochenaufschlüsselung (Kalenderwochen)</div>
+                    <table style="margin-bottom: 15px;">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%;">Kalenderwoche</th>
+                                <th style="width: 25%;">CAD</th>
+                                <th style="width: 25%;">Zeichnung</th>
+                                <th style="width: 25%;">Summe KW</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
 
-        pdfContainer.innerHTML = pdfCss + `
-            <div class="pdf-page">
-                ${pageHeader}
-                
-                <div class="pdf-section-title" style="border-color: #3182ce;">Gesamtprojekt-Status zum Stichtag (${dEnd})</div>
-                <div class="pdf-box" style="display: flex; gap: 40px; align-items: center;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="${pieDUrl}" style="width: 50px; height: 50px;">
-                        <div>
-                            <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total CAD</div>
-                            <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentD)}</strong> von ${formatHoursToHM(pData.budD)}</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
-                        <div>
-                            <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total Zeichnung</div>
-                            <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentDr)}</strong> von ${formatHoursToHM(pData.budDr)}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="pdf-section-title" style="border-color: #e67e22; margin-top: 15px;">Gefilterter Aufwand: ${filterUserName}</div>
-                <div class="pdf-box" style="display: flex; gap: 20px; justify-content: space-between;">
-                    <div><strong>Summe CAD:</strong> <span style="color:#2b6cb0; font-size: 13px;">${formatHoursToHM(filterTotalD)}</span></div>
-                    <div><strong>Summe Zeichnung:</strong> <span style="color:#38a169; font-size: 13px;">${formatHoursToHM(filterTotalDr)}</span></div>
-                    <div><strong>Gesamtaufwand:</strong> <span style="color:#2d3748; font-weight: bold; font-size: 13px;">${formatHoursToHM(filterTotalD + filterTotalDr)}</span></div>
-                </div>
-
-                ${pdfWeeklyHtml}
-
-                <div class="pdf-section-title" style="border-color: #4a5568; margin-top: 15px;">Logbuch-Auszug</div>
-                <table>
-                    <thead>
+                const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
+                sortedKWs.forEach(kw => {
+                    const wCAD = weeklyData[kw].cad;
+                    const wDraft = weeklyData[kw].draft;
+                    pdfWeeklyHtml += `
                         <tr>
-                            <th>Datum</th><th>User</th><th>Bereich</th><th>Baugruppe</th><th>Kat.</th><th>Dauer</th><th>Kommentar</th>
+                            <td><strong>KW ${kw}</strong></td>
+                            <td style="color:#2b6cb0;">${formatHoursToHM(wCAD)}</td>
+                            <td style="color:#38a169;">${formatHoursToHM(wDraft)}</td>
+                            <td><strong>${formatHoursToHM(wCAD + wDraft)}</strong></td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRows || '<tr><td colspan="7">Keine Einträge vorhanden.</td></tr>'}
-                    </tbody>
-                </table>
-            </div>
-        `;
+                    `;
+                });
+
+                pdfWeeklyHtml += `</tbody></table>`;
+            }
+
+            pdfContainer.innerHTML = pdfCss + `
+                <div class="pdf-page">
+                    ${pageHeader}
+                    
+                    <div class="pdf-section-title" style="border-color: #3182ce;">Gesamtprojekt-Status zum Stichtag (${dEnd})</div>
+                    <div class="pdf-box" style="display: flex; gap: 40px; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img src="${pieDUrl}" style="width: 50px; height: 50px;">
+                            <div>
+                                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total CAD</div>
+                                <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentD)}</strong> von ${formatHoursToHM(pData.budD)}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
+                            <div>
+                                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold;">Total Zeichnung</div>
+                                <div style="font-size:13px; color:#2c3e50;"><strong>${formatHoursToHM(pData.spentDr)}</strong> von ${formatHoursToHM(pData.budDr)}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pdf-section-title" style="border-color: #e67e22; margin-top: 15px;">Gefilterter Aufwand: ${escapeHtml(filterUserName)}</div>
+                    <div class="pdf-box" style="display: flex; gap: 20px; justify-content: space-between;">
+                        <div><strong>Summe CAD:</strong> <span style="color:#2b6cb0; font-size: 13px;">${formatHoursToHM(filterTotalD)}</span></div>
+                        <div><strong>Summe Zeichnung:</strong> <span style="color:#38a169; font-size: 13px;">${formatHoursToHM(filterTotalDr)}</span></div>
+                        <div><strong>Gesamtaufwand:</strong> <span style="color:#2d3748; font-weight: bold; font-size: 13px;">${formatHoursToHM(filterTotalD + filterTotalDr)}</span></div>
+                    </div>
+
+                    ${pdfWeeklyHtml}
+
+                    <div class="pdf-section-title" style="border-color: #4a5568; margin-top: 15px;">Logbuch-Auszug</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Datum</th><th>User</th><th>Bereich</th><th>Baugruppe</th><th>Kat.</th><th>Dauer</th><th>Kommentar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows || '<tr><td colspan="7">Keine Einträge vorhanden.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
 
         const opt = {
             margin: [10, 10, 15, 10],
             filename: exportFileName,
             image: { type: 'jpeg', quality: 1.0 },
             html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
         };
 
         const worker = html2pdf().set(opt).from(pdfContainer).toPdf().get('pdf').then((pdf) => {
