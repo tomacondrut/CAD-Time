@@ -1639,19 +1639,19 @@ html, body {
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Stylesheet (Badge-Überstand freigegeben & Zoom-Schutz)
- * ERSETZEN IN: style.css (Zeile ~800 bis ~825)
- * Zeitstempel: 2026-09-27 12:20:00 CEST
+ * Domain: Stylesheet (Freigabe des Überstands & Badge-Sichtbarkeit)
+ * ERSETZEN IN: style.css (Zeile ~790 bis ~830)
+ * Zeitstempel: 2026-09-27 12:45:00 CEST
  * Breadcrumbs:
- *   - [2026-09-27 12:05:00 CEST]: Culling-Versuch.
- *   - [2026-09-27 12:20:00 CEST]: BUGFIX: content-visibility & contain:layout 
- *     restlos entfernt (verhindert das Abschneiden von top: -12px Badges 
- *     entlang der Oberkante). overflow: visible für Karten und Rahmen garantiert.
+ *   - [2026-09-27 12:20:00 CEST]: content-visibility & contain:layout entfernt.
+ *   - [2026-09-27 12:45:00 CEST]: BUGFIX: 1. contain auf #canvas restlos entfernt.
+ *     2. .assembly-card und .project-zone erhalten overflow: visible !important.
+ *     3. Badges (.assembly-id-badge) mit top: -12px thronen unbeschnitten über Kanten.
  * =============================================================================
  */
 
 /* 
- * Strikte Freigabe des Überstands:
+ * Strikte Freigabe des Überstands für Blöcke und Rahmen:
  * Verhindert jedes Clipping von .assembly-id-badge (top: -12px) und .ep-top (top: -9px)
  */
 .assembly-card,
@@ -1659,9 +1659,16 @@ html, body {
     overflow: visible !important;
 }
 
+/* Notizen erhalten dauerhaft keine Schatten (Flat-Look) */
+.note-card,
+.note-card:hover,
+.note-card.selected-node {
+    box-shadow: none !important;
+}
+
 /* 
- * Während der schnellen Zoomfahrt (LERP) werden nur bei Karten die Schatten
- * temporär gedämpft, um 120-144 FPS zu sichern.
+ * Während der schnellen Zoomfahrt (LERP) werden rechenintensive
+ * Schatten nur bei Karten und Rahmen pausiert (120-144 FPS).
  */
 #viewport.is-zooming .assembly-card,
 #viewport.is-zooming .project-zone {

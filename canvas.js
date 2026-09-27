@@ -60,6 +60,18 @@ window.contextTargetZoneId = null;
  *     die Rasterpunkte unendlich über den gesamten Bildschirm mitgleiten.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Transform mit Viewport-Grid-Sync & Debounce)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 12:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:05:00 CEST]: Debounced localStorage.
+ *   - [2026-09-27 12:45:00 CEST]: Viewport-Grid-Sync wiederhergestellt, damit
+ *     die Rasterpunkte beim Pannen/Zoomen millimetergenau mitwandern.
+ * =============================================================================
+ */
 let saveTransformTimeout = null;
 
 function applyCanvasTransform(animate = false) {
@@ -84,14 +96,14 @@ function applyCanvasTransform(animate = false) {
     canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    // Raster synchron zum Mauszeiger mitbewegen
+    // Raster synchron zum Fadenkreuz mitgleiten lassen
     if (viewportEl) {
         const scaledGridSize = 24 * window.currentScale;
         viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
         viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
     }
 
-    // Debounced LocalStorage: Verhindert Festplatten-Blockaden bei 120 Hz
+    // Debounced LocalStorage (keine I/O-Blockaden während der 120-FPS-Fahrt)
     clearTimeout(saveTransformTimeout);
     saveTransformTimeout = setTimeout(() => {
         localStorage.setItem('cad_tm_panX', window.currentPanX);
@@ -99,16 +111,6 @@ function applyCanvasTransform(animate = false) {
         localStorage.setItem('cad_tm_scale', window.currentScale);
     }, 300);
 }
-
-window.getCanvasCoords = function (clientX, clientY) {
-    const viewport = document.getElementById('viewport');
-    if (!viewport) return { x: 0, y: 0 };
-    const rect = viewport.getBoundingClientRect();
-    return {
-        x: (clientX - rect.left - window.currentPanX) / window.currentScale,
-        y: (clientY - rect.top - window.currentPanY) / window.currentScale
-    };
-};
 
 /**
  * =============================================================================
