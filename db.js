@@ -589,14 +589,32 @@ window.fetchCanvasData = async function () {
         console.error("Fehler beim Laden der Canvas-Daten aus Supabase:", err);
     }
 
-    // B. Snapshots separat & defensiv abfragen (blockiert niemals das Canvas-Rendering)
+    // =============================================================================
+    // Projekt: CAD Time Manager
+    // Domain: Datenbank (Snapshot-Laden mit Fehler-Prüfung)
+    // ERSETZEN IN: db.js (Am Ende von window.fetchCanvasData)
+    // Zeitstempel: 2026-09-27 16:50:00 CEST
+    // Breadcrumbs:
+    //   - [2026-09-27 16:30:00 CEST]: Defensiver try/catch ohne error-Log.
+    //   - [2026-09-27 16:50:00 CEST]: snapsRes.error explizit abfragen, um RLS- oder
+    //     Berechtigungsfehler von Supabase sofort in der Browser-Konsole zu sehen.
+    // =============================================================================
+
+    // B. Snapshots separat & defensiv abfragen
     try {
-        const snapsRes = await realDb.from('project_snapshots').select('*').eq('project_id', activeProjectId).order('review_date', { ascending: false });
-        if (snapsRes && snapsRes.data) {
+        const snapsRes = await realDb
+            .from('project_snapshots')
+            .select('*')
+            .eq('project_id', activeProjectId)
+            .order('review_date', { ascending: false });
+
+        if (snapsRes.error) {
+            console.error("Fehler beim Laden der Snapshots aus Supabase:", snapsRes.error);
+        } else if (snapsRes.data) {
             window.currentSnapshots = snapsRes.data;
         }
     } catch (e) {
-        console.warn("project_snapshots in Supabase noch nicht vorhanden (Offline-/RAM-Snapshots aktiv):", e);
+        console.warn("project_snapshots Verbindungsfehler:", e);
         if (!window.currentSnapshots) window.currentSnapshots = [];
     }
 
@@ -605,7 +623,6 @@ window.fetchCanvasData = async function () {
     if (window.renderSidebarZones) window.renderSidebarZones();
     if (isAdmin && window.renderPendingLogsTable) window.renderPendingLogsTable();
 };
-
 // =============================================================================
 // 2. HIERARCHISCHE ROLLUP ENGINE (Child -> Parent Zeit-Aggregation)
 // =============================================================================
@@ -679,6 +696,19 @@ window.openCreateSnapshotModal = function () {
     openModal('createSnapshotModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank (Snapshot-Persistenz, Fehler-Logging & Mock-Support)
+ * ERSETZEN IN: db.js (Funktionen handleSaveSnapshot und fetchCanvasData)
+ * Zeitstempel: 2026-09-27 16:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 15:50:00 CEST]: Initiale Snapshot-Engine.
+ *   - [2026-09-27 16:45:00 CEST]: BUGFIX: 1. Supabase insert-Error in handleSaveSnapshot
+ *     abgefangen und geloggt. 2. snapsRes.error in fetchCanvasData explizit geprüft.
+ * =============================================================================
+ */
+
 window.handleSaveSnapshot = async function (e) {
     e.preventDefault();
     const title = document.getElementById('snapshotTitle').value.trim();
@@ -687,10 +717,9 @@ window.handleSaveSnapshot = async function (e) {
 
     if (!title || !dateVal) return;
 
-    // Stichtag auf das Ende des gewählten Tages setzen (23:59:59 Uhr)
     const cutoffDate = new Date(dateVal + 'T23:59:59.999Z');
 
-    // 1. Rekonstruktion der Ist-Stunden bis zu diesem Stichtag
+    // 1. Rekonstruktion der Ist-Stunden bis zum Stichtag
     const nodeStatsAtDate = {};
     const zoneStatsAtDate = {};
 
@@ -710,7 +739,7 @@ window.handleSaveSnapshot = async function (e) {
         }
     });
 
-    // 2. Snapshot-Zustand des Projekts zusammenstellen
+    // 2. Snapshot-Zustand zusammenstellen
     const proj = getCurrentProject();
     const snapshotData = {
         project_budgets: {
@@ -756,20 +785,21 @@ window.handleSaveSnapshot = async function (e) {
         snapshot_data: snapshotData
     };
 
-    window.currentSnapshots.unshift(newSnapshot);
-
     // Speichern (Cloud vs. Lokal)
     const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
     if (isLocalActive) {
+        window.currentSnapshots.unshift(newSnapshot);
         if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
     } else {
-        try {
-            await realDb.from('project_snapshots').insert([newSnapshot]);
-        } catch (err) {
-            console.warn("Konnte Snapshot nicht in Supabase sichern (Offline-Fallback aktiv):", err);
+        const { error } = await realDb.from('project_snapshots').insert([newSnapshot]);
+        if (error) {
+            console.error("Supabase Snapshot Insert Fehler:", error);
+            showToast("Fehler beim Speichern in Supabase: " + error.message, "error");
+            return;
         }
+        window.currentSnapshots.unshift(newSnapshot);
     }
 
     closeModal('createSnapshotModal');
-    showToast(`Snapshot "${title}" zum ${new Date(dateVal).toLocaleDateString('de-DE')} erstellt`, 'success');
+    showToast(`Snapshot "${title}" dauerhaft gespeichert`, 'success');
 };
