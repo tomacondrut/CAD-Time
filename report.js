@@ -162,19 +162,55 @@ window.populateReportFilters = function () {
  * =============================================================================
  */
 
-window.handleTimeframeChange = function() {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Review-Snapshot Vergleich mit hierarchischem Rollup)
+ * ERSETZEN IN: report.js (Ab handleTimeframeChange bis Dateiende von renderReportSummary)
+ * Zeitstempel: 2026-09-27 15:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31]: Horizontale Kacheln.
+ *   - [2026-09-27 15:55:00 CEST]: 1. Hierarchischer Bottom-Up Rollup:
+ *     Stunden von Unterrahmen und Bauteilen fließen in den obersten Hauptrahmen ein.
+ *   - [2026-09-27 15:55:00 CEST]: 2. Top-Down Sortierung: Oberste Rahmen 
+ *     werden absteigend nach Intervall-Aufwand gelistet, darin liegende Bauteile 
+ *     ebenfalls absteigend.
+ *   - [2026-09-27 15:55:00 CEST]: 3. Differenz-Matrix für Zeitbudgets (Alt vs. Neu).
+ * =============================================================================
+ */
+
+window.handleTimeframeChange = function () {
     const timeframe = document.getElementById('repTimeframe').value;
     const customDiv = document.getElementById('repCustomDates');
+    const snapDiv = document.getElementById('repSnapshotSelectContainer');
     const now = new Date();
 
+    if (customDiv) customDiv.style.display = (timeframe === 'custom') ? 'flex' : 'none';
+    if (snapDiv) snapDiv.style.display = (timeframe === 'snapshot_compare') ? 'flex' : 'none';
+
+    if (timeframe === 'snapshot_compare') {
+        const selA = document.getElementById('repSelectSnapshotA');
+        const selB = document.getElementById('repSelectSnapshotB');
+        if (selA && selB) {
+            selA.innerHTML = '';
+            selB.innerHTML = '<option value="live">🔴 Aktueller Live-Stand (Heute)</option>';
+
+            if (!window.currentSnapshots || window.currentSnapshots.length === 0) {
+                selA.innerHTML = '<option value="">Keine Snapshots vorhanden (Bitte oben über 🚩 anlegen)</option>';
+            } else {
+                window.currentSnapshots.forEach(s => {
+                    const dFormatted = new Date(s.review_date).toLocaleDateString('de-DE');
+                    selA.add(new Option(`🚩 ${s.title} (${dFormatted})`, s.id));
+                    selB.add(new Option(`🚩 ${s.title} (${dFormatted})`, s.id));
+                });
+            }
+        }
+    }
+
     if (timeframe === 'custom') {
-        if (customDiv) customDiv.style.display = 'flex';
-        // Fallback: Aktueller Monat vorbelegen
         const range = getStartAndEndOfMonth(now);
         document.getElementById('repStartDate').value = formatDateForInput(range.start);
         document.getElementById('repEndDate').value = formatDateForInput(range.end);
-    } else {
-        if (customDiv) customDiv.style.display = 'none';
     }
 
     updateReportData();
@@ -225,7 +261,7 @@ function createPieChartImage(spent, budget, baseColor) {
 // --- Engine & Datenaufbereitung ---
 let reportState = { logs: [], startDate: null, endDate: null, projData: null };
 
-window.updateReportData = function() {
+window.updateReportData = function () {
     const filterUser = document.getElementById('repFilterUser').value;
     const timeframe = document.getElementById('repTimeframe').value;
     const filterZone = document.getElementById('repFilterZone').value;
@@ -233,8 +269,28 @@ window.updateReportData = function() {
 
     const now = new Date();
     let startDate, endDate;
+    let snapA = null, snapB = null;
 
-    if (timeframe === 'today') {
+    if (timeframe === 'snapshot_compare') {
+        const selAId = document.getElementById('repSelectSnapshotA')?.value;
+        const selBId = document.getElementById('repSelectSnapshotB')?.value;
+
+        snapA = (window.currentSnapshots || []).find(s => s.id === selAId) || null;
+        if (!snapA) {
+            document.getElementById('repSummaryContainer').innerHTML = '<div style="font-size:12px; color:#e53e3e; padding:10px;">Bitte zuerst einen Start-Snapshot über das 🚩-Icon anlegen.</div>';
+            document.getElementById('repDetailsContainer').innerHTML = '';
+            return;
+        }
+
+        startDate = new Date(snapA.review_date);
+
+        if (selBId === 'live' || !selBId) {
+            endDate = new Date(); // Bis jetzt
+        } else {
+            snapB = (window.currentSnapshots || []).find(s => s.id === selBId) || null;
+            endDate = snapB ? new Date(snapB.review_date) : new Date();
+        }
+    } else if (timeframe === 'today') {
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
         endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     } else if (timeframe === 'yesterday') {
@@ -255,7 +311,7 @@ window.updateReportData = function() {
         endDate = eVal ? new Date(eVal + 'T23:59:59Z') : new Date();
     }
 
-    // 1. STICHTAGS-REKONSTRUKTION FÜR DAS GESAMTPROJEKT
+    // 1. STICHTAGS-REKONSTRUKTION GESAMTPROJEKT
     const proj = getCurrentProject();
     let projTotalD = 0, projTotalDr = 0;
 
@@ -294,16 +350,13 @@ window.updateReportData = function() {
         </div>
     `;
 
-    // 2. GEFILTERTE LOGS FÜR DEN BERICHT
+    // 2. GEFILTERTE LOGS FÜR DAS GEWÄHLTE INTERVALL
     let filteredLogs = currentTimeLogs.filter(log => {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
-
-        // Block-Filter
         if (filterBlock !== 'all' && log.node_id !== filterBlock) return false;
 
-        // Bereichs- / Zonen-Filter (prüft direkte Zonen-Logs und Blöcke innerhalb der Zone)
         if (filterZone !== 'all') {
             if (log.zone_id && log.zone_id === filterZone) return true;
             const node = currentNodes.find(n => n.id === log.node_id);
@@ -316,9 +369,255 @@ window.updateReportData = function() {
     reportState.startDate = startDate;
     reportState.endDate = endDate;
 
-    renderReportSummary(filteredLogs, timeframe);
-    renderReportDetailsTable(filteredLogs);
+    if (timeframe === 'snapshot_compare') {
+        renderSnapshotReviewReport(snapA, snapB, filteredLogs, startDate, endDate);
+    } else {
+        renderReportSummary(filteredLogs, timeframe);
+        renderReportDetailsTable(filteredLogs);
+    }
 };
+
+/**
+ * =============================================================================
+ * Hierarchischer Rollup & Absteigende Sortierung (Vom obersten Rahmen weg)
+ * =============================================================================
+ */
+function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDate) {
+    const summaryContainer = document.getElementById('repSummaryContainer');
+    const detailsContainer = document.getElementById('repDetailsContainer');
+    if (!summaryContainer || !detailsContainer) return;
+
+    // 1. INTERVALL-STUNDEN PRO ELEMENT BERECHNEN
+    const intervalHoursNode = {};
+    const intervalHoursZone = {};
+    let totalCAD = 0, totalDraft = 0;
+
+    intervalLogs.forEach(l => {
+        const hrs = parseFloat(l.hours) || 0;
+        if (l.task_type === 'design') totalCAD += hrs;
+        if (l.task_type === 'drafting') totalDraft += hrs;
+
+        if (l.node_id) {
+            if (!intervalHoursNode[l.node_id]) intervalHoursNode[l.node_id] = { cad: 0, draft: 0, total: 0 };
+            if (l.task_type === 'design') intervalHoursNode[l.node_id].cad += hrs;
+            if (l.task_type === 'drafting') intervalHoursNode[l.node_id].draft += hrs;
+            intervalHoursNode[l.node_id].total += hrs;
+        }
+        if (l.zone_id) {
+            if (!intervalHoursZone[l.zone_id]) intervalHoursZone[l.zone_id] = { cad: 0, draft: 0, total: 0 };
+            if (l.task_type === 'design') intervalHoursZone[l.zone_id].cad += hrs;
+            if (l.task_type === 'drafting') intervalHoursZone[l.zone_id].draft += hrs;
+            intervalHoursZone[l.zone_id].total += hrs;
+        }
+    });
+
+    // 2. BOTTOM-UP HIERARCHIE-ROLLUP: Unterrahmen & Bauteile rollen in den Oberrahmen
+    const getZoneDirectEffort = (zId) => (intervalHoursZone[zId]?.total || 0);
+
+    const getNodeEffort = (nId) => (intervalHoursNode[nId]?.total || 0);
+
+    // Rekursiver Rollup für einen Rahmen inklusive aller Unterstrukturen
+    function calculateSubtreeIntervalEffort(zoneId) {
+        let sum = getZoneDirectEffort(zoneId);
+
+        // Blöcke im Rahmen summieren
+        (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
+            sum += getNodeEffort(n.id);
+        });
+
+        // Unterrahmen rekursiv summieren
+        (currentZones || []).filter(z => z.parent_zone_id === zoneId).forEach(cz => {
+            sum += calculateSubtreeIntervalEffort(cz.id);
+        });
+
+        return sum;
+    }
+
+    // 3. TOP-DOWN SORTIERUNG: Oberste Rahmen nach Gesamtaufwand absteigend sortieren
+    const topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => {
+        return {
+            zone: z,
+            subtreeEffort: calculateSubtreeIntervalEffort(z.id)
+        };
+    });
+
+    // Sortierung der obersten Rahmen (Absteigend nach Gesamtaufwand im Intervall)
+    topZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
+
+    // 4. HEADER-KACHELN FÜR DAS REVIEW-INTERVALL
+    const sADateStr = new Date(snapA.review_date).toLocaleDateString('de-DE');
+    const sBDateStr = snapB ? new Date(snapB.review_date).toLocaleDateString('de-DE') : 'Heute (Live)';
+    const sBTitle = snapB ? snapB.title : 'Live-Stand';
+
+    summaryContainer.innerHTML = `
+        <div style="background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+            <div style="font-size: 11px; font-weight: bold; color: #2b6cb0;">
+                🚩 REVIEW-INTERVALL: ${escapeHtml(snapA.title)} (${sADateStr}) ➔ ${escapeHtml(sBTitle)} (${sBDateStr})
+            </div>
+            ${snapA.note ? `<div style="font-size: 11px; color: #4a5568; margin-top: 2px;"><em>Notiz: ${escapeHtml(snapA.note)}</em></div>` : ''}
+        </div>
+        <div style="display: flex; gap: 12px; width: 100%; margin-bottom: 8px;">
+            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliches CAD (3D)</div>
+                <div style="font-size: 18px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">+${formatHoursToHM(totalCAD)}</div>
+            </div>
+            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliche Zeichnung (2D)</div>
+                <div style="font-size: 18px; font-weight: bold; color: #38a169; margin-top: 2px;">+${formatHoursToHM(totalDraft)}</div>
+            </div>
+            <div style="background: #2d3748; padding: 10px 14px; border-radius: 6px; flex: 1;">
+                <div style="font-size: 10px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Intervall-Gesamtaufwand</div>
+                <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 2px;">+${formatHoursToHM(totalCAD + totalDraft)}</div>
+            </div>
+        </div>
+    `;
+
+    // 5. STRUKTURIERTE TABELLE: HIERARCHISCH & ABSTEIGEND SORTIERT
+    let tableHtml = `
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Bereich / Baugruppe (Nach Aufwand sortiert)</th>
+                    <th style="text-align: right; width: 110px;">Im Intervall gebucht</th>
+                    <th style="text-align: right; width: 110px;">Budget (Alt ➔ Neu)</th>
+                    <th style="text-align: right; width: 90px;">Budget-Delta</th>
+                    <th style="text-align: right; width: 110px;">Gesamt-Iststand</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    // Map alter Budgets aus SnapA
+    const oldNodeBudgets = {};
+    const oldZoneBudgets = {};
+    if (snapA.snapshot_data) {
+        (snapA.snapshot_data.nodes || []).forEach(n => {
+            oldNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0);
+        });
+        (snapA.snapshot_data.zones || []).forEach(z => {
+            oldZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0);
+        });
+    }
+
+    // Rekursiver Tabellen-Renderer (sortiert Unterstrukturen intern absteigend)
+    function renderZoneRows(zoneObj, level) {
+        const z = zoneObj.zone;
+        const zEffort = zoneObj.subtreeEffort;
+        const curBud = (parseFloat(z.budget_design_hours) || 0) + (parseFloat(z.budget_drafting_hours) || 0);
+        const oldBud = oldZoneBudgets[z.id] !== undefined ? oldZoneBudgets[z.id] : curBud;
+        const diffBud = curBud - oldBud;
+
+        let diffBudHtml = '<span style="color:#718096;">±0h</span>';
+        if (diffBud > 0.01) diffBudHtml = `<span style="color:#e53e3e; font-weight:bold;">▲ +${formatHoursToHM(diffBud)}</span>`;
+        else if (diffBud < -0.01) diffBudHtml = `<span style="color:#38a169; font-weight:bold;">▼ -${formatHoursToHM(Math.abs(diffBud))}</span>`;
+
+        const indentPx = level * 18;
+        const bgCol = level === 0 ? '#edf2f7' : '#f8fafc';
+        const docLabel = z.doc_number ? `[${escapeHtml(z.doc_number)}] ` : '';
+
+        tableHtml += `
+            <tr style="background: ${bgCol}; font-weight: bold; border-top: 2px solid #cbd5e0;">
+                <td style="padding-left: ${indentPx + 6}px;">
+                    <span style="color:${z.color_hex || '#2b6cb0'}; font-size:13px; margin-right:4px;">📁</span>
+                    ${docLabel}${escapeHtml(z.title)}
+                </td>
+                <td style="text-align: right; color:#2b6cb0; font-family:monospace; font-size:12px;">+${formatHoursToHM(zEffort)}</td>
+                <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(oldBud)} ➔ ${formatHoursToHM(curBud)}</td>
+                <td style="text-align: right;">${diffBudHtml}</td>
+                <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(zEffort)}</td>
+            </tr>
+        `;
+
+        // 1. Untergeordnete Blöcke nach Aufwand absteigend sortieren
+        const childNodes = (currentNodes || [])
+            .filter(n => n.zone_id === z.id && n.block_type !== 'note')
+            .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
+
+        childNodes.sort((a, b) => b.effort - a.effort);
+
+        childNodes.forEach(({ node: n, effort: nEffort }) => {
+            const nCurBud = (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+            const nOldBud = oldNodeBudgets[n.id] !== undefined ? oldNodeBudgets[n.id] : nCurBud;
+            const nDiffBud = nCurBud - nOldBud;
+
+            let nDiffHtml = '<span style="color:#a0aec0;">±0h</span>';
+            if (nDiffBud > 0.01) nDiffHtml = `<span style="color:#e53e3e; font-weight:bold;">▲ +${formatHoursToHM(nDiffBud)}</span>`;
+            else if (nDiffBud < -0.01) nDiffHtml = `<span style="color:#38a169; font-weight:bold;">▼ -${formatHoursToHM(Math.abs(nDiffBud))}</span>`;
+
+            const nDoc = n.doc_number || (n.article_number ? `ART-${n.article_number}` : '');
+            const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
+            const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+
+            tableHtml += `
+                <tr>
+                    <td style="padding-left: ${indentPx + 24}px;">
+                        <span style="color:#a0aec0; margin-right:4px;">└──</span>
+                        ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
+                    </td>
+                    <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2d3748' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
+                    <td style="text-align: right;">${nDiffHtml}</td>
+                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nEffort)}</td>
+                </tr>
+            `;
+        });
+
+        // 2. Untergeordnete Rahmen ebenfalls absteigend nach Intervall-Aufwand sortieren
+        const subZones = (currentZones || [])
+            .filter(cz => cz.parent_zone_id === z.id)
+            .map(cz => ({ zone: cz, subtreeEffort: calculateSubtreeIntervalEffort(cz.id) }));
+
+        subZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
+
+        subZones.forEach(subZoneObj => renderZoneRows(subZoneObj, level + 1));
+    }
+
+    // Hauptdurchlauf: Oberste Rahmen ausgeben
+    topZones.forEach(topZoneObj => {
+        renderZoneRows(topZoneObj, 0);
+    });
+
+    // Freie Blöcke (ohne Rahmen) am Ende ausgeben
+    const unzonedNodes = (currentNodes || [])
+        .filter(n => !n.zone_id && n.block_type !== 'note')
+        .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
+
+    if (unzonedNodes.length > 0) {
+        unzonedNodes.sort((a, b) => b.effort - a.effort);
+        const unzonedTotal = unzonedNodes.reduce((acc, curr) => acc + curr.effort, 0);
+
+        tableHtml += `
+            <tr style="background: #edf2f7; font-weight: bold; border-top: 2px solid #cbd5e0;">
+                <td style="padding-left: 6px;">📌 Freie Blöcke (Ohne Rahmenzuweisung)</td>
+                <td style="text-align: right; color:#2b6cb0; font-family:monospace; font-size:12px;">+${formatHoursToHM(unzonedTotal)}</td>
+                <td colspan="3"></td>
+            </tr>
+        `;
+
+        unzonedNodes.forEach(({ node: n, effort: nEffort }) => {
+            const nCurBud = (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+            const nOldBud = oldNodeBudgets[n.id] !== undefined ? oldNodeBudgets[n.id] : nCurBud;
+            const nDiffBud = nCurBud - nOldBud;
+
+            let nDiffHtml = '<span style="color:#a0aec0;">±0h</span>';
+            if (nDiffBud > 0.01) nDiffHtml = `<span style="color:#e53e3e; font-weight:bold;">▲ +${formatHoursToHM(nDiffBud)}</span>`;
+            else if (nDiffBud < -0.01) nDiffHtml = `<span style="color:#38a169; font-weight:bold;">▼ -${formatHoursToHM(Math.abs(nDiffBud))}</span>`;
+
+            tableHtml += `
+                <tr>
+                    <td style="padding-left: 24px;">└── ${escapeHtml(n.name)}</td>
+                    <td style="text-align: right; font-weight:bold; color:#2d3748; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
+                    <td style="text-align: right;">${nDiffHtml}</td>
+                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nEffort)}</td>
+                </tr>
+            `;
+        });
+    }
+
+    tableHtml += `</tbody></table>`;
+    detailsContainer.innerHTML = tableHtml;
+}
 
 /**
  * =============================================================================

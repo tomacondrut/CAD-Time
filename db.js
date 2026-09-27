@@ -603,3 +603,126 @@ function calculateRollups() {
     currentNodes.forEach(n => aggregate(n.id));
     return memo;
 }
+
+/**
+* =============================================================================
+* Projekt: CAD Time Manager
+* Domain: Datenbank & State (Review-Snapshots Engine)
+* EINFÜGEN IN: db.js (Am Dateiende)
+* Zeitstempel: 2026-09-27 15:50:00 CEST
+* Breadcrumb: [2026-09-27] window.currentSnapshots initialisiert und 
+* createProjectSnapshot mit Stichtags-Rekonstruktion implementiert.
+* =============================================================================
+*/
+
+window.currentSnapshots = [];
+
+window.openCreateSnapshotModal = function () {
+    const titleInput = document.getElementById('snapshotTitle');
+    const dateInput = document.getElementById('snapshotDate');
+    const noteInput = document.getElementById('snapshotNote');
+
+    const today = new Date();
+    const dStr = today.toISOString().split('T')[0];
+
+    if (dateInput) dateInput.value = dStr;
+    if (titleInput) titleInput.value = `Review Stand ${new Date().toLocaleDateString('de-DE')}`;
+    if (noteInput) noteInput.value = '';
+
+    openModal('createSnapshotModal');
+};
+
+window.handleSaveSnapshot = async function (e) {
+    e.preventDefault();
+    const title = document.getElementById('snapshotTitle').value.trim();
+    const dateVal = document.getElementById('snapshotDate').value;
+    const note = document.getElementById('snapshotNote').value.trim();
+
+    if (!title || !dateVal) return;
+
+    // Stichtag auf das Ende des gewählten Tages setzen (23:59:59 Uhr)
+    const cutoffDate = new Date(dateVal + 'T23:59:59.999Z');
+
+    // 1. Rekonstruktion der Ist-Stunden bis zu diesem Stichtag
+    const nodeStatsAtDate = {};
+    const zoneStatsAtDate = {};
+
+    (currentTimeLogs || []).forEach(l => {
+        if (new Date(l.logged_at) <= cutoffDate) {
+            const hrs = parseFloat(l.hours) || 0;
+            if (l.node_id) {
+                if (!nodeStatsAtDate[l.node_id]) nodeStatsAtDate[l.node_id] = { d: 0, dr: 0 };
+                if (l.task_type === 'design') nodeStatsAtDate[l.node_id].d += hrs;
+                if (l.task_type === 'drafting') nodeStatsAtDate[l.node_id].dr += hrs;
+            }
+            if (l.zone_id) {
+                if (!zoneStatsAtDate[l.zone_id]) zoneStatsAtDate[l.zone_id] = { d: 0, dr: 0 };
+                if (l.task_type === 'design') zoneStatsAtDate[l.zone_id].d += hrs;
+                if (l.task_type === 'drafting') zoneStatsAtDate[l.zone_id].dr += hrs;
+            }
+        }
+    });
+
+    // 2. Snapshot-Zustand des Projekts zusammenstellen
+    const proj = getCurrentProject();
+    const snapshotData = {
+        project_budgets: {
+            design: parseFloat(proj.total_budget_design) || 0,
+            drafting: parseFloat(proj.total_budget_drafting) || 0
+        },
+        nodes: (currentNodes || []).map(n => ({
+            id: n.id,
+            name: n.name,
+            doc_number: n.doc_number,
+            article_number: n.article_number,
+            block_type: n.block_type,
+            zone_id: n.zone_id,
+            linked_id: n.linked_id,
+            budget_design: parseFloat(n.budget_design_hours) || 0,
+            budget_drafting: parseFloat(n.budget_drafting_hours) || 0,
+            progress_design: n.progress_design || 0,
+            progress_drafting: n.progress_drafting || 0,
+            completion_status: n.completion_status || 'open',
+            spent_design: nodeStatsAtDate[n.id]?.d || 0,
+            spent_drafting: nodeStatsAtDate[n.id]?.dr || 0
+        })),
+        zones: (currentZones || []).map(z => ({
+            id: z.id,
+            title: z.title,
+            doc_number: z.doc_number,
+            article_number: z.article_number,
+            parent_zone_id: z.parent_zone_id,
+            budget_design: parseFloat(z.budget_design_hours) || 0,
+            budget_drafting: parseFloat(z.budget_drafting_hours) || 0,
+            spent_design: zoneStatsAtDate[z.id]?.d || 0,
+            spent_drafting: zoneStatsAtDate[z.id]?.dr || 0
+        }))
+    };
+
+    const newSnapshot = {
+        id: 'snap_' + Date.now(),
+        project_id: activeProjectId,
+        title,
+        review_date: cutoffDate.toISOString(),
+        created_by: activeUserCode || 'COT',
+        note,
+        snapshot_data: snapshotData
+    };
+
+    window.currentSnapshots.unshift(newSnapshot);
+
+    // Speichern (Cloud vs. Lokal)
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        try {
+            await realDb.from('project_snapshots').insert([newSnapshot]);
+        } catch (err) {
+            console.warn("Konnte Snapshot nicht in Supabase sichern (Offline-Fallback aktiv):", err);
+        }
+    }
+
+    closeModal('createSnapshotModal');
+    showToast(`Snapshot "${title}" zum ${new Date(dateVal).toLocaleDateString('de-DE')} erstellt`, 'success');
+};

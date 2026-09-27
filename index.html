@@ -511,15 +511,39 @@
                         <select id="repFilterUser" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
                     </div>
 
-                    <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
-                        <label>Zeitraum:</label>
+                    <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Reporting UI (Snapshot-Vergleichsauswahl)
+    ERSETZEN IN: index.html (Im #reportModal -> Form-Group repTimeframe)
+    Zeitstempel: 2026-09-27 15:45:00 CEST
+    Breadcrumb: [2026-09-27] Option 'snapshot_compare' und Auswahldropdowns für Snapshots integriert.
+    =============================================================================
+    -->
+                    <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                        <label>Zeitraum / Modus:</label>
                         <select id="repTimeframe" onchange="handleTimeframeChange()" style="padding: 4px; font-size: 11px;">
                             <option value="today">Heute</option>
                             <option value="yesterday">Gestern</option>
                             <option value="week">Diese Woche</option>
                             <option value="month">Dieser Monat</option>
                             <option value="custom">Benutzerdefiniert</option>
+                            <option value="snapshot_compare" style="font-weight: bold; color: #2b6cb0;">🚩 Review-Vergleich (Snapshots)</option>
                         </select>
+                    </div>
+
+                    <!-- Container für Snapshot-Wahl (standardmäßig ausgeblendet) -->
+                    <div id="repSnapshotSelectContainer" style="display: none; gap: 8px; align-items: flex-end;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Start (Review-Snapshot):</label>
+                            <select id="repSelectSnapshotA" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Ende (Review oder Live):</label>
+                            <select id="repSelectSnapshotB" onchange="updateReportData()" style="padding: 4px; font-size: 11px;">
+                                <option value="live">🔴 Aktueller Live-Stand (Heute)</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="form-group" id="repCustomDates" style="display: none; margin-bottom: 0; align-items: flex-end; gap: 6px;">
@@ -684,36 +708,36 @@
             <button id="mobileMenuBtn" onclick="toggleMobileSidebar()">☰</button>
 
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Viewport (Canvas-Modus Toggle: Konstruktion vs. Manager-Cockpit)
-    EINGEFÜGT IN: index.html (Im #viewport direkt nach mobileMenuBtn)
-    Zeitstempel: 2026-09-17 21:05:00 CEST
-    Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport (Canvas-Modus Toggle: Konstruktion vs. Manager-Cockpit)
+            EINGEFÜGT IN: index.html (Im #viewport direkt nach mobileMenuBtn)
+            Zeitstempel: 2026-09-17 21:05:00 CEST
+            Breadcrumb: [2026-09-17 21:05:00 CEST] Segment-Umschalter & Auto-Sortier-Button
+            =============================================================================
+            -->
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Viewport (Canvas-Modus Toggle & Manager Fokus-Filter)
-    ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
-    Zeitstempel: 2026-09-26 09:40:00 CEST
-    Breadcrumbs:
-      - [2026-09-17 21:05:00 CEST]: Segment-Umschalter & Auto-Sortier-Button.
-      - [2026-09-26 09:40:00 CEST]: Button #btnToggleManagerFocus hinzugefügt
-        zum Filtern auf kritische Pfade (Budgetüberzieher, 2D-Übergaben).
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport (Canvas-Modus Toggle & Manager Fokus-Filter)
+            ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
+            Zeitstempel: 2026-09-26 09:40:00 CEST
+            Breadcrumbs:
+              - [2026-09-17 21:05:00 CEST]: Segment-Umschalter & Auto-Sortier-Button.
+              - [2026-09-26 09:40:00 CEST]: Button #btnToggleManagerFocus hinzugefügt
+                zum Filtern auf kritische Pfade (Budgetüberzieher, 2D-Übergaben).
+            =============================================================================
+            -->
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Viewport (Schlanker Canvas-Modus Switcher gegen UI-Kollision)
-    ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
-    Zeitstempel: 2026-09-26 10:15:00 CEST
-    Breadcrumb: [2026-09-26 10:15:00 CEST] Button-Texte gestrafft, um Überlappungen
-      mit den Speichern-/Export-Buttons oben rechts zu verhindern.
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport (Schlanker Canvas-Modus Switcher gegen UI-Kollision)
+            ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
+            Zeitstempel: 2026-09-26 10:15:00 CEST
+            Breadcrumb: [2026-09-26 10:15:00 CEST] Button-Texte gestrafft, um Überlappungen
+              mit den Speichern-/Export-Buttons oben rechts zu verhindern.
+            =============================================================================
+            -->
             <!--
                 =============================================================================
                 Projekt: CAD Time Manager
@@ -738,34 +762,35 @@
             </div>
 
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Viewport Header-Aktionen (Buttons oben rechts)
-    ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
-    Zeitstempel: 2026-09-17 21:35:00 CEST
-    Breadcrumbs:
-      - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
-      - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport Header-Aktionen (Buttons oben rechts)
+            ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
+            Zeitstempel: 2026-09-17 21:35:00 CEST
+            Breadcrumbs:
+              - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
+              - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
+            =============================================================================
+            -->
             <!--
-     =============================================================================
-     Projekt: CAD Time Manager
-     Domain: Viewport Header-Aktionen (Buttons oben rechts / Mobile Vertikal-Dock)
-     ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
-     Zeitstempel: 2026-09-27 10:55:00 CEST
-     Breadcrumbs:
-       - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
-       - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
-       - [2026-09-27 10:55:00 CEST]: BUGFIX: Container #topActionsContainer hinzugefügt;
-         starre Inline-Offsets ('right: ...px') entfernt. Desktop: horizontales Layout,
-         Portrait-Modus (iOS / Android): vertikales Paletten-Dock an der rechten Kante.
-     =============================================================================
-     -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Viewport Header-Aktionen (Buttons oben rechts / Mobile Vertikal-Dock)
+            ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
+            Zeitstempel: 2026-09-27 10:55:00 CEST
+            Breadcrumbs:
+              - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
+              - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
+              - [2026-09-27 10:55:00 CEST]: BUGFIX: Container #topActionsContainer hinzugefügt;
+                starre Inline-Offsets ('right: ...px') entfernt. Desktop: horizontales Layout,
+                Portrait-Modus (iOS / Android): vertikales Paletten-Dock an der rechten Kante.
+            =============================================================================
+            -->
             <div id="topActionsContainer" class="top-actions-container">
                 <button id="newFileBtn" class="top-right-btn" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
                 <button id="saveFileBtn" class="top-right-btn" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>
                 <button id="loadFileBtn" class="top-right-btn" title="Lokale Datei laden" onclick="handleLoadFile()">📂</button>
+                <button id="snapshotBtn" class="top-right-btn" title="Review-Snapshot (Flag) setzen" onclick="window.openCreateSnapshotModal()">🚩</button>
                 <button id="reportBtn" class="top-right-btn" title="Reporting & Auswertung" onclick="openReportModal()">📊</button>
                 <button id="printBtn" class="top-right-btn" title="Drucken & Export" onclick="openPrintModal()">🖨️</button>
                 <button id="infoGuideBtn" class="top-right-btn" title="Bedienungsanleitung & Tipps" onclick="openModal('infoGuideModal')">ℹ️</button>
@@ -773,15 +798,15 @@
             </div>
 
             <!--
-    =============================================================================
-    Projekt: CAD Time Manager
-    Domain: Live-Zeiterfassungs-Widget (Bottom Dock)
-    EINFÜGEN IN: index.html (Im #viewport vor .zoom-controls)
-    Zeitstempel: 2026-09-26 09:35:00 CEST
-    Breadcrumb: [2026-09-26] Live-Timer Leiste mit Start/Pause/Stop, Zuweisungs-Modus
-      und optischem Aufleuchten von Blöcken (vollflächig) und Rahmen (nur Header).
-    =============================================================================
-    -->
+            =============================================================================
+            Projekt: CAD Time Manager
+            Domain: Live-Zeiterfassungs-Widget (Bottom Dock)
+            EINFÜGEN IN: index.html (Im #viewport vor .zoom-controls)
+            Zeitstempel: 2026-09-26 09:35:00 CEST
+            Breadcrumb: [2026-09-26] Live-Timer Leiste mit Start/Pause/Stop, Zuweisungs-Modus
+              und optischem Aufleuchten von Blöcken (vollflächig) und Rahmen (nur Header).
+            =============================================================================
+            -->
             <div id="liveTimerBar" class="live-timer-bar">
                 <div class="live-timer-row" id="liveTimerControlsRow">
                     <div class="live-timer-badge">
@@ -1240,6 +1265,43 @@
                 <button type="button" class="btn-sec" style="color: #c53030;" onclick="handleResetColorCategories()">↺ Auf Standard zurücksetzen</button>
                 <button type="button" class="btn-sec" onclick="closeModal('colorCategoryModal')">Schließen</button>
             </div>
+        </div>
+    </div>
+
+
+    <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: UI Modals (Review-Snapshot Modal)
+    EINFÜGEN IN: index.html (Vor den <script>-Tags)
+    Zeitstempel: 2026-09-27 15:45:00 CEST
+    Breadcrumb: [2026-09-27] Modal zum Erfassen von Review-Snapshots mit frei wählbarem Stichtag.
+    =============================================================================
+    -->
+    <div id="createSnapshotModal" class="modal-backdrop" style="z-index: 3700;">
+        <div class="modal-content" style="width: 440px;">
+            <div class="modal-header">🚩 Review-Snapshot (Flag) erstellen</div>
+            <p style="font-size: 12px; color: #718096; margin-bottom: 12px;">
+                Friert den Projektstatus (Budgets, Ist-Stunden und Fertigstellungsgrade) zu einem Stichtag ein, um Änderungen und Stunden bis zum nächsten Review exakt auszuwerten.
+            </p>
+            <form id="createSnapshotForm" onsubmit="window.handleSaveSnapshot(event)">
+                <div class="form-group">
+                    <label>Review-Bezeichnung:</label>
+                    <input type="text" id="snapshotTitle" required placeholder="z.B. Review KW 37 – Stand vor 2 Wochen" />
+                </div>
+                <div class="form-group">
+                    <label>Stichtags-Datum:</label>
+                    <input type="date" id="snapshotDate" required />
+                </div>
+                <div class="form-group">
+                    <label>Review-Notiz / Meilenstein (optional):</label>
+                    <textarea id="snapshotNote" rows="2" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-family: inherit; font-size: 12px;" placeholder="z.B. Stand vor der Budgetaufstockung Trichter..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-sec" onclick="closeModal('createSnapshotModal')">Abbrechen</button>
+                    <button type="submit" class="btn-prim" style="background: #2b6cb0;">🚩 Snapshot einfrieren</button>
+                </div>
+            </form>
         </div>
     </div>
 
