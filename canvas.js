@@ -85,6 +85,14 @@ window.contextTargetZoneId = null;
  *     1-Finger-Panning löst keine teure Gradient-Neuberechnung mehr aus.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Direkte GPU-Transformation ohne Inline-Resets)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 13:40:00 CEST
+ * =============================================================================
+ */
 let saveTransformTimeout = null;
 let lastRenderedGridScale = -1;
 
@@ -102,17 +110,13 @@ function applyCanvasTransform(animate = false) {
             canvasEl.style.transition = 'none';
             if (viewportEl) viewportEl.style.transition = 'none';
         }, 200);
-    } else {
-        canvasEl.style.transition = 'none';
-        if (viewportEl) viewportEl.style.transition = 'none';
     }
 
-    canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    // Raster synchron mitgleiten lassen (backgroundSize nur bei echtem Zoom-Wechsel anfassen)
     if (viewportEl) {
-        if (Math.abs(lastRenderedGridScale - window.currentScale) > 0.001) {
+        // Skaliert die Raster-Textur nur neu, wenn tatsächlich gezoomt wurde
+        if (Math.abs(lastRenderedGridScale - window.currentScale) > 0.005) {
             const scaledGridSize = 24 * window.currentScale;
             viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
             lastRenderedGridScale = window.currentScale;
@@ -120,7 +124,6 @@ function applyCanvasTransform(animate = false) {
         viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
     }
 
-    // Debounced LocalStorage (keine I/O-Blockaden während der Fahrt)
     clearTimeout(saveTransformTimeout);
     saveTransformTimeout = setTimeout(() => {
         localStorage.setItem('cad_tm_panX', window.currentPanX);
@@ -268,6 +271,20 @@ function initNativeCanvasEngine() {
         viewport.style.cursor = 'grabbing';
     };
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (PC-Pan Restore & Mobile Zero-Repaint Pipeline)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> Ab mousedown bis stopPanOrPinch)
+ * Zeitstempel: 2026-09-27 13:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 13:15:00 CEST]: Touch-rAF.
+ *   - [2026-09-27 13:35:00 CEST]: BUGFIX: 1. window mousemove Event für PC-Panning
+ *     vollständig wiederhergestellt. 2. .is-zooming strikt auf echten 2-Finger-Pinch
+ *     begrenzt. 1-Finger-Pan läuft als reine GPU-Verschiebung ohne Re-Paints der Blöcke.
+ * =============================================================================
+ */
+
     // ---------------------------------------------------------
     // PANNING (Desktop Maus)
     // ---------------------------------------------------------
@@ -294,20 +311,15 @@ function initNativeCanvasEngine() {
         }
     });
 
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (rAF Touch-Pipeline & .is-zooming Aktivierung)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> TOUCH-EVENTS Bereich)
- * Zeitstempel: 2026-09-27 13:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 11:45:00 CEST]: Basis Multi-Touch.
- *   - [2026-09-27 13:15:00 CEST]: PERF-FIX MOBILE: 1. touchmove entkoppelt via 
- *     requestAnimationFrame (verhindert Event-Stau bei 120Hz). 2. Viewport erhält
- *     während Pan & Pinch die Klasse .is-zooming, um teure Schatten und SVGs
- *     temporär abzuschalten (stoppt Kachel-Flackern und Ausblenden).
- * =============================================================================
- */
+    // Wiederhergestellter PC-Maus-Listener
+    window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        window.currentPanX = startPanX + dx;
+        window.currentPanY = startPanY + dy;
+        applyCanvasTransform(false);
+    });
 
     let touchRafPending = false;
     const requestTouchTransform = () => {
@@ -329,7 +341,7 @@ function initNativeCanvasEngine() {
             window.isPinching = true;
             window.isDraggingAnything = false;
             isPanning = false;
-            viewport.classList.add('is-zooming');
+            viewport.classList.add('is-zooming'); // Nur beim Skalieren Effekte reduzieren
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
@@ -357,7 +369,7 @@ function initNativeCanvasEngine() {
 
         if (e.touches.length === 1 && !window.isPinching) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
-            viewport.classList.add('is-zooming');
+            // Kein is-zooming beim 1-Finger Pan -> verhindert Neurendern aller Karten
         }
     }, { capture: true, passive: false });
 
@@ -406,7 +418,7 @@ function initNativeCanvasEngine() {
             return;
         }
 
-        // 1-Finger Canvas Panning
+        // 1-Finger Canvas Panning (Reines GPU-Blitting)
         if (isPanning && e.touches.length === 1 && !window.isPinching) {
             if (e.cancelable) e.preventDefault();
             const dx = e.touches[0].clientX - startX;
@@ -436,10 +448,9 @@ function initNativeCanvasEngine() {
             viewport.style.cursor = 'default';
         }
 
-        // Sobald keine Finger mehr aufliegen: Schutzklasse entfernen
         if (!e.touches || e.touches.length === 0) {
             viewport.classList.remove('is-zooming');
-            applyCanvasTransform(false); // Letzte Position synchron festschreiben
+            applyCanvasTransform(false);
         }
     };
 
