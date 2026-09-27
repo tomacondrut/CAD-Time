@@ -159,6 +159,20 @@ window.getCanvasCoords = function (clientX, clientY) {
  *     direkt auf dem Canvas mit dynamischem Mittelpunkt implementiert.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, 2-Finger-Pinch-Zoom & Gesture-Guard)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-27 11:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:15:00 CEST]: Basis Multi-Touch.
+ *   - [2026-09-27 11:45:00 CEST]: BUGFIX: 1. Scope-Fehler behoben: window.isPinching 
+ *     einheitlich genutzt (zuvor blockierte let isPinching im Closure den Zoom-Aufruf).
+ *     2. On-the-fly Pinch-Initialisierung in touchmove integriert.
+ *     3. window.isPinching im touchend/touchcancel zuverlässig zurückgesetzt.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -184,8 +198,8 @@ function initNativeCanvasEngine() {
     let startX = 0, startY = 0;
     let startPanX = 0, startPanY = 0;
 
-    // Pinch-to-Zoom State
-    let isPinching = false;
+    // Pinch-to-Zoom State (konsistent an window gebunden)
+    window.isPinching = false;
     let pinchStartDist = 0;
     let pinchStartScale = 1;
     let pinchWorldX = 0;
@@ -205,7 +219,7 @@ function initNativeCanvasEngine() {
     // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
-        if (e.button === 2) return; // Rechtsklick darf nie Pan starten
+        if (e.button === 2) return;
 
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
         if (interactiveEl) {
@@ -229,21 +243,6 @@ function initNativeCanvasEngine() {
     // ---------------------------------------------------------
     // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
     // ---------------------------------------------------------
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pinch-Capture & Globaler Drag-Lock)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> touchstart Event)
- * Zeitstempel: 2026-09-27 11:35:00 CEST
- * Breadcrumbs:
- *   - [2026-09-26 14:10:00 CEST]: Basis Touch-Panning.
- *   - [2026-09-27 11:35:00 CEST]: BUGFIX: Capture-Phase ({ capture: true }) 
- *     aktiviert. Sobald >= 2 Finger das Display berühren, wird jeglicher Drag
- *     auf Blöcken/Zonen sofort unterbunden und abgebrochen.
- * =============================================================================
- */
-    window.isPinching = false;
-
     viewport.addEventListener('touchstart', (e) => {
         if (e.touches.length >= 2) {
             if (e.cancelable) e.preventDefault();
@@ -291,8 +290,29 @@ function initNativeCanvasEngine() {
 
     window.addEventListener('touchmove', (e) => {
         // 2-Finger Pinch Zooming
-        if (isPinching && e.touches.length === 2) {
+        if (e.touches.length === 2) {
             if (e.cancelable) e.preventDefault();
+
+            // On-the-fly Initialisierung falls der 2. Finger ohne separates touchstart aktiv wurde
+            if (!window.isPinching || pinchStartDist <= 0) {
+                window.isPinching = true;
+                window.isDraggingAnything = false;
+                isPanning = false;
+
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                pinchStartScale = window.currentScale || 1;
+
+                const rect = viewport.getBoundingClientRect();
+                const midX = ((t1.clientX + t2.clientX) / 2) - rect.left;
+                const midY = ((t1.clientY + t2.clientY) / 2) - rect.top;
+
+                pinchWorldX = (midX - window.currentPanX) / pinchStartScale;
+                pinchWorldY = (midY - window.currentPanY) / pinchStartScale;
+                return;
+            }
+
             const t1 = e.touches[0];
             const t2 = e.touches[1];
             const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -313,7 +333,7 @@ function initNativeCanvasEngine() {
         }
 
         // 1-Finger Canvas Panning
-        if (isPanning && e.touches.length === 1 && !isPinching) {
+        if (isPanning && e.touches.length === 1 && !window.isPinching) {
             if (e.cancelable) e.preventDefault();
             const dx = e.touches[0].clientX - startX;
             const dy = e.touches[0].clientY - startY;
@@ -324,16 +344,16 @@ function initNativeCanvasEngine() {
     }, { passive: false });
 
     const stopPanOrPinch = (e) => {
-        if (isPinching) {
-            if (e.touches && e.touches.length < 2) {
-                isPinching = false;
+        if (window.isPinching) {
+            if (!e.touches || e.touches.length === 0) {
+                window.isPinching = false;
                 window.isDraggingAnything = false;
-                if (e.touches.length === 1) {
-                    startPan(e.touches[0].clientX, e.touches[0].clientY);
-                }
-            } else if (!e.touches || e.touches.length === 0) {
-                isPinching = false;
+                pinchStartDist = 0;
+            } else if (e.touches.length === 1) {
+                window.isPinching = false;
                 window.isDraggingAnything = false;
+                pinchStartDist = 0;
+                startPan(e.touches[0].clientX, e.touches[0].clientY);
             }
         }
         if (isPanning && (!e.touches || e.touches.length === 0)) {
@@ -377,7 +397,7 @@ function initNativeCanvasEngine() {
     // ---------------------------------------------------------
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (window.isDraggingAnything || isPanning || isPinching) return;
+        if (window.isDraggingAnything || isPanning || window.isPinching) return;
 
         const menu = document.getElementById('canvasContextMenu');
         if (menu) {

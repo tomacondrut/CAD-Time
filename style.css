@@ -2786,6 +2786,14 @@ body.assigning-live-time {
  * Zeitstempel: 2026-09-26 13:40:00 CEST
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Touch-Action & Drag-Ghost Image Unterdrückung)
+ * ERSETZEN IN: style.css (Block #canvas, #canvas * am Dateiende)
+ * Zeitstempel: 2026-09-27 11:45:00 CEST
+ * =============================================================================
+ */
 #canvas,
 #canvas *,
 .assembly-card,
@@ -2794,6 +2802,7 @@ body.assigning-live-time {
 #connections-layer {
     -webkit-user-drag: none !important;
     user-drag: none !important;
+    touch-action: none !important; /* <--- VERHINDERT NATIVES BROWSER-ZOOMEN AUF KARTEN */
 }
 
 /**
