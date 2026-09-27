@@ -32,6 +32,88 @@ let contextMenuCoords = { x: 100, y: 100 };
 let contextTargetNodeId = null;
 window.contextTargetZoneId = null;
 
+
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Koordinaten-Transformation & Kontextmenü-Sichtbarkeit
+ * EINFÜGEN IN: canvas.js (Direkt nach 'window.contextTargetZoneId = null;')
+ * Zeitstempel: 2026-09-27 16:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:50:00 CEST]: Bei der Canvas-Konsolidierung ging getCanvasCoords 
+ *     verloren, was beim Rechtsklick den Fehler 'getCanvasCoords is not a function' 
+ *     warf und das Kontextmenü blockierte.
+ *   - [2026-09-27 16:55:00 CEST]: BUGFIX: 1. window.getCanvasCoords & getCanvasCoords
+ *     wiederhergestellt (Viewport-Offset & Zoom-Kompensation).
+ *     2. window.updateContextMenuVisibility implementiert (steuert Sichtbarkeit
+ *     für CAD-Modus vs. Status-Board sowie Leerfläche vs. Baugruppe/Rahmen).
+ * =============================================================================
+ */
+
+// 1. Exakte Welt-Koordinaten unter dem Mauszeiger berechnen (Zoom & Pan einberechnet)
+window.getCanvasCoords = function (clientX, clientY) {
+    const viewport = document.getElementById('viewport');
+    const rect = viewport ? viewport.getBoundingClientRect() : { left: 0, top: 0 };
+    const scale = window.currentScale || 1;
+    return {
+        x: (clientX - rect.left - (window.currentPanX || 0)) / scale,
+        y: (clientY - rect.top - (window.currentPanY || 0)) / scale
+    };
+};
+const getCanvasCoords = window.getCanvasCoords;
+
+// 2. Kontextmenü-Einträge rollen- und ortsbasiert filtern
+window.updateContextMenuVisibility = function (nodeId, zoneId) {
+    const isManager = (window.activeCanvasMode === 'manager');
+
+    // Standard / CAD Menü-Elemente
+    const addBlock = document.getElementById('ctxMenuAddBlock');
+    const addZone = document.getElementById('ctxMenuAddZone');
+    const addNote = document.getElementById('ctxMenuAddNote');
+    const toggleHandles = document.getElementById('ctxMenuToggleHandles');
+    const dupNode = document.getElementById('ctxMenuDuplicateNode');
+    const delNode = document.getElementById('ctxMenuDeleteNode');
+
+    // Status-Board Menü-Elemente
+    const mgrAddExisting = document.getElementById('ctxMenuMgrAddExisting');
+    const mgrAddZone = document.getElementById('ctxMenuMgrAddZone');
+    const mgrRemoveNode = document.getElementById('ctxMenuMgrRemoveNode');
+    const mgrDeleteZone = document.getElementById('ctxMenuMgrDeleteZone');
+
+    if (isManager) {
+        // Status-Board Modus: CAD-Elemente ausblenden
+        if (addBlock) addBlock.style.display = 'none';
+        if (addZone) addZone.style.display = 'none';
+        if (addNote) addNote.style.display = 'none';
+        if (toggleHandles) toggleHandles.style.display = 'none';
+        if (dupNode) dupNode.style.display = 'none';
+        if (delNode) delNode.style.display = 'none';
+
+        if (mgrAddExisting) mgrAddExisting.style.display = (!nodeId && !zoneId) ? 'block' : 'none';
+        if (mgrAddZone) mgrAddZone.style.display = (!nodeId) ? 'block' : 'none';
+        if (mgrRemoveNode) mgrRemoveNode.style.display = nodeId ? 'block' : 'none';
+        if (mgrDeleteZone) mgrDeleteZone.style.display = (!nodeId && zoneId) ? 'block' : 'none';
+    } else {
+        // CAD-Konstruktionsplan Modus: Manager-Elemente ausblenden
+        if (mgrAddExisting) mgrAddExisting.style.display = 'none';
+        if (mgrAddZone) mgrAddZone.style.display = 'none';
+        if (mgrRemoveNode) mgrRemoveNode.style.display = 'none';
+        if (mgrDeleteZone) mgrDeleteZone.style.display = 'none';
+
+        const isBlank = (!nodeId && !zoneId);
+        if (addBlock) addBlock.style.display = isBlank ? 'block' : 'none';
+        if (addZone) addZone.style.display = isBlank ? 'block' : 'none';
+        if (addNote) addNote.style.display = isBlank ? 'block' : 'none';
+        if (toggleHandles) toggleHandles.style.display = isBlank ? 'block' : 'none';
+
+        if (dupNode) dupNode.style.display = nodeId ? 'block' : 'none';
+        if (delNode) delNode.style.display = nodeId ? 'block' : 'none';
+    }
+};
+
+
+
 // =============================================================================
 // NATIVE ENGINE: PAN, ZOOM & EVENTS (Wiederhergestellt)
 // =============================================================================
