@@ -2141,23 +2141,46 @@ html, body {
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Portrait Manager-Aktionen: Touch-Pan & Auto-Fit)
+ * ERSETZEN IN: style.css (In @media (orientation: portrait) -> Abschnitt C)
+ * Zeitstempel: 2026-09-27 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:15:00 CEST]: 2-Zeilen-Layout Basis.
+ *   - [2026-09-27 11:35:00 CEST]: BUGFIX: 1. touch-action: pan-x aktiviert, 
+ *     damit die Leiste auf Touchscreens horizontal gewischt werden kann.
+ *     2. Kompakte Schrift- und Padding-Werte, damit alle 3 Buttons 
+ *        ('Sortieren', 'Kritisch', 'In Rahmen') auf einen Blick hineinpassen.
+ * =============================================================================
+ */
+
+/* C. Manager-Aktionen: Eigenständige scrollbare Zeile 2 unterhalb des Umschalters */
 .manager-actions-cluster {
-    display: contents; /* Desktop: Verhält sich wie direkte Flex-Geschwister */
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 2px 2px 6px 2px !important;
+    touch-action: pan-x !important; /* <--- ERLAUBT NATIVES WISCHEN TROTZ VIEWPORT-LOCK */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
 }
 
+    .manager-actions-cluster::-webkit-scrollbar {
+        display: none;
+    }
+
 .btn-manager-action {
-    background: #fff;
-    border: 1px solid #cbd5e0;
-    padding: 6px 10px;
-    border-radius: 16px;
-    font-size: 11px;
-    font-weight: bold;
-    color: #2d3748;
-    cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
+    padding: 4px 7px !important;
+    font-size: 10px !important;
+    border-radius: 12px !important;
+    white-space: nowrap !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12) !important;
 }
 
     .btn-manager-action:hover {

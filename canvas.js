@@ -229,13 +229,27 @@ function initNativeCanvasEngine() {
     // ---------------------------------------------------------
     // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
     // ---------------------------------------------------------
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pinch-Capture & Globaler Drag-Lock)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> touchstart Event)
+ * Zeitstempel: 2026-09-27 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 14:10:00 CEST]: Basis Touch-Panning.
+ *   - [2026-09-27 11:35:00 CEST]: BUGFIX: Capture-Phase ({ capture: true }) 
+ *     aktiviert. Sobald >= 2 Finger das Display berühren, wird jeglicher Drag
+ *     auf Blöcken/Zonen sofort unterbunden und abgebrochen.
+ * =============================================================================
+ */
+    window.isPinching = false;
+
     viewport.addEventListener('touchstart', (e) => {
-        // Bei 2 Fingern: Sofort Browser-Zoom abfangen und Canvas-Pinch starten
-        if (e.touches.length === 2) {
+        if (e.touches.length >= 2) {
             if (e.cancelable) e.preventDefault();
+            window.isPinching = true;
+            window.isDraggingAnything = false;
             isPanning = false;
-            isPinching = true;
-            window.isDraggingAnything = true;
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
@@ -251,7 +265,7 @@ function initNativeCanvasEngine() {
             return;
         }
 
-        if (window.isDraggingAnything) return;
+        if (window.isDraggingAnything || window.isPinching) return;
 
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
         if (interactiveEl) {
@@ -261,10 +275,10 @@ function initNativeCanvasEngine() {
             if ((!isLockedZone && !isManagerZoneBody) || isButtonOrAction) return;
         }
 
-        if (e.touches.length === 1 && !isPinching) {
+        if (e.touches.length === 1 && !window.isPinching) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
         }
-    }, { passive: false });
+    }, { capture: true, passive: false });
 
     window.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
@@ -2436,24 +2450,32 @@ function renderCanvas() {
             let initialNodePositions = new Map();
             let initCurX = posX, initCurY = posY;
 
+            /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Pinch-Protected Card Dragging & Position Revert)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> Block 2b: startCardDrag)
+ * Zeitstempel: 2026-09-27 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:45:00 CEST]: Multi-Selektions-Drag Basis.
+ *   - [2026-09-27 11:35:00 CEST]: BUGFIX: Sobald eine 2. Berührung (Pinch-Zoom)
+ *     erkannt wird, bricht der Block-Drag sofort ab, setzt die Karte pixelgenau 
+ *     auf die Ausgangsposition zurück und verhindert jegliches DB-Update.
+ * =============================================================================
+ */
             const startCardDrag = (e) => {
-                if (e.type === 'mousedown' && e.button !== 0) return; // <--- NEU: Rechtsklick freigeben
+                if (e.type === 'mousedown' && e.button !== 0) return;
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
-                if (e.type === 'touchstart' && e.touches.length > 1) return;
-                if (e.type === 'mousedown') e.preventDefault();
-                if (e.cancelable) e.stopPropagation();
-                window.isDraggingAnything = true;
+                if (window.isPinching || (e.type === 'touchstart' && e.touches.length > 1)) return;
 
-                isDragging = true;
-                startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-                initCurX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? posX) : node.pos_x;
-                initCurY = isManagerMode ? (mgrLayout.placements[node.id]?.pos_y ?? posY) : node.pos_y;
+                let isDragging = true;
+                let didMove = false;
+                let startClientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                let startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                let initCurX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? posX) : node.pos_x;
+                let initCurY = isManagerMode ? (mgrLayout.placements[node.id]?.pos_y ?? posY) : node.pos_y;
 
-                if (e.cancelable) e.stopPropagation();
-
-                // Multi-Selektion für den CAD-Modus initialisieren
                 if (!isManagerMode) {
                     const nodesToMove = (window.selectedNodeIds.has(node.id))
                         ? Array.from(window.selectedNodeIds).map(id => currentNodes.find(n => n.id === id)).filter(Boolean)
@@ -2465,9 +2487,44 @@ function renderCanvas() {
                     });
                 }
 
+                const cancelDragAndRevert = () => {
+                    isDragging = false;
+                    window.isDraggingAnything = false;
+                    window.removeEventListener('mousemove', onCardMove);
+                    window.removeEventListener('mouseup', onCardUp);
+                    window.removeEventListener('touchmove', onCardMove);
+                    window.removeEventListener('touchend', onCardUp);
+                    window.removeEventListener('touchcancel', onCardUp);
+
+                    if (isManagerMode) {
+                        el.style.left = `${initCurX}px`;
+                        el.style.top = `${initCurY}px`;
+                        if (mgrLayout.placements[node.id]) {
+                            mgrLayout.placements[node.id].pos_x = initCurX;
+                            mgrLayout.placements[node.id].pos_y = initCurY;
+                        }
+                    } else {
+                        initialNodePositions.forEach((pos, nId) => {
+                            const targetN = currentNodes.find(x => x.id === nId);
+                            if (targetN) { targetN.pos_x = pos.x; targetN.pos_y = pos.y; }
+                            const nEl = document.getElementById(nId);
+                            if (nEl) { nEl.style.left = `${pos.x}px`; nEl.style.top = `${pos.y}px`; }
+                        });
+                        (currentZones || []).forEach(z => {
+                            const zEl = document.getElementById(z.id);
+                            if (zEl) zEl.classList.remove('zone-hover-highlight');
+                        });
+                        renderConnections();
+                    }
+                };
+
                 const onCardMove = (me) => {
+                    // Multi-Touch erkannt -> Drag sofort abbrechen und Position wiederherstellen
+                    if (window.isPinching || (me.touches && me.touches.length > 1)) {
+                        cancelDragAndRevert();
+                        return;
+                    }
                     if (!isDragging) return;
-                    if (me.type === 'touchmove' && me.cancelable) me.preventDefault();
 
                     const clientX = me.type.includes('touch') ? me.touches[0].clientX : me.clientX;
                     const clientY = me.type.includes('touch') ? me.touches[0].clientY : me.clientY;
@@ -2475,13 +2532,18 @@ function renderCanvas() {
                     const dx = (clientX - startClientX) / scale;
                     const dy = (clientY - startClientY) / scale;
 
+                    // Minimale Bewegungsschwelle (Deadzone) schützt vor Mikrobewegungen beim Tap
+                    if (!didMove && Math.hypot(dx, dy) < 4) return;
+                    didMove = true;
+                    window.isDraggingAnything = true;
+                    if (me.type === 'touchmove' && me.cancelable) me.preventDefault();
+
                     if (isManagerMode) {
                         const curX = Math.round(initCurX + dx);
                         const curY = Math.round(initCurY + dy);
                         el.style.left = `${curX}px`;
                         el.style.top = `${curY}px`;
                     } else {
-                        // Multi-Block Bewegung im CAD Modus
                         initialNodePositions.forEach((pos, nId) => {
                             const curX = Math.round(pos.x + dx);
                             const curY = Math.round(pos.y + dy);
@@ -2502,12 +2564,11 @@ function renderCanvas() {
                                 else zEl.classList.remove('zone-hover-highlight');
                             }
                         });
-
                         renderConnections();
                     }
                 };
 
-                const onCardUp = async () => {
+                const onCardUp = async (ue) => {
                     if (!isDragging) return;
                     isDragging = false;
                     window.isDraggingAnything = false;
@@ -2518,6 +2579,8 @@ function renderCanvas() {
                     window.removeEventListener('touchend', onCardUp);
                     window.removeEventListener('touchcancel', onCardUp);
 
+                    if (!didMove || window.isPinching) return;
+
                     const finalX = parseInt(el.style.left, 10);
                     const finalY = parseInt(el.style.top, 10);
 
@@ -2526,14 +2589,12 @@ function renderCanvas() {
                         const centerY = finalY + 60;
                         const targetZone = getDeepestMgrZoneAt(centerX, centerY, [], mgrLayout.zones);
 
-                        // Händisches Verschieben definiert die Koordinate fest & dauerhaft in der DB!
                         mgrLayout.placements[node.id] = {
                             pos_x: finalX,
                             pos_y: finalY,
                             zone_id: targetZone ? targetZone.id : null
                         };
 
-                        // Falls die Hilfsansicht aktiv war, übernimmt dieser gezielt bewegte Block seine neue Position
                         if (window.managerHelperVirtualPlacements && window.managerHelperVirtualPlacements[node.id]) {
                             window.managerHelperVirtualPlacements[node.id] = { pos_x: finalX, pos_y: finalY };
                         }

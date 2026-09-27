@@ -3880,7 +3880,7 @@ window.switchCanvasMode = function (mode) {
     if (btnFramed) {
         btnFramed.style.display = mode === 'manager' ? 'inline-block' : 'none';
         btnFramed.classList.toggle('active', window.managerFramedOnlyActive);
-        btnFramed.textContent = window.managerFramedOnlyActive ? '🔲 Nur in Rahmen (Aktiv)' : '🔲 Nur in Rahmen';
+        btnFramed.textContent = '🔲 In Rahmen';
     }
 
     const savedX = localStorage.getItem(`cad_tm_panX_${mode}`);
@@ -3922,7 +3922,7 @@ window.toggleManagerFramedOnlyFilter = function () {
     const btn = document.getElementById('btnToggleManagerFramedOnly');
     if (btn) {
         btn.classList.toggle('active', window.managerFramedOnlyActive);
-        btn.textContent = window.managerFramedOnlyActive ? '🔲 Nur in Rahmen (Aktiv)' : '🔲 Nur in Rahmen';
+        btn.textContent = '🔲 In Rahmen';
     }
 
     showToast(window.managerFramedOnlyActive ? 'Filter aktiv: Nur Blöcke in Rahmen sichtbar' : 'Alle Blöcke eingeblendet', 'info');
