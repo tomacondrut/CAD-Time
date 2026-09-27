@@ -366,30 +366,107 @@ function initNativeCanvasEngine() {
     window.addEventListener('touchend', stopPanOrPinch);
     window.addEventListener('touchcancel', stopPanOrPinch);
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Smooth LERP Zoom & MX Master High-Res Engine)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> MAUSRAD-ZOOM Bereich)
+ * Zeitstempel: 2026-09-27 11:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 23:15:00 CEST]: Basis-Mausradzoom (starr 0.9/1.1).
+ *   - [2026-09-27 11:55:00 CEST]: 1. deltaMode- & deltaY-Normalisierung für 
+ *     Logitech MX Master (MagSpeed Freilauf / High-Res Scrolling) und Trackpads.
+ *     2. LERP-Interpolation via requestAnimationFrame für butterweiches 120Hz-Zoomen.
+ *     3. Mausfokus bleibt während der Animation stabil unter dem Cursor verankert.
+ * =============================================================================
+ */
+
     // ---------------------------------------------------------
-    // MAUSRAD-ZOOM (Desktop)
+    // SMOOTH MAUSRAD-ZOOM (Logitech MX Master & High-Res Support)
     // ---------------------------------------------------------
+    let zoomTargetScale = window.currentScale;
+    let zoomTargetPanX = window.currentPanX;
+    let zoomTargetPanY = window.currentPanY;
+    let zoomAnimFrameId = null;
+
+    // Synchronisiert Zoom-Ziele, wenn per Hand gepannt oder ge-pincht wird
+    const syncZoomTargets = () => {
+        zoomTargetScale = window.currentScale;
+        zoomTargetPanX = window.currentPanX;
+        zoomTargetPanY = window.currentPanY;
+        if (zoomAnimFrameId) {
+            cancelAnimationFrame(zoomAnimFrameId);
+            zoomAnimFrameId = null;
+        }
+    };
+
+    // Bei Start von Pan/Drag eventuelle Zoom-Animation sanft stoppen
+    viewport.addEventListener('mousedown', syncZoomTargets, { capture: true });
+    viewport.addEventListener('touchstart', syncZoomTargets, { capture: true });
+
     viewport.addEventListener('wheel', (e) => {
+        // Formularfelder und Scroll-Container vor versehentlichem Canvas-Zoom schützen
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
             return;
         }
         e.preventDefault();
 
-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-        const newScale = Math.min(Math.max(0.05, window.currentScale * zoomFactor), 3.0);
+        // 1. deltaMode normalisieren (0 = Pixel [Trackpad/Freilauf], 1 = Zeilen [Standard-Mausrad], 2 = Seiten)
+        let dy = e.deltaY;
+        if (e.deltaMode === 1) {
+            dy *= 28; // Ausgewogene Übersetzung für gerasterte Mausräder
+        } else if (e.deltaMode === 2) {
+            dy *= 350;
+        }
 
+        // Sicherheitsbegrenzung gegen extreme Einzelsprünge
+        dy = Math.max(-600, Math.min(600, dy));
+
+        // 2. Exponentielle Skalierung: passt sich linear der Scroll-Geschwindigkeit an
+        const zoomIntensity = 0.0015;
+        const zoomFactor = Math.exp(-dy * zoomIntensity);
+        const newTargetScale = Math.min(Math.max(0.05, zoomTargetScale * zoomFactor), 3.0);
+
+        // 3. Fokus-Punkt unter dem Cursor festhalten
         const rect = viewport.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
-        const worldX = (mouseX - window.currentPanX) / window.currentScale;
-        const worldY = (mouseY - window.currentPanY) / window.currentScale;
+        const worldX = (mouseX - zoomTargetPanX) / zoomTargetScale;
+        const worldY = (mouseY - zoomTargetPanY) / zoomTargetScale;
 
-        window.currentPanX = mouseX - (worldX * newScale);
-        window.currentPanY = mouseY - (worldY * newScale);
-        window.currentScale = newScale;
+        zoomTargetScale = newTargetScale;
+        zoomTargetPanX = mouseX - (worldX * zoomTargetScale);
+        zoomTargetPanY = mouseY - (worldY * zoomTargetScale);
 
-        applyCanvasTransform(false);
+        // 4. LERP-Animationsschleife starten (falls noch nicht aktiv)
+        if (!zoomAnimFrameId) {
+            const smoothZoomLoop = () => {
+                const diffScale = zoomTargetScale - window.currentScale;
+                const diffPanX = zoomTargetPanX - window.currentPanX;
+                const diffPanY = zoomTargetPanY - window.currentPanY;
+
+                // Abbruchbedingung bei Erreichen des Ziels (verhindert Idle-CPU-Last)
+                if (Math.abs(diffScale) < 0.0008 && Math.abs(diffPanX) < 0.15 && Math.abs(diffPanY) < 0.15) {
+                    window.currentScale = zoomTargetScale;
+                    window.currentPanX = zoomTargetPanX;
+                    window.currentPanY = zoomTargetPanY;
+                    applyCanvasTransform(false);
+                    zoomAnimFrameId = null;
+                    return;
+                }
+
+                // Dämpfungsfaktor (0.28 = sehr direktes, aber gleitendes CAD-Gefühl)
+                const damping = 0.28;
+                window.currentScale += diffScale * damping;
+                window.currentPanX += diffPanX * damping;
+                window.currentPanY += diffPanY * damping;
+
+                applyCanvasTransform(false);
+                zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+            };
+            zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+        }
     }, { passive: false });
 
     // ---------------------------------------------------------
