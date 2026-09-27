@@ -818,13 +818,27 @@ window.handleOpenAddBlockModal = function (customX = null, customY = null, paren
  *     nach dem Einfügen aufgerufen, damit lokale Blöcke ohne Projektwechsel sichtbar sind.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sofort-Render & Fehlersichere Blockerstellung)
+ * ERSETZEN IN: ui.js (Funktion handleAddBlock)
+ * Zeitstempel: 2026-09-27 17:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-30 10:35:00 CEST]: Initiale Erstellung.
+ *   - [2026-09-27 17:05:00 CEST]: BUGFIX: 1. Eindeutige ID generiert (verhindert
+ *     Not-Null-Fehler auf project_nodes.id). 2. Optimistisches Push in currentNodes
+ *     und sofortiges renderCanvas() (Block erscheint ohne Ladeverzögerung).
+ *     3. Fehlerprüfung mit Toast-Meldung bei Supabase-Blockaden.
+ * =============================================================================
+ */
 window.handleAddBlock = async function (e) {
     e.preventDefault();
     const name = document.getElementById('newBlockName').value.trim();
     const docInput = document.getElementById('newBlockDocNumber').value.trim();
     const docNumber = docInput ? 'DOC' + docInput : '';
     const article = document.getElementById('newBlockArticle').value.trim();
-    const blockType = document.querySelector('input[name="blockType"]:checked').value;
+    const blockType = document.querySelector('input[name="blockType"]:checked')?.value || 'assembly';
     const customPosVal = document.getElementById('newBlockCustomPos').value;
 
     if (docNumber && !/^DOC\d{7}$/.test(docNumber)) {
@@ -836,8 +850,8 @@ window.handleAddBlock = async function (e) {
     let draftingBudget = 0;
 
     if (isAdmin) {
-        designBudget = Math.max(0, parseFloat(document.getElementById('newBlockBudgetDesign').value) || 0);
-        draftingBudget = Math.max(0, parseFloat(document.getElementById('newBlockBudgetDrafting').value) || 0);
+        designBudget = Math.max(0, parseFloat(document.getElementById('newBlockBudgetDesign')?.value) || 0);
+        draftingBudget = Math.max(0, parseFloat(document.getElementById('newBlockBudgetDrafting')?.value) || 0);
     }
 
     if (article && !/^\d{5}$/.test(article)) {
@@ -850,10 +864,14 @@ window.handleAddBlock = async function (e) {
     let parentConnectId = null;
 
     if (customPosVal) {
-        const posObj = JSON.parse(customPosVal);
-        posX = Math.round(posObj.x);
-        posY = Math.round(posObj.y);
-        parentConnectId = posObj.parentConnectId;
+        try {
+            const posObj = JSON.parse(customPosVal);
+            if (!isNaN(posObj.x)) posX = Math.round(posObj.x);
+            if (!isNaN(posObj.y)) posY = Math.round(posObj.y);
+            parentConnectId = posObj.parentConnectId;
+        } catch (err) {
+            console.warn("Pos-Parsing Fehler:", err);
+        }
     }
 
     // Automatische Zonen-Zuordnung ermitteln
@@ -861,7 +879,8 @@ window.handleAddBlock = async function (e) {
         ? getDeepestZoneAt(posX + 160, posY + 100)
         : null;
 
-    const { data: insertedNode } = await db.from('project_nodes').insert([{
+    const newBlockPayload = {
+        id: 'node_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
         project_id: activeProjectId,
         name,
         doc_number: docNumber,
@@ -873,16 +892,45 @@ window.handleAddBlock = async function (e) {
         created_by: activeUserCode || 'COT',
         pos_x: posX,
         pos_y: posY,
-        zone_id: targetZone ? targetZone.id : null
-    }]).select().single();
+        zone_id: targetZone ? targetZone.id : null,
+        completion_status: 'open',
+        progress_design: 0,
+        progress_drafting: 0
+    };
 
-    if (parentConnectId && insertedNode) {
+    // 1. Sofortige UI-Aktualisierung (Optimistisches Rendern)
+    currentNodes.push(newBlockPayload);
+    if (typeof renderCanvas === 'function') renderCanvas();
+    if (typeof updateSidebarStats === 'function') updateSidebarStats();
+
+    closeModal('newBlockModal');
+    document.getElementById('newBlockForm').reset();
+    showToast('Block erfolgreich hinzugefügt', 'success');
+
+    // 2. Persistieren in Datenbank (Cloud vs. Lokal)
+    const { data, error } = await db.from('project_nodes').insert([newBlockPayload]).select();
+    if (error) {
+        console.error("Fehler beim Speichern des Blocks in Supabase:", error);
+        showToast('Fehler beim Speichern in DB: ' + error.message, 'error');
+        // Bei Fehler wieder aus dem lokalen Speicher entfernen
+        currentNodes = currentNodes.filter(n => n.id !== newBlockPayload.id);
+        if (typeof renderCanvas === 'function') renderCanvas();
+        return;
+    }
+
+    const insertedNode = (data && data[0]) ? data[0] : newBlockPayload;
+    if (insertedNode && insertedNode.id !== newBlockPayload.id) {
+        newBlockPayload.id = insertedNode.id;
+    }
+
+    // Automatische Verbindung verknüpfen falls Eltern-Knoten gewählt war
+    if (parentConnectId) {
         const parentNode = currentNodes.find(n => n.id === parentConnectId);
         if (parentNode) {
             let pId = parentNode.id;
-            let cId = insertedNode.id;
-            if (parentNode.pos_y > insertedNode.pos_y) {
-                pId = insertedNode.id;
+            let cId = newBlockPayload.id;
+            if (parentNode.pos_y > newBlockPayload.pos_y) {
+                pId = newBlockPayload.id;
                 cId = parentNode.id;
             }
             await db.from('project_edges').insert([{
@@ -891,19 +939,14 @@ window.handleAddBlock = async function (e) {
                 target: cId,
                 created_by: activeUserCode || 'COT'
             }]);
-            cancelConnectionMode();
         }
     }
 
-    closeModal('newBlockModal');
-    document.getElementById('newBlockForm').reset();
-    showToast('Block erfolgreich hinzugefügt', 'success');
-
-    // Erzwingt sofortige Aktualisierung auf dem Canvas
-    if (typeof fetchCanvasData === 'function') {
-        fetchCanvasData();
-    } else if (typeof renderCanvas === 'function') {
-        renderCanvas();
+    // Falls im Status-Board Modus: direkt Platzierung registrieren
+    if (window.activeCanvasMode === 'manager' && typeof getManagerLayout === 'function') {
+        const layout = getManagerLayout();
+        layout.placements[newBlockPayload.id] = { pos_x: posX, pos_y: posY, zone_id: null };
+        if (typeof saveManagerLayout === 'function') saveManagerLayout(layout);
     }
 };
 
@@ -2705,9 +2748,21 @@ window.handleOpenAddNoteModal = function (x, y) {
  * damit Notizen beim Ausblenden/Isolieren von Rahmen korrekt mit verschwinden.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Sofort-Render & Fehlersichere Notiz-Erstellung)
+ * ERSETZEN IN: ui.js (Funktion handleAddNote)
+ * Zeitstempel: 2026-09-27 17:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-29 00:30:00 CEST]: Zonen-Zuweisung bei Notizen.
+ *   - [2026-09-27 17:05:00 CEST]: BUGFIX: Eindeutige ID generiert, optimistisches
+ *     Push in currentNodes und sofortiges Neuzeichnen des Canvas.
+ * =============================================================================
+ */
 window.handleAddNote = async function (e) {
     if (e) e.preventDefault();
-    const noteType = document.querySelector('input[name="newNoteType"]:checked').value;
+    const noteType = document.querySelector('input[name="newNoteType"]:checked')?.value || 'NOTE';
     const text = document.getElementById('newNoteText').value.trim();
     const visibility = document.getElementById('newNoteVisibility').value;
     const color = document.getElementById('newNoteColor').value;
@@ -2715,9 +2770,13 @@ window.handleAddNote = async function (e) {
 
     let posX = 150, posY = 150;
     if (posStr) {
-        const p = JSON.parse(posStr);
-        posX = Math.round(p.x);
-        posY = Math.round(p.y);
+        try {
+            const p = JSON.parse(posStr);
+            if (!isNaN(p.x)) posX = Math.round(p.x);
+            if (!isNaN(p.y)) posY = Math.round(p.y);
+        } catch (err) {
+            console.warn("Notiz-Pos Fehler:", err);
+        }
     }
 
     if (!text && noteType === 'NOTE') {
@@ -2743,13 +2802,13 @@ window.handleAddNote = async function (e) {
         items: checklistItems
     });
 
-    // NEU: Automatische Zuweisung der Notiz an den Kasten/Rahmen an diesen Koordinaten
     const targetZone = (typeof getDeepestZoneAt === 'function')
         ? getDeepestZoneAt(posX + 100, posY + 50)
         : null;
     const targetZoneId = targetZone ? targetZone.id : null;
 
-    const { error } = await db.from('project_nodes').insert([{
+    const newNotePayload = {
+        id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
         project_id: activeProjectId,
         name: payload,
         doc_number: noteType,
@@ -2763,18 +2822,25 @@ window.handleAddNote = async function (e) {
         created_by: activeUserCode || 'COT',
         pos_x: posX,
         pos_y: posY,
-        zone_id: targetZoneId // <--- Verknüpft die Notiz mit dem Rahmen
-    }]);
+        zone_id: targetZoneId
+    };
 
-    if (error) {
-        console.error("Fehler beim Speichern der Notiz:", error);
-        showToast('Fehler beim Anheften: ' + error.message, 'error');
-        return;
-    }
+    // 1. Sofortige UI-Aktualisierung (Optimistisches Rendern)
+    currentNodes.push(newNotePayload);
+    if (typeof renderCanvas === 'function') renderCanvas();
 
     closeModal('newNoteModal');
     showToast(noteType === 'TODO' ? 'To-Do Liste angeheftet' : 'Notiz angeheftet', 'success');
-    if (typeof fetchCanvasData === 'function') fetchCanvasData();
+
+    // 2. Persistieren in Datenbank (Cloud vs. Lokal)
+    const { data, error } = await db.from('project_nodes').insert([newNotePayload]).select();
+    if (error) {
+        console.error("Fehler beim Speichern der Notiz in Supabase:", error);
+        showToast('Fehler beim Anheften: ' + error.message, 'error');
+        currentNodes = currentNodes.filter(n => n.id !== newNotePayload.id);
+        if (typeof renderCanvas === 'function') renderCanvas();
+        return;
+    }
 };
 
 window.openEditNoteModal = function (nodeId) {
