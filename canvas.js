@@ -93,6 +93,20 @@ window.contextTargetZoneId = null;
  * Zeitstempel: 2026-09-27 13:40:00 CEST
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Jitterfreier 1:1 Viewport-Grid-Sync)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 13:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 13:10:00 CEST]: 0.005 Threshold (verursachte Verspringen/Jitter).
+ *   - [2026-09-27 13:50:00 CEST]: BUGFIX GRID-JITTER: 1. Starre 0.005-Schwelle
+ *     entfernt. Beim Zoomen werden backgroundSize und backgroundPosition in
+ *     jedem Frame 100% phasensynchron berechnet (kein Nachspringen der Dots).
+ *     2. Beim Pannen bleibt backgroundSize unberührt (Scale ändert sich nicht, 0% CPU-Last).
+ * =============================================================================
+ */
 let saveTransformTimeout = null;
 let lastRenderedGridScale = -1;
 
@@ -115,8 +129,8 @@ function applyCanvasTransform(animate = false) {
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
     if (viewportEl) {
-        // Skaliert die Raster-Textur nur neu, wenn tatsächlich gezoomt wurde
-        if (Math.abs(lastRenderedGridScale - window.currentScale) > 0.005) {
+        // Exakter Sync beim Zoomen; keine Neuberechnung beim reinen Pannen
+        if (lastRenderedGridScale !== window.currentScale) {
             const scaledGridSize = 24 * window.currentScale;
             viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
             lastRenderedGridScale = window.currentScale;

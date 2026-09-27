@@ -179,7 +179,14 @@ html, body {
  * =============================================================================
  */
 
-/* Viewport: Hält das unendliche Punktraster */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Zentriertes Vektor-Punktraster ohne Randbeschnitt)
+ * ERSETZEN IN: style.css (Im Block #viewport)
+ * Zeitstempel: 2026-09-27 13:50:00 CEST
+ * =============================================================================
+ */
 #viewport {
     flex: 1;
     height: 100%;
@@ -187,7 +194,7 @@ html, body {
     overflow: hidden;
     cursor: grab;
     background-color: var(--bg-canvas);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='2' cy='2' r='1.5' fill='%23cbd5e0'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='1.5' fill='%23cbd5e0'/%3E%3C/svg%3E");
     background-size: 24px 24px;
     touch-action: none !important;
     -webkit-user-select: none;
