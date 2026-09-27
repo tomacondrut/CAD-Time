@@ -382,6 +382,19 @@ window.updateReportData = function () {
  * Hierarchischer Rollup & Absteigende Sortierung (Vom obersten Rahmen weg)
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Review-Snapshot Vergleich: Echter Gesamt-Iststand & Snapshot-B Support)
+ * ERSETZEN IN: report.js (Funktion renderSnapshotReviewReport komplett ersetzen)
+ * Zeitstempel: 2026-09-27 16:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 15:55:00 CEST]: Hierarchischer Bottom-Up Rollup & Top-Down Sortierung.
+ *   - [2026-09-27 16:20:00 CEST]: BUGFIX: 1. Spalte 5 korrigiert (zeigt nun den echten
+ *     kumulierten Gesamt-Iststand bis zum Stichtag statt der Intervall-Stunden).
+ *     2. Budgets bei Snapshot-B-Vergleichen dynamisch aus snapshot_data bezogen.
+ * =============================================================================
+ */
 function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDate) {
     const summaryContainer = document.getElementById('repSummaryContainer');
     const detailsContainer = document.getElementById('repDetailsContainer');
@@ -402,8 +415,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             if (l.task_type === 'design') intervalHoursNode[l.node_id].cad += hrs;
             if (l.task_type === 'drafting') intervalHoursNode[l.node_id].draft += hrs;
             intervalHoursNode[l.node_id].total += hrs;
-        }
-        if (l.zone_id) {
+        } else if (l.zone_id) {
             if (!intervalHoursZone[l.zone_id]) intervalHoursZone[l.zone_id] = { cad: 0, draft: 0, total: 0 };
             if (l.task_type === 'design') intervalHoursZone[l.zone_id].cad += hrs;
             if (l.task_type === 'drafting') intervalHoursZone[l.zone_id].draft += hrs;
@@ -411,37 +423,54 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         }
     });
 
-    // 2. BOTTOM-UP HIERARCHIE-ROLLUP: Unterrahmen & Bauteile rollen in den Oberrahmen
-    const getZoneDirectEffort = (zId) => (intervalHoursZone[zId]?.total || 0);
+    // 2. KUMULIERTE GESAMT-STUNDEN BIS END-DATUM ERMITTELN (FÜR SPALTE 5)
+    const totalSpentToDateNode = {};
+    const totalSpentToDateZone = {};
 
+    (currentTimeLogs || []).forEach(l => {
+        if (new Date(l.logged_at) <= endDate) {
+            const hrs = parseFloat(l.hours) || 0;
+            if (l.node_id) {
+                totalSpentToDateNode[l.node_id] = (totalSpentToDateNode[l.node_id] || 0) + hrs;
+            } else if (l.zone_id) {
+                totalSpentToDateZone[l.zone_id] = (totalSpentToDateZone[l.zone_id] || 0) + hrs;
+            }
+        }
+    });
+
+    const getZoneDirectEffort = (zId) => (intervalHoursZone[zId]?.total || 0);
     const getNodeEffort = (nId) => (intervalHoursNode[nId]?.total || 0);
 
-    // Rekursiver Rollup für einen Rahmen inklusive aller Unterstrukturen
+    // Rekursiver Rollup für einen Rahmen (Intervall-Aufwand)
     function calculateSubtreeIntervalEffort(zoneId) {
         let sum = getZoneDirectEffort(zoneId);
-
-        // Blöcke im Rahmen summieren
         (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
             sum += getNodeEffort(n.id);
         });
-
-        // Unterrahmen rekursiv summieren
         (currentZones || []).filter(z => z.parent_zone_id === zoneId).forEach(cz => {
             sum += calculateSubtreeIntervalEffort(cz.id);
         });
-
         return sum;
     }
 
-    // 3. TOP-DOWN SORTIERUNG: Oberste Rahmen nach Gesamtaufwand absteigend sortieren
-    const topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => {
-        return {
-            zone: z,
-            subtreeEffort: calculateSubtreeIntervalEffort(z.id)
-        };
-    });
+    // Rekursiver Rollup für Gesamt-Iststand bis zum Stichtag (Spalte 5)
+    function calculateSubtreeTotalSpent(zoneId) {
+        let sum = totalSpentToDateZone[zoneId] || 0;
+        (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
+            sum += (totalSpentToDateNode[n.id] || 0);
+        });
+        (currentZones || []).filter(z => z.parent_zone_id === zoneId).forEach(cz => {
+            sum += calculateSubtreeTotalSpent(cz.id);
+        });
+        return sum;
+    }
 
-    // Sortierung der obersten Rahmen (Absteigend nach Gesamtaufwand im Intervall)
+    // 3. TOP-DOWN SORTIERUNG: Oberste Rahmen nach Intervall-Gesamtaufwand absteigend sortieren
+    const topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => ({
+        zone: z,
+        subtreeEffort: calculateSubtreeIntervalEffort(z.id)
+    }));
+
     topZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
 
     // 4. HEADER-KACHELN FÜR DAS REVIEW-INTERVALL
@@ -479,7 +508,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                 <tr>
                     <th>Bereich / Baugruppe (Nach Aufwand sortiert)</th>
                     <th style="text-align: right; width: 110px;">Im Intervall gebucht</th>
-                    <th style="text-align: right; width: 110px;">Budget (Alt ➔ Neu)</th>
+                    <th style="text-align: right; width: 120px;">Budget (Alt ➔ Neu)</th>
                     <th style="text-align: right; width: 90px;">Budget-Delta</th>
                     <th style="text-align: right; width: 110px;">Gesamt-Iststand</th>
                 </tr>
@@ -487,9 +516,12 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             <tbody>
     `;
 
-    // Map alter Budgets aus SnapA
+    // Map alter Budgets aus SnapA & neuer Budgets aus SnapB (oder Live)
     const oldNodeBudgets = {};
     const oldZoneBudgets = {};
+    const newNodeBudgets = {};
+    const newZoneBudgets = {};
+
     if (snapA.snapshot_data) {
         (snapA.snapshot_data.nodes || []).forEach(n => {
             oldNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0);
@@ -499,11 +531,24 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         });
     }
 
-    // Rekursiver Tabellen-Renderer (sortiert Unterstrukturen intern absteigend)
+    if (snapB && snapB.snapshot_data) {
+        (snapB.snapshot_data.nodes || []).forEach(n => {
+            newNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0);
+        });
+        (snapB.snapshot_data.zones || []).forEach(z => {
+            newZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0);
+        });
+    }
+
     function renderZoneRows(zoneObj, level) {
         const z = zoneObj.zone;
         const zEffort = zoneObj.subtreeEffort;
-        const curBud = (parseFloat(z.budget_design_hours) || 0) + (parseFloat(z.budget_drafting_hours) || 0);
+        const zTotalSpent = calculateSubtreeTotalSpent(z.id);
+
+        const curBud = newZoneBudgets[z.id] !== undefined
+            ? newZoneBudgets[z.id]
+            : (parseFloat(z.budget_design_hours) || 0) + (parseFloat(z.budget_drafting_hours) || 0);
+
         const oldBud = oldZoneBudgets[z.id] !== undefined ? oldZoneBudgets[z.id] : curBud;
         const diffBud = curBud - oldBud;
 
@@ -524,7 +569,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                 <td style="text-align: right; color:#2b6cb0; font-family:monospace; font-size:12px;">+${formatHoursToHM(zEffort)}</td>
                 <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(oldBud)} ➔ ${formatHoursToHM(curBud)}</td>
                 <td style="text-align: right;">${diffBudHtml}</td>
-                <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(zEffort)}</td>
+                <td style="text-align: right; color:#2d3748; font-family:monospace; font-weight:bold;">${formatHoursToHM(zTotalSpent)}</td>
             </tr>
         `;
 
@@ -536,7 +581,11 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         childNodes.sort((a, b) => b.effort - a.effort);
 
         childNodes.forEach(({ node: n, effort: nEffort }) => {
-            const nCurBud = (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+            const nTotal = totalSpentToDateNode[n.id] || 0;
+            const nCurBud = newNodeBudgets[n.id] !== undefined
+                ? newNodeBudgets[n.id]
+                : (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+
             const nOldBud = oldNodeBudgets[n.id] !== undefined ? oldNodeBudgets[n.id] : nCurBud;
             const nDiffBud = nCurBud - nOldBud;
 
@@ -554,21 +603,20 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                         <span style="color:#a0aec0; margin-right:4px;">└──</span>
                         ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
                     </td>
-                    <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2d3748' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(nTotal)}</td>
                 </tr>
             `;
         });
 
-        // 2. Untergeordnete Rahmen ebenfalls absteigend nach Intervall-Aufwand sortieren
+        // 2. Untergeordnete Rahmen absteigend nach Intervall-Aufwand sortieren
         const subZones = (currentZones || [])
             .filter(cz => cz.parent_zone_id === z.id)
             .map(cz => ({ zone: cz, subtreeEffort: calculateSubtreeIntervalEffort(cz.id) }));
 
         subZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
-
         subZones.forEach(subZoneObj => renderZoneRows(subZoneObj, level + 1));
     }
 
@@ -595,7 +643,11 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         `;
 
         unzonedNodes.forEach(({ node: n, effort: nEffort }) => {
-            const nCurBud = (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+            const nTotal = totalSpentToDateNode[n.id] || 0;
+            const nCurBud = newNodeBudgets[n.id] !== undefined
+                ? newNodeBudgets[n.id]
+                : (parseFloat(n.budget_design_hours) || 0) + (parseFloat(n.budget_drafting_hours) || 0);
+
             const nOldBud = oldNodeBudgets[n.id] !== undefined ? oldNodeBudgets[n.id] : nCurBud;
             const nDiffBud = nCurBud - nOldBud;
 
@@ -606,10 +658,10 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             tableHtml += `
                 <tr>
                     <td style="padding-left: 24px;">└── ${escapeHtml(n.name)}</td>
-                    <td style="text-align: right; font-weight:bold; color:#2d3748; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nEffort)}</td>
+                    <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(nTotal)}</td>
                 </tr>
             `;
         });

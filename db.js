@@ -528,17 +528,32 @@ window.fetchCanvasData = async function () {
         return;
     }
 
+
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Datenbank (Cloud-Abruf inkl. project_snapshots)
+ * ERSETZEN IN: db.js (In fetchCanvasData() -> Abschnitt 2: Cloud-Modus)
+ * Zeitstempel: 2026-09-27 16:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 17:50:00 CEST]: State-Trennung Cloud vs. Lokal.
+ *   - [2026-09-27 16:15:00 CEST]: BUGFIX: project_snapshots in Promise.all 
+ *     aufgenommen, damit Snapshots nach Reloads/F5 dauerhaft erhalten bleiben.
+ * =============================================================================
+ */
+
     // 2. Cloud-Modus: Lokale Handles entkoppeln
     window.isLocalFileOpen = false;
     window.localFileHandle = null;
     window.loadedLocalProjectId = null;
 
-    const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes] = await Promise.all([
+    const [nodesRes, edgesRes, zonesRes, logsRes, arrowsRes, snapsRes] = await Promise.all([
         realDb.from('project_nodes').select('*').eq('project_id', activeProjectId),
         realDb.from('project_edges').select('*').eq('project_id', activeProjectId),
         realDb.from('project_zones').select('*').eq('project_id', activeProjectId),
         realDb.from('time_logs').select('*').eq('project_id', activeProjectId).order('logged_at', { ascending: false }),
-        realDb.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId)
+        realDb.from('zone_flow_arrows').select('*').eq('project_id', activeProjectId),
+        realDb.from('project_snapshots').select('*').eq('project_id', activeProjectId).order('review_date', { ascending: false })
     ]);
 
     if (arrowsRes.error) console.error("Supabase Fehler beim Pfeile laden:", arrowsRes.error);
@@ -552,6 +567,7 @@ window.fetchCanvasData = async function () {
     currentZones = zonesRes.data || [];
     currentTimeLogs = logsRes.data || [];
     window.currentFlowArrows = arrowsRes.data || [];
+    window.currentSnapshots = (snapsRes && snapsRes.data) ? snapsRes.data : [];
 
     if (window.renderCanvas) window.renderCanvas();
     if (window.updateSidebarStats) window.updateSidebarStats();

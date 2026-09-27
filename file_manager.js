@@ -64,6 +64,7 @@ window.handleNewFile = async function () {
     currentZones = [];
     currentTimeLogs = [];
     window.currentFlowArrows = [];
+    window.currentSnapshots = [];
 
     try {
         if (window.showSaveFilePicker) {
