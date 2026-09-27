@@ -146,6 +146,19 @@ window.getCanvasCoords = function (clientX, clientY) {
  * Zeitstempel: 2026-09-26 14:10:00 CEST
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Pan, 2-Finger-Pinch-Zoom & Gesture-Guard)
+ * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
+ * Zeitstempel: 2026-09-27 11:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-26 14:10:00 CEST]: Pan-Filter & Rechtsklick-Schutz.
+ *   - [2026-09-27 11:15:00 CEST]: BUGFIX: Natives Browser-Zoomen unterbunden 
+ *     (iOS gesturestart & multi-touch preventDefault). 2-Finger-Pinch-Zoom 
+ *     direkt auf dem Canvas mit dynamischem Mittelpunkt implementiert.
+ * =============================================================================
+ */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -157,9 +170,26 @@ function initNativeCanvasEngine() {
         }
     });
 
+    // ---------------------------------------------------------
+    // SAFARI / CHROME GESTURE-BLOCKER (Verhindert Browser-Skalierung)
+    // ---------------------------------------------------------
+    const preventBrowserGesture = (e) => {
+        if (e.cancelable) e.preventDefault();
+    };
+    document.addEventListener('gesturestart', preventBrowserGesture, { passive: false });
+    document.addEventListener('gesturechange', preventBrowserGesture, { passive: false });
+    document.addEventListener('gestureend', preventBrowserGesture, { passive: false });
+
     let isPanning = false;
     let startX = 0, startY = 0;
     let startPanX = 0, startPanY = 0;
+
+    // Pinch-to-Zoom State
+    let isPinching = false;
+    let pinchStartDist = 0;
+    let pinchStartScale = 1;
+    let pinchWorldX = 0;
+    let pinchWorldY = 0;
 
     const startPan = (clientX, clientY) => {
         isPanning = true;
@@ -171,14 +201,13 @@ function initNativeCanvasEngine() {
     };
 
     // ---------------------------------------------------------
-    // PANNING (Desktop) - Strikt nur Linksklick (0) oder Mittelklick (1)
+    // PANNING (Desktop Maus)
     // ---------------------------------------------------------
     viewport.addEventListener('mousedown', (e) => {
         if (window.isDraggingAnything) return;
-        if (e.button === 2) return; // Rechtsklick darf NIEMALS Panning starten
+        if (e.button === 2) return; // Rechtsklick darf nie Pan starten
 
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
-
         if (interactiveEl) {
             const isLockedZone = interactiveEl.classList.contains('zone-locked') || interactiveEl.closest('.zone-locked');
             const isManagerZoneBody = (window.activeCanvasMode === 'manager') && interactiveEl.classList.contains('project-zone') && !e.target.closest('.project-zone-header, .zone-actions, .zone-resize-handle');
@@ -198,9 +227,30 @@ function initNativeCanvasEngine() {
     });
 
     // ---------------------------------------------------------
-    // PANNING (Mobile Touch)
+    // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
     // ---------------------------------------------------------
     viewport.addEventListener('touchstart', (e) => {
+        // Bei 2 Fingern: Sofort Browser-Zoom abfangen und Canvas-Pinch starten
+        if (e.touches.length === 2) {
+            if (e.cancelable) e.preventDefault();
+            isPanning = false;
+            isPinching = true;
+            window.isDraggingAnything = true;
+
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            pinchStartScale = window.currentScale || 1;
+
+            const rect = viewport.getBoundingClientRect();
+            const midX = ((t1.clientX + t2.clientX) / 2) - rect.left;
+            const midY = ((t1.clientY + t2.clientY) / 2) - rect.top;
+
+            pinchWorldX = (midX - window.currentPanX) / pinchStartScale;
+            pinchWorldY = (midY - window.currentPanY) / pinchStartScale;
+            return;
+        }
+
         if (window.isDraggingAnything) return;
 
         const interactiveEl = e.target.closest('.assembly-card, .project-zone, .note-card, button, input, select, textarea, .ep-handle, .mgr-prog-slider, .zone-resize-handle, .note-resize-handle');
@@ -211,7 +261,7 @@ function initNativeCanvasEngine() {
             if ((!isLockedZone && !isManagerZoneBody) || isButtonOrAction) return;
         }
 
-        if (e.touches.length === 1) {
+        if (e.touches.length === 1 && !isPinching) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
         }
     }, { passive: false });
@@ -226,8 +276,30 @@ function initNativeCanvasEngine() {
     });
 
     window.addEventListener('touchmove', (e) => {
-        if (!isPanning) return;
-        if (e.touches.length === 1) {
+        // 2-Finger Pinch Zooming
+        if (isPinching && e.touches.length === 2) {
+            if (e.cancelable) e.preventDefault();
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+            if (pinchStartDist <= 0) return;
+
+            const factor = curDist / pinchStartDist;
+            const newScale = Math.min(Math.max(0.05, pinchStartScale * factor), 3.0);
+
+            const rect = viewport.getBoundingClientRect();
+            const curMidX = ((t1.clientX + t2.clientX) / 2) - rect.left;
+            const curMidY = ((t1.clientY + t2.clientY) / 2) - rect.top;
+
+            window.currentScale = newScale;
+            window.currentPanX = curMidX - (pinchWorldX * newScale);
+            window.currentPanY = curMidY - (pinchWorldY * newScale);
+            applyCanvasTransform(false);
+            return;
+        }
+
+        // 1-Finger Canvas Panning
+        if (isPanning && e.touches.length === 1 && !isPinching) {
             if (e.cancelable) e.preventDefault();
             const dx = e.touches[0].clientX - startX;
             const dy = e.touches[0].clientY - startY;
@@ -237,18 +309,31 @@ function initNativeCanvasEngine() {
         }
     }, { passive: false });
 
-    const stopPan = () => {
-        if (isPanning) {
+    const stopPanOrPinch = (e) => {
+        if (isPinching) {
+            if (e.touches && e.touches.length < 2) {
+                isPinching = false;
+                window.isDraggingAnything = false;
+                if (e.touches.length === 1) {
+                    startPan(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            } else if (!e.touches || e.touches.length === 0) {
+                isPinching = false;
+                window.isDraggingAnything = false;
+            }
+        }
+        if (isPanning && (!e.touches || e.touches.length === 0)) {
             isPanning = false;
             viewport.style.cursor = 'default';
         }
     };
-    window.addEventListener('mouseup', stopPan);
-    window.addEventListener('touchend', stopPan);
-    window.addEventListener('touchcancel', stopPan);
+
+    window.addEventListener('mouseup', stopPanOrPinch);
+    window.addEventListener('touchend', stopPanOrPinch);
+    window.addEventListener('touchcancel', stopPanOrPinch);
 
     // ---------------------------------------------------------
-    // ZOOMING - Schützt alle Zeiteingaben vor versehentlichem Canvas-Zoom
+    // MAUSRAD-ZOOM (Desktop)
     // ---------------------------------------------------------
     viewport.addEventListener('wheel', (e) => {
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
@@ -278,7 +363,7 @@ function initNativeCanvasEngine() {
     // ---------------------------------------------------------
     viewport.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (window.isDraggingAnything || isPanning) return;
+        if (window.isDraggingAnything || isPanning || isPinching) return;
 
         const menu = document.getElementById('canvasContextMenu');
         if (menu) {

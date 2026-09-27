@@ -2,7 +2,8 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Viewport-Sperre gegen natives Browser-Pinchen auf mobilen Endgeräten -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>CAD Time Manager</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom/dist/panzoom.min.js"></script>
@@ -713,14 +714,27 @@
       mit den Speichern-/Export-Buttons oben rechts zu verhindern.
     =============================================================================
     -->
+            <!--
+                =============================================================================
+                Projekt: CAD Time Manager
+                Domain: Viewport (Modus-Umschalter & Entzerrtes Manager-Aktions-Cluster)
+                ERSETZEN IN: index.html (Bereich .canvas-mode-switcher-container)
+                Zeitstempel: 2026-09-27 11:15:00 CEST
+                Breadcrumb: [2026-09-27] Manager-Buttons in .manager-actions-cluster
+                  gekapselt. Desktop: nahtlose 1-Zeilen-Ansicht (display: contents).
+                  Mobile Portrait: saubere 2. Zeile unterhalb des Umschalters ohne Kanten-Cut.
+                =============================================================================
+                -->
             <div class="canvas-mode-switcher-container">
                 <div class="canvas-mode-switcher">
                     <button type="button" class="mode-btn active" id="btnModeMain" onclick="switchCanvasMode('main')">📐 Konstruktionsplan</button>
                     <button type="button" class="mode-btn" id="btnModeManager" onclick="switchCanvasMode('manager')">📊 Status-Board</button>
                 </div>
-                <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerSortHelper()" title="Temporäre Hilfsansicht (Überschreibt keine gespeicherten Positionen)">🗂️ Sortier-Hilfe</button>
-                <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und 2D-Übergaben filtern">⚠️ Nur Kritische</button>
-                <button type="button" id="btnToggleManagerFramedOnly" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFramedOnlyFilter()" title="Alle freien Blöcke ausblenden, die keinem Rahmen zugewiesen sind">🔲 Nur in Rahmen</button>
+                <div class="manager-actions-cluster" id="managerActionsCluster">
+                    <button type="button" id="btnAutoSortManager" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerSortHelper()" title="Temporäre Hilfsansicht (Überschreibt keine gespeicherten Positionen)">🗂️ Sortier-Hilfe</button>
+                    <button type="button" id="btnToggleManagerFocus" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFocusFilter()" title="Kritische Pfade, Überhänge und 2D-Übergaben filtern">⚠️ Nur Kritische</button>
+                    <button type="button" id="btnToggleManagerFramedOnly" class="btn-manager-action" style="display: none;" onclick="window.toggleManagerFramedOnlyFilter()" title="Alle freien Blöcke ausblenden, die keinem Rahmen zugewiesen sind">🔲 Nur in Rahmen</button>
+                </div>
             </div>
 
             <!--
@@ -735,19 +749,19 @@
     =============================================================================
     -->
             <!--
-             =============================================================================
-             Projekt: CAD Time Manager
-             Domain: Viewport Header-Aktionen (Buttons oben rechts / Mobile Vertikal-Dock)
-             ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
-             Zeitstempel: 2026-09-27 10:55:00 CEST
-             Breadcrumbs:
-               - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
-               - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
-               - [2026-09-27 10:55:00 CEST]: BUGFIX: Container #topActionsContainer hinzugefügt;
-                 starre Inline-Offsets ('right: ...px') entfernt. Desktop: horizontales Layout,
-                 Portrait-Modus (iOS / Android): vertikales Paletten-Dock an der rechten Kante.
-             =============================================================================
-             -->
+     =============================================================================
+     Projekt: CAD Time Manager
+     Domain: Viewport Header-Aktionen (Buttons oben rechts / Mobile Vertikal-Dock)
+     ERSETZEN IN: index.html (Im #viewport der Bereich mit .top-right-btn)
+     Zeitstempel: 2026-09-27 10:55:00 CEST
+     Breadcrumbs:
+       - [2026-08-30 09:54:00 CEST]: Konsolidierte Buttonleiste.
+       - [2026-09-17 21:35:00 CEST]: #reportBtn (📊) für Reporting & Auswertungs-Modal ergänzt.
+       - [2026-09-27 10:55:00 CEST]: BUGFIX: Container #topActionsContainer hinzugefügt;
+         starre Inline-Offsets ('right: ...px') entfernt. Desktop: horizontales Layout,
+         Portrait-Modus (iOS / Android): vertikales Paletten-Dock an der rechten Kante.
+     =============================================================================
+     -->
             <div id="topActionsContainer" class="top-actions-container">
                 <button id="newFileBtn" class="top-right-btn" title="Neue lokale Datei" onclick="handleNewFile()">📄</button>
                 <button id="saveFileBtn" class="top-right-btn" title="Lokal speichern (HTML)" onclick="handleSaveFile()">💾</button>

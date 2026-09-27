@@ -148,24 +148,35 @@ html, body {
   color: #fff;
 }
 
-/* Canvas Viewport */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Touch-Action Guard & Entzerrter Mobile Portrait Mode)
+ * ERSETZEN IN: style.css
+ * Zeitstempel: 2026-09-27 11:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 10:55:00 CEST]: Vertikale Icons rechts.
+ *   - [2026-09-27 11:15:00 CEST]: 1. touch-action: none auf Viewport/Canvas gelegt
+ *     (blockiert natives Browser-Zooming). 2. Status-Board Manager-Aktionen im 
+ *     Portrait-Modus in eigene scrollbare Zeile unter den Umschalter verlegt (kein Abschneiden).
+ * =============================================================================
+ */
+
+/* Viewport schützt vor unbeabsichtigtem nativen Browser-Scroll/Zoom */
 #viewport {
     flex: 1;
     height: 100%;
     position: relative;
     overflow: hidden;
     cursor: grab;
-    /* Raster als unendlichen Hintergrund setzen */
     background-color: var(--bg-canvas);
     background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
     background-size: 24px 24px;
+    touch-action: none !important;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
-    #viewport:active {
-        cursor: grabbing;
-    }
-
-/* ERSETZEN IN: style.css (Beim #canvas Element) */
 #canvas {
     width: 3000px;
     height: 3000px;
@@ -174,7 +185,9 @@ html, body {
     left: 0;
     background: transparent;
     transform-origin: 0 0;
+    touch-action: none !important;
 }
+
 
 /* Native SVG Connection Layer */
 #connections-layer {
@@ -2062,107 +2075,74 @@ html, body {
  *     3. Safe-Area-Insets (Notch / Dynamic Island) berücksichtigt.
  * =============================================================================
  */
+
+/* -----------------------------------------------------------------------------
+ * PORTRAIT-MODUS (Smartphones & Tablets im Hochformat)
+ * ----------------------------------------------------------------------------- */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Desktop Umschalter, Vertikales Action-Dock & Portrait-Zeilen)
+ * ERSETZEN IN: style.css (Von /* Zentrierter Canvas-Modus Umschalter 
+* Zeitstempel: 2026-09-27 11:25:00 CEST
+* Breadcrumbs:
+* - [2026-09-27 10:55:00 CEST]: Vertikale Icons rechts.
+* - [2026-09-27 11:15:00 CEST]: Manager-Aktionen als Zeile 2.
+* - [2026-09-27 11:25:00 CEST]: BUGFIX: 1. .top-actions-container im Portrait-Modus
+* wieder auf flex-direction: column gesetzt. 2. Doppelte .btn-manager-action
+* und verwaiste @media (max-width: 768px)-Blöcke restlos bereinigt.
+* =============================================================================
+*/
+/* -----------------------------------------------------------------------------
+ * 1. DESKTOP & LANDSCAPE (Standard-Ansicht)
+ * ----------------------------------------------------------------------------- */
 .canvas-mode-switcher-container {
     position: absolute;
     top: 14px;
     left: 20px;
-    transform: none;
     z-index: 45;
     display: flex;
     align-items: center;
     gap: 8px;
     pointer-events: auto;
     max-width: calc(100% - 370px);
-    overflow: hidden;
 }
 
-/* -----------------------------------------------------------------------------
- * PORTRAIT-MODUS (Smartphones & Tablets im Hochformat)
- * ----------------------------------------------------------------------------- */
-@media (orientation: portrait) {
-    /* 1. Vertikales Action-Dock an der rechten Screen-Kante */
-    .top-actions-container {
-        flex-direction: column !important;
-        right: max(10px, env(safe-area-inset-right)) !important;
-        top: max(14px, env(safe-area-inset-top)) !important;
-        gap: 6px !important;
-        z-index: 150 !important;
-    }
-
-        .top-actions-container .top-right-btn {
-            position: static !important;
-            right: auto !important;
-            top: auto !important;
-            width: 36px !important;
-            height: 36px !important;
-            font-size: 15px !important;
-        }
-
-    /* Fallback falls Buttons ohne Container im DOM liegen */
-    #viewport > .top-right-btn {
-        position: absolute !important;
-        right: max(10px, env(safe-area-inset-right)) !important;
-        width: 36px !important;
-        height: 36px !important;
-    }
-
-    #viewport > #newFileBtn.top-right-btn {
-        top: max(14px, env(safe-area-inset-top)) !important;
-    }
-
-    #viewport > #saveFileBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 42px) !important;
-    }
-
-    #viewport > #loadFileBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 84px) !important;
-    }
-
-    #viewport > #reportBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 126px) !important;
-    }
-
-    #viewport > #printBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 168px) !important;
-    }
-
-    #viewport > #infoGuideBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 210px) !important;
-    }
-
-    #viewport > #adminLockBtn.top-right-btn {
-        top: calc(max(14px, env(safe-area-inset-top)) + 252px) !important;
-    }
-
-    /* 2. Modus-Umschalter: Kollisionsfrei zwischen ☰ (links) und Vertikal-Palette (rechts) */
-    .canvas-mode-switcher-container {
-        left: 60px !important;
-        max-width: calc(100% - 116px) !important;
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-    }
-
-        .canvas-mode-switcher-container::-webkit-scrollbar {
-            display: none;
-        }
+.canvas-mode-switcher {
+    display: flex;
+    background: #1a202c;
+    padding: 3px;
+    border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    border: 1px solid #4a5568;
+    flex-shrink: 0;
+}
 
     .canvas-mode-switcher .mode-btn {
-        padding: 5px 8px !important;
-        font-size: 10.5px !important;
+        background: transparent;
+        border: none;
+        color: #a0aec0;
+        padding: 6px 14px;
+        border-radius: 16px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
     }
 
-    .btn-manager-action {
-        padding: 5px 8px !important;
-        font-size: 10px !important;
-    }
-}
+        .canvas-mode-switcher .mode-btn:hover {
+            color: #fff;
+        }
 
-@media (max-width: 768px) {
-    .canvas-mode-switcher-container {
-        left: 64px; /* Platzhalter für den mobilen Menü-Button ☰ */
-        max-width: calc(100% - 74px);
-    }
+        .canvas-mode-switcher .mode-btn.active {
+            background: #2b6cb0;
+            color: #fff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+.manager-actions-cluster {
+    display: contents; /* Desktop: Verhält sich wie direkte Flex-Geschwister */
 }
 
 .btn-manager-action {
@@ -2192,42 +2172,78 @@ html, body {
         box-shadow: 0 0 10px rgba(229, 62, 62, 0.5) !important;
     }
 
-.canvas-mode-switcher {
-    display: flex;
-    background: #1a202c;
-    padding: 3px;
-    border-radius: 20px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-    border: 1px solid #4a5568;
+/* -----------------------------------------------------------------------------
+ * 2. PORTRAIT-MODUS (Smartphones & Tablets im Hochformat)
+ * ----------------------------------------------------------------------------- */
+@media (orientation: portrait) {
+    /* A. Datei- & Aktions-Buttons: Vertikal an der rechten Bildschirmkante */
+    .top-actions-container {
+        flex-direction: column !important;
+        right: max(10px, env(safe-area-inset-right)) !important;
+        top: max(14px, env(safe-area-inset-top)) !important;
+        gap: 6px !important;
+        z-index: 150 !important;
+    }
+
+        .top-actions-container .top-right-btn {
+            position: static !important;
+            right: auto !important;
+            top: auto !important;
+            width: 36px !important;
+            height: 36px !important;
+            font-size: 15px !important;
+        }
+
+    /* B. Modus-Umschalter: Zeile 1 oben links neben ☰ */
+    .canvas-mode-switcher-container {
+        left: 60px !important;
+        top: max(12px, env(safe-area-inset-top)) !important;
+        max-width: calc(100vw - 116px) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 6px !important;
+        overflow: visible !important;
+        pointer-events: none !important;
+    }
+
+        .canvas-mode-switcher-container > * {
+            pointer-events: auto !important;
+        }
+
+    .canvas-mode-switcher {
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25) !important;
+    }
+
+        .canvas-mode-switcher .mode-btn {
+            padding: 5px 9px !important;
+            font-size: 11px !important;
+        }
+
+    /* C. Manager-Aktionen: Eigenständige scrollbare Zeile 2 unterhalb des Umschalters */
+    .manager-actions-cluster {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding: 2px 4px 6px 2px !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+        .manager-actions-cluster::-webkit-scrollbar {
+            display: none;
+        }
+
+    .btn-manager-action {
+        padding: 4px 9px !important;
+        font-size: 10.5px !important;
+        border-radius: 14px !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+    }
 }
-
-    .canvas-mode-switcher .mode-btn {
-        background: transparent;
-        border: none;
-        color: #a0aec0;
-        padding: 6px 14px;
-        border-radius: 16px;
-        font-size: 11px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-    }
-
-        .canvas-mode-switcher .mode-btn:hover {
-            color: #fff;
-        }
-
-        .canvas-mode-switcher .mode-btn.active {
-            background: #2b6cb0;
-            color: #fff;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-        }
-
-    .btn-manager-action:hover {
-        background: #edf2f7;
-        color: #2b6cb0;
-    }
 
 /* Manager Card (Kompakt, nur Pie-Charts und Fertigstellung) */
 .assembly-card.manager-card {
