@@ -163,6 +163,22 @@ html, body {
  */
 
 /* Viewport schützt vor unbeabsichtigtem nativen Browser-Scroll/Zoom */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (GPU Canvas Raster, Will-Change & Content-Visibility)
+ * ERSETZEN IN: style.css (Im Bereich #viewport, #canvas und .assembly-card)
+ * Zeitstempel: 2026-09-27 12:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:45:00 CEST]: Touch-Action Guard.
+ *   - [2026-09-27 12:05:00 CEST]: 1. Punktraster auf #canvas verlegt (GPU-skaliert).
+ *     2. will-change: transform auf #canvas aktiviert.
+ *     3. content-visibility: auto auf Blöcken/Zonen aktiviert (überspringt
+ *        das Rendering aller Elemente außerhalb des Bildschirms).
+ *     4. .is-zooming deaktiviert Schatten und Filter während der Zoomfahrt.
+ * =============================================================================
+ */
+
 #viewport {
     flex: 1;
     height: 100%;
@@ -170,22 +186,24 @@ html, body {
     overflow: hidden;
     cursor: grab;
     background-color: var(--bg-canvas);
-    background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
-    background-size: 24px 24px;
     touch-action: none !important;
     -webkit-user-select: none;
     user-select: none;
 }
 
+/* Das Punktraster liegt direkt auf dem Canvas und skaliert 100% nativ über die GPU */
 #canvas {
     width: 3000px;
     height: 3000px;
     position: absolute;
     top: 0;
     left: 0;
-    background: transparent;
+    background-color: transparent;
+    background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
     transform-origin: 0 0;
     touch-action: none !important;
+    will-change: transform; /* Hält den Canvas permanent auf einer eigenen GPU-Ebene */
 }
 
 
@@ -1607,8 +1625,29 @@ html, body {
     contain: layout style;
 }
 
+/* 
+ * Offscreen-Culling: Elemente, die außerhalb des sichtbaren Fensters liegen,
+ * belasten weder CPU noch GPU, solange sie nicht im Sichtfeld sind.
+ */
 .assembly-card, .project-zone, .note-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 320px 200px;
     contain: layout style;
+}
+
+/* 
+ * Während der aktiven Zoomfahrt (LERP) werden rechenintensive Schatten 
+ * und SVG-Animationsschleifen gedämpft, um 120-144 FPS zu garantieren.
+ */
+#viewport.is-zooming .assembly-card,
+#viewport.is-zooming .project-zone,
+#viewport.is-zooming .note-card {
+    box-shadow: none !important;
+    pointer-events: none !important;
+}
+
+#viewport.is-zooming #flow-layer {
+    opacity: 0.45;
 }
 
 /* Info Modal Tabs */

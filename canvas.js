@@ -35,34 +35,42 @@ window.contextTargetZoneId = null;
 // =============================================================================
 // NATIVE ENGINE: PAN, ZOOM & EVENTS (Wiederhergestellt)
 // =============================================================================
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (High-Performance Transform & Debounced Cache)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 12:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-17 22:50:00 CEST]: Basis Canvas-Transform.
+ *   - [2026-09-27 12:05:00 CEST]: PERF-FIX: 1. Synchrones localStorage.setItem
+ *     aus dem Render-Loop entfernt (nur noch debounced nach 300ms Idle).
+ *     2. CPU-Repaint des Punkt-Rasters eliminiert (Raster liegt nun auf #canvas).
+ * =============================================================================
+ */
+let saveTransformTimeout = null;
 
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
-    const viewportEl = document.getElementById('viewport');
-    if (!canvasEl || !viewportEl) return;
+    if (!canvasEl) return;
 
     if (animate) {
         canvasEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-        viewportEl.style.transition = 'background-position 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-size 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-        setTimeout(() => {
-            canvasEl.style.transition = 'none';
-            viewportEl.style.transition = 'none';
-        }, 200);
+        setTimeout(() => { canvasEl.style.transition = 'none'; }, 200);
     } else {
         canvasEl.style.transition = 'none';
-        viewportEl.style.transition = 'none';
     }
 
     canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    const scaledGridSize = 24 * window.currentScale;
-    viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
-    viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
-
-    localStorage.setItem('cad_tm_panX', window.currentPanX);
-    localStorage.setItem('cad_tm_panY', window.currentPanY);
-    localStorage.setItem('cad_tm_scale', window.currentScale);
+    // Debounced LocalStorage: Belastet die CPU nicht mehr während 60-144 FPS Animationen
+    clearTimeout(saveTransformTimeout);
+    saveTransformTimeout = setTimeout(() => {
+        localStorage.setItem('cad_tm_panX', window.currentPanX);
+        localStorage.setItem('cad_tm_panY', window.currentPanY);
+        localStorage.setItem('cad_tm_scale', window.currentScale);
+    }, 300);
 }
 
 window.getCanvasCoords = function (clientX, clientY) {
@@ -381,90 +389,101 @@ function initNativeCanvasEngine() {
  * =============================================================================
  */
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Exakter Cursor-Anker & Smooth LERP-Zoom)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> MAUSRAD-ZOOM Bereich)
+ * Zeitstempel: 2026-09-27 12:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:55:00 CEST]: Erste LERP-Version.
+ *   - [2026-09-27 12:05:00 CEST]: BUGFIX: Drift an Mausposition behoben.
+ *     Mauspunkt wird in Weltkoordinaten verankert; PanX/PanY werden im Render-Loop
+ *     strikt synchron an Scale gekoppelt. Klasse .is-zooming schaltet teure Effekte ab.
+ * =============================================================================
+ */
+
     // ---------------------------------------------------------
-    // SMOOTH MAUSRAD-ZOOM (Logitech MX Master & High-Res Support)
+    // SMOOTH MAUSRAD-ZOOM (Logitech MX Master & Exakter Maus-Fokus)
     // ---------------------------------------------------------
     let zoomTargetScale = window.currentScale;
-    let zoomTargetPanX = window.currentPanX;
-    let zoomTargetPanY = window.currentPanY;
+    let anchorWorldX = 0;
+    let anchorWorldY = 0;
+    let anchorMouseX = 0;
+    let anchorMouseY = 0;
     let zoomAnimFrameId = null;
 
-    // Synchronisiert Zoom-Ziele, wenn per Hand gepannt oder ge-pincht wird
-    const syncZoomTargets = () => {
+    const stopZoomAnimation = () => {
         zoomTargetScale = window.currentScale;
-        zoomTargetPanX = window.currentPanX;
-        zoomTargetPanY = window.currentPanY;
         if (zoomAnimFrameId) {
             cancelAnimationFrame(zoomAnimFrameId);
             zoomAnimFrameId = null;
+            viewport.classList.remove('is-zooming');
         }
     };
 
-    // Bei Start von Pan/Drag eventuelle Zoom-Animation sanft stoppen
-    viewport.addEventListener('mousedown', syncZoomTargets, { capture: true });
-    viewport.addEventListener('touchstart', syncZoomTargets, { capture: true });
+    viewport.addEventListener('mousedown', stopZoomAnimation, { capture: true });
+    viewport.addEventListener('touchstart', stopZoomAnimation, { capture: true });
 
     viewport.addEventListener('wheel', (e) => {
-        // Formularfelder und Scroll-Container vor versehentlichem Canvas-Zoom schützen
         if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
             return;
         }
         e.preventDefault();
 
-        // 1. deltaMode normalisieren (0 = Pixel [Trackpad/Freilauf], 1 = Zeilen [Standard-Mausrad], 2 = Seiten)
+        // 1. deltaMode vereinheitlichen (0 = Pixel [Trackpad/Freilauf], 1 = Zeilen [Raster], 2 = Seiten)
         let dy = e.deltaY;
         if (e.deltaMode === 1) {
-            dy *= 28; // Ausgewogene Übersetzung für gerasterte Mausräder
+            dy *= 28;
         } else if (e.deltaMode === 2) {
             dy *= 350;
         }
-
-        // Sicherheitsbegrenzung gegen extreme Einzelsprünge
         dy = Math.max(-600, Math.min(600, dy));
 
-        // 2. Exponentielle Skalierung: passt sich linear der Scroll-Geschwindigkeit an
+        // 2. Cursor-Position im Viewport ermitteln
+        const rect = viewport.getBoundingClientRect();
+        anchorMouseX = e.clientX - rect.left;
+        anchorMouseY = e.clientY - rect.top;
+
+        // 3. Exakter Weltpunkt unter dem Fadenkreuz zum aktuellen Zeitpunkt
+        anchorWorldX = (anchorMouseX - window.currentPanX) / window.currentScale;
+        anchorWorldY = (anchorMouseY - window.currentPanY) / window.currentScale;
+
+        // 4. Exponentielle Skalierung
         const zoomIntensity = 0.0015;
         const zoomFactor = Math.exp(-dy * zoomIntensity);
-        const newTargetScale = Math.min(Math.max(0.05, zoomTargetScale * zoomFactor), 3.0);
+        zoomTargetScale = Math.min(Math.max(0.05, zoomTargetScale * zoomFactor), 3.0);
 
-        // 3. Fokus-Punkt unter dem Cursor festhalten
-        const rect = viewport.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = (mouseX - zoomTargetPanX) / zoomTargetScale;
-        const worldY = (mouseY - zoomTargetPanY) / zoomTargetScale;
-
-        zoomTargetScale = newTargetScale;
-        zoomTargetPanX = mouseX - (worldX * zoomTargetScale);
-        zoomTargetPanY = mouseY - (worldY * zoomTargetScale);
-
-        // 4. LERP-Animationsschleife starten (falls noch nicht aktiv)
+        // 5. Animations-Schleife (60–144 Hz)
         if (!zoomAnimFrameId) {
+            viewport.classList.add('is-zooming'); // Schaltet teure Schatten & Animationen temporär ab
+
             const smoothZoomLoop = () => {
                 const diffScale = zoomTargetScale - window.currentScale;
-                const diffPanX = zoomTargetPanX - window.currentPanX;
-                const diffPanY = zoomTargetPanY - window.currentPanY;
 
-                // Abbruchbedingung bei Erreichen des Ziels (verhindert Idle-CPU-Last)
-                if (Math.abs(diffScale) < 0.0008 && Math.abs(diffPanX) < 0.15 && Math.abs(diffPanY) < 0.15) {
+                // Abbruchschwelle
+                if (Math.abs(diffScale) < 0.0006) {
                     window.currentScale = zoomTargetScale;
-                    window.currentPanX = zoomTargetPanX;
-                    window.currentPanY = zoomTargetPanY;
+                    window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+                    window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
                     applyCanvasTransform(false);
+
                     zoomAnimFrameId = null;
+                    viewport.classList.remove('is-zooming');
                     return;
                 }
 
-                // Dämpfungsfaktor (0.28 = sehr direktes, aber gleitendes CAD-Gefühl)
-                const damping = 0.28;
-                window.currentScale += diffScale * damping;
-                window.currentPanX += diffPanX * damping;
-                window.currentPanY += diffPanY * damping;
+                // Dämpfungsfaktor (0.24 = weiches, gleitendes CAD-Gefühl)
+                window.currentScale += diffScale * 0.24;
+
+                // Mathematisch perfekte Zentrierung: Keine separate Pan-Dämpfung!
+                window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+                window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
 
                 applyCanvasTransform(false);
                 zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
             };
+
             zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
         }
     }, { passive: false });
