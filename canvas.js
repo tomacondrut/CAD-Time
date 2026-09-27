@@ -2608,11 +2608,27 @@ function renderCanvas() {
  *     auf die Ausgangsposition zurück und verhindert jegliches DB-Update.
  * =============================================================================
  */
+            /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Mobile Pinch-Zoom Isolation & Frame Protection)
+ * ERSETZEN IN: canvas.js (In renderCanvas() -> startCardDrag)
+ * Zeitstempel: 2026-09-27 12:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 11:35:00 CEST]: Revert bei Multi-Touch.
+ *   - [2026-09-27 12:55:00 CEST]: BUGFIX MOBILE: 1. Start-Sperre bei e.touches > 1.
+ *     2. Beim Pinch-Abbruch wird auch zone_id strikt auf den Ausgangszustand 
+ *     zurückgesetzt (verhindert das Verschwinden durch Filter/Frames).
+ *     3. Hover-Highlights und Deadzone für Touch-Taps stabilisiert.
+ * =============================================================================
+ */
             const startCardDrag = (e) => {
                 if (e.type === 'mousedown' && e.button !== 0) return;
                 if (e.target.closest('input, select, button, .ep-handle, .btn-delete-log, .btn-tree-toggle, .mgr-prog-slider')) return;
                 if (e.type === 'mousedown' && (e.ctrlKey || e.shiftKey || e.metaKey)) return;
-                if (window.isPinching || (e.type === 'touchstart' && e.touches.length > 1)) return;
+
+                // Sobald zwei Finger im Spiel sind oder Pinch aktiv ist -> kein Block-Drag!
+                if (window.isPinching || (e.touches && e.touches.length > 1)) return;
 
                 let isDragging = true;
                 let didMove = false;
@@ -2620,6 +2636,7 @@ function renderCanvas() {
                 let startClientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
                 let initCurX = isManagerMode ? (mgrLayout.placements[node.id]?.pos_x ?? posX) : node.pos_x;
                 let initCurY = isManagerMode ? (mgrLayout.placements[node.id]?.pos_y ?? posY) : node.pos_y;
+                let initZoneId = isManagerMode ? (mgrLayout.placements[node.id]?.zone_id ?? null) : (node.zone_id ?? null);
 
                 if (!isManagerMode) {
                     const nodesToMove = (window.selectedNodeIds.has(node.id))
@@ -2628,12 +2645,13 @@ function renderCanvas() {
 
                     initialNodePositions.clear();
                     nodesToMove.forEach(n => {
-                        initialNodePositions.set(n.id, { x: n.pos_x, y: n.pos_y });
+                        initialNodePositions.set(n.id, { x: n.pos_x, y: n.pos_y, zone_id: n.zone_id });
                     });
                 }
 
                 const cancelDragAndRevert = () => {
                     isDragging = false;
+                    didMove = false;
                     window.isDraggingAnything = false;
                     window.removeEventListener('mousemove', onCardMove);
                     window.removeEventListener('mouseup', onCardUp);
@@ -2647,13 +2665,21 @@ function renderCanvas() {
                         if (mgrLayout.placements[node.id]) {
                             mgrLayout.placements[node.id].pos_x = initCurX;
                             mgrLayout.placements[node.id].pos_y = initCurY;
+                            mgrLayout.placements[node.id].zone_id = initZoneId;
                         }
                     } else {
                         initialNodePositions.forEach((pos, nId) => {
                             const targetN = currentNodes.find(x => x.id === nId);
-                            if (targetN) { targetN.pos_x = pos.x; targetN.pos_y = pos.y; }
+                            if (targetN) {
+                                targetN.pos_x = pos.x;
+                                targetN.pos_y = pos.y;
+                                targetN.zone_id = pos.zone_id;
+                            }
                             const nEl = document.getElementById(nId);
-                            if (nEl) { nEl.style.left = `${pos.x}px`; nEl.style.top = `${pos.y}px`; }
+                            if (nEl) {
+                                nEl.style.left = `${pos.x}px`;
+                                nEl.style.top = `${pos.y}px`;
+                            }
                         });
                         (currentZones || []).forEach(z => {
                             const zEl = document.getElementById(z.id);
@@ -2664,7 +2690,7 @@ function renderCanvas() {
                 };
 
                 const onCardMove = (me) => {
-                    // Multi-Touch erkannt -> Drag sofort abbrechen und Position wiederherstellen
+                    // Multi-Touch erkannt -> Drag sofort sauber verwerfen und Positionen restlos retten
                     if (window.isPinching || (me.touches && me.touches.length > 1)) {
                         cancelDragAndRevert();
                         return;
@@ -2677,8 +2703,9 @@ function renderCanvas() {
                     const dx = (clientX - startClientX) / scale;
                     const dy = (clientY - startClientY) / scale;
 
-                    // Minimale Bewegungsschwelle (Deadzone) schützt vor Mikrobewegungen beim Tap
-                    if (!didMove && Math.hypot(dx, dy) < 4) return;
+                    // Erhöhte Deadzone für Touchscreens (schützt vor Wackeln beim Aufsetzen des 2. Fingers)
+                    const threshold = me.type.includes('touch') ? 8 : 4;
+                    if (!didMove && Math.hypot(dx, dy) < threshold) return;
                     didMove = true;
                     window.isDraggingAnything = true;
                     if (me.type === 'touchmove' && me.cancelable) me.preventDefault();
@@ -2724,7 +2751,11 @@ function renderCanvas() {
                     window.removeEventListener('touchend', onCardUp);
                     window.removeEventListener('touchcancel', onCardUp);
 
-                    if (!didMove || window.isPinching) return;
+                    // Wenn währenddessen gezoomt wurde oder keine echte Bewegung stattfand -> abbrechen
+                    if (!didMove || window.isPinching) {
+                        cancelDragAndRevert();
+                        return;
+                    }
 
                     const finalX = parseInt(el.style.left, 10);
                     const finalY = parseInt(el.style.top, 10);
