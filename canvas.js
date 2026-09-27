@@ -48,23 +48,50 @@ window.contextTargetZoneId = null;
  *     2. CPU-Repaint des Punkt-Rasters eliminiert (Raster liegt nun auf #canvas).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Performantes Transform mit Viewport-Grid-Sync)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform)
+ * Zeitstempel: 2026-09-27 12:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:05:00 CEST]: Debounced localStorage.
+ *   - [2026-09-27 12:15:00 CEST]: Viewport-Grid-Sync wiederhergestellt, damit
+ *     die Rasterpunkte unendlich über den gesamten Bildschirm mitgleiten.
+ * =============================================================================
+ */
 let saveTransformTimeout = null;
 
 function applyCanvasTransform(animate = false) {
     const canvasEl = document.getElementById('canvas');
+    const viewportEl = document.getElementById('viewport');
     if (!canvasEl) return;
 
     if (animate) {
         canvasEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-        setTimeout(() => { canvasEl.style.transition = 'none'; }, 200);
+        if (viewportEl) {
+            viewportEl.style.transition = 'background-position 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-size 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+        }
+        setTimeout(() => {
+            canvasEl.style.transition = 'none';
+            if (viewportEl) viewportEl.style.transition = 'none';
+        }, 200);
     } else {
         canvasEl.style.transition = 'none';
+        if (viewportEl) viewportEl.style.transition = 'none';
     }
 
     canvasEl.style.transformOrigin = '0 0';
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
-    // Debounced LocalStorage: Belastet die CPU nicht mehr während 60-144 FPS Animationen
+    // Raster synchron zum Mauszeiger mitbewegen
+    if (viewportEl) {
+        const scaledGridSize = 24 * window.currentScale;
+        viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
+        viewportEl.style.backgroundPosition = `${window.currentPanX}px ${window.currentPanY}px`;
+    }
+
+    // Debounced LocalStorage: Verhindert Festplatten-Blockaden bei 120 Hz
     clearTimeout(saveTransformTimeout);
     saveTransformTimeout = setTimeout(() => {
         localStorage.setItem('cad_tm_panX', window.currentPanX);

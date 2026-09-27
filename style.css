@@ -179,6 +179,7 @@ html, body {
  * =============================================================================
  */
 
+/* Viewport: Hält das unendliche Punktraster */
 #viewport {
     flex: 1;
     height: 100%;
@@ -186,24 +187,22 @@ html, body {
     overflow: hidden;
     cursor: grab;
     background-color: var(--bg-canvas);
+    background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
+    background-size: 24px 24px;
     touch-action: none !important;
     -webkit-user-select: none;
     user-select: none;
 }
 
-/* Das Punktraster liegt direkt auf dem Canvas und skaliert 100% nativ über die GPU */
 #canvas {
     width: 3000px;
     height: 3000px;
     position: absolute;
     top: 0;
     left: 0;
-    background-color: transparent;
-    background-image: radial-gradient(circle, #cbd5e0 1.5px, transparent 1.5px);
-    background-size: 24px 24px;
+    background: transparent;
     transform-origin: 0 0;
     touch-action: none !important;
-    will-change: transform; /* Hält den Canvas permanent auf einer eigenen GPU-Ebene */
 }
 
 
@@ -1636,14 +1635,14 @@ html, body {
 }
 
 /* 
- * Während der aktiven Zoomfahrt (LERP) werden rechenintensive Schatten 
- * und SVG-Animationsschleifen gedämpft, um 120-144 FPS zu garantieren.
+ * Während der schnellen Zoomfahrt (LERP) werden nur rechenintensive
+ * Schatten gedämpft, um 120-144 FPS ohne Frame-Drops zu liefern.
+ * Badges und Rahmen bleiben dabei zu 100% sichtbar und unbeschnitten!
  */
 #viewport.is-zooming .assembly-card,
 #viewport.is-zooming .project-zone,
 #viewport.is-zooming .note-card {
     box-shadow: none !important;
-    pointer-events: none !important;
 }
 
 #viewport.is-zooming #flow-layer {
