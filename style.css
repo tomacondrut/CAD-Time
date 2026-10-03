@@ -3131,3 +3131,53 @@ body.assigning-live-time {
 .project-zone:has(.mgr-status-badge:hover) {
     z-index: 4000 !important;
 }
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Reporting Baugruppen-Checkliste & Checkbox-Reset)
+ * EINFÜGEN IN: style.css (Am Dateiende)
+ * Zeitstempel: 2026-10-03 10:05:00 CEST
+ * =============================================================================
+ */
+#repBlockChecklist {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+    #repBlockChecklist .rep-block-item {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 6px !important;
+        font-size: 11px !important;
+        font-weight: normal !important;
+        text-transform: none !important;
+        color: #2d3748 !important;
+        cursor: pointer !important;
+        margin: 0 !important;
+        padding: 3px 5px !important;
+        border-radius: 4px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        user-select: none !important;
+    }
+
+        #repBlockChecklist .rep-block-item:hover {
+            background-color: #edf2f7 !important;
+        }
+
+    #repBlockChecklist input[type="checkbox"].rep-block-checkbox {
+        width: 14px !important;
+        height: 14px !important;
+        min-width: 14px !important;
+        max-width: 14px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
+        accent-color: #2b6cb0 !important;
+    }

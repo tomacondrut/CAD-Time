@@ -577,19 +577,26 @@
                     </div>
 
                     <!-- Container für Snapshot-Wahl -->
-                    <div id="repSnapshotSelectContainer" style="display: none; gap: 8px; align-items: flex-end;">
+                    <!--
+    =============================================================================
+    Projekt: CAD Time Manager
+    Domain: Reporting Filter (Snapshot-Vergleich vertikal entzerrt)
+    ERSETZEN IN: index.html (Bereich #repSnapshotSelectContainer)
+    Zeitstempel: 2026-10-03 10:05:00 CEST
+    =============================================================================
+    -->
+                    <div id="repSnapshotSelectContainer" style="display: none; flex-direction: column; gap: 8px; margin-bottom: 0;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label>Start (Review-Snapshot):</label>
-                            <select id="repSelectSnapshotA" onchange="updateReportData()" style="padding: 4px; font-size: 11px;"></select>
+                            <select id="repSelectSnapshotA" onchange="updateReportData()" style="padding: 5px 8px; font-size: 11px; width: 100%;"></select>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label>Ende (Review oder Live):</label>
-                            <select id="repSelectSnapshotB" onchange="updateReportData()" style="padding: 4px; font-size: 11px;">
+                            <select id="repSelectSnapshotB" onchange="updateReportData()" style="padding: 5px 8px; font-size: 11px; width: 100%;">
                                 <option value="live">🔴 Aktueller Live-Stand (Heute)</option>
                             </select>
                         </div>
-                        <!-- NEU: Direktsprung zur Snapshot-Verwaltung -->
-                        <button type="button" class="btn-sec" style="padding: 4px 8px; font-size: 11px; height: 28px;" onclick="window.openCreateSnapshotModal()" title="Snapshots bearbeiten oder löschen">⚙️ Verwalten</button>
+                        <button type="button" class="btn-sec" style="width: 100%; padding: 5px 8px; font-size: 11px; border: 1px dashed #cbd5e0; color: #4a5568; display: flex; align-items: center; justify-content: center; gap: 5px;" onclick="window.openCreateSnapshotModal()" title="Snapshots bearbeiten oder löschen">⚙️ Snapshots verwalten</button>
                     </div>
 
                     <div class="form-group" id="repCustomDates" style="display: none; flex-direction: column; gap: 8px; margin-bottom: 0;">
@@ -600,18 +607,18 @@
                     <hr style="border: 0; border-top: 1px solid #cbd5e0; margin: 4px 0;" />
 
                     <!--
-                        =============================================================================
-                        Projekt: CAD Time Manager
-                        Domain: Reporting Filter (Hierarchie-Zone & Dynamische Baugruppen-Checkliste)
-                        ERSETZEN IN: index.html (Im #reportModal linke Spalte)
-                        Zeitstempel: 2026-10-03 09:40:00 CEST
-                        Breadcrumbs:
-                          - [2026-10-03 09:40:00 CEST]:
-                            1. repFilterZone ruft bei Änderung handleZoneFilterChange() auf.
-                            2. repFilterBlock Dropdown durch dynamischen Checklisten-Container
-                               (#repBlockFilterGroup & #repBlockChecklist) ersetzt.
-                        =============================================================================
-                        -->
+        =============================================================================
+        Projekt: CAD Time Manager
+        Domain: Reporting Filter (Hierarchie-Zone & Dynamische Baugruppen-Checkliste)
+        ERSETZEN IN: index.html (Im #reportModal linke Spalte)
+        Zeitstempel: 2026-10-03 09:40:00 CEST
+        Breadcrumbs:
+          - [2026-10-03 09:40:00 CEST]:
+            1. repFilterZone ruft bei Änderung handleZoneFilterChange() auf.
+            2. repFilterBlock Dropdown durch dynamischen Checklisten-Container
+               (#repBlockFilterGroup & #repBlockChecklist) ersetzt.
+        =============================================================================
+        -->
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>Bereich / Kasten (Ebene 1 & 2):</label>
                         <select id="repFilterZone" onchange="window.handleZoneFilterChange()" style="padding: 4px; font-size: 11px;"></select>

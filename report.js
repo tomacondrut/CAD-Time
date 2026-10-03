@@ -139,6 +139,20 @@ window.populateReportFilters = function () {
     window.handleZoneFilterChange();
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting Filter (Dynamische Baugruppen-Checkliste & Typ-Sicherheit)
+ * ERSETZEN IN: report.js (Funktion window.handleZoneFilterChange komplett ersetzen)
+ * Zeitstempel: 2026-10-03 10:05:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 09:40:00 CEST]: Checklisten-Container eingeführt.
+ *   - [2026-10-03 10:05:00 CEST]: BUGFIX:
+ *     1. Checkboxen fest auf 14px fixiert gegen .form-group Übersteuerung.
+ *     2. String-sichere Zonen-Rekursion für ID-Typen (Integer / UUID).
+ *     3. Robuste Flex-Hierarchie mit min-width: 0 gegen Text-Clipping.
+ * =============================================================================
+ */
 window.handleZoneFilterChange = function () {
     const selZone = document.getElementById('repFilterZone');
     const groupEl = document.getElementById('repBlockFilterGroup');
@@ -154,19 +168,19 @@ window.handleZoneFilterChange = function () {
         return;
     }
 
-    // Alle untergeordneten Zonen-IDs ermitteln, die zu diesem Bereich gehören
-    const allMatchingZoneIds = [zoneId];
+    // Alle untergeordneten Zonen-IDs ermitteln (Typ-sicher via String-Vergleich)
+    const allMatchingZoneIds = new Set([String(zoneId)]);
     const collectDescendants = (parentId) => {
-        (currentZones || []).filter(z => z.parent_zone_id === parentId).forEach(cz => {
-            allMatchingZoneIds.push(cz.id);
+        (currentZones || []).filter(z => String(z.parent_zone_id) === String(parentId)).forEach(cz => {
+            allMatchingZoneIds.add(String(cz.id));
             collectDescendants(cz.id);
         });
     };
     collectDescendants(zoneId);
 
-    // Alle Baugruppen/Bauteile ermitteln, die in diesem Bereich liegen
+    // Alle Baugruppen/Bauteile ermitteln, die in diesem Bereich oder dessen Unterrahmen liegen
     const containedNodes = (currentNodes || []).filter(n =>
-        n.block_type !== 'note' && allMatchingZoneIds.includes(n.zone_id)
+        n.block_type !== 'note' && allMatchingZoneIds.has(String(n.zone_id))
     );
 
     containedNodes.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -174,20 +188,20 @@ window.handleZoneFilterChange = function () {
     checklistEl.innerHTML = '';
 
     if (containedNodes.length === 0) {
-        checklistEl.innerHTML = '<div style="font-size:10px; color:#718096; font-style:italic;">Keine Baugruppen in diesem Bereich.</div>';
+        checklistEl.innerHTML = '<div style="font-size:10px; color:#718096; font-style:italic; padding:4px;">Keine Baugruppen in diesem Bereich.</div>';
     } else {
         containedNodes.forEach(node => {
             const doc = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
-            const docBadge = doc ? `<span style="font-family:monospace; font-size:9px; background:#edf2f7; padding:1px 3px; border-radius:2px;">${escapeHtml(doc)}</span>` : '';
+            const docBadge = doc ? `<span style="font-family:monospace; font-size:9px; background:#edf2f7; padding:1px 4px; border-radius:2px; flex-shrink:0;">${escapeHtml(doc)}</span>` : '';
             const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
             const label = document.createElement('label');
-            label.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
+            label.className = 'rep-block-item';
             label.title = node.name;
             label.innerHTML = `
-                <input type="checkbox" class="rep-block-checkbox" value="${node.id}" checked onchange="updateReportData()" style="cursor:pointer; flex-shrink:0;" />
-                <span style="overflow:hidden; text-overflow:ellipsis; display:inline-flex; align-items:center; gap:4px;">
-                    ${docBadge} ${iconSvg} ${escapeHtml(node.name)}
+                <input type="checkbox" class="rep-block-checkbox" value="${node.id}" checked onchange="updateReportData()" />
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; flex:1; min-width:0;">
+                    ${docBadge} <span style="display:inline-flex; align-items:center; flex-shrink:0;">${iconSvg}</span> <span style="overflow:hidden; text-overflow:ellipsis;">${escapeHtml(node.name)}</span>
                 </span>
             `;
             checklistEl.appendChild(label);
