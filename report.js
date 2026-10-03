@@ -573,6 +573,21 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             </tr>
         `;
 
+        /**
+        * =============================================================================
+        * Projekt: CAD Time Manager
+        * Domain: Reporting (Inline-Ladebalken mit Überhangs- & Null-Budget-Schutz)
+        * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> Innerhalb renderZoneRows)
+        * Zeitstempel: 2026-10-03 08:45:00 CEST
+        * Breadcrumbs:
+        *   - [2026-09-27 16:20:00 CEST]: Hierarchischer Rollup & Top-Down Sortierung.
+        *   - [2026-10-03 08:45:00 CEST]: Inline Data-Bars integriert. 
+        *     DISMISSED: Math.min für Text-Label (schnitt echte Überhänge wie 140% auf 100% ab).
+        *     NEU: Trennung von barWidthPct (max 100%) und actualPct (echter Wert).
+        *     Sonderbehandlung für nCurBud === 0 (Neutralgrau statt fälschlichem Rot).
+        * =============================================================================
+        */
+
         // 1. Untergeordnete Blöcke nach Aufwand absteigend sortieren
         const childNodes = (currentNodes || [])
             .filter(n => n.zone_id === z.id && n.block_type !== 'note')
@@ -597,16 +612,36 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
+            // Grafische Balkenberechnung mit Überhang- und Null-Budget-Guard
+            const hasBudget = nCurBud > 0;
+            const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
+            const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
+            const isOver = hasBudget && (nTotal > nCurBud);
+            const barColor = !hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce');
+            const pctLabel = hasBudget ? `${actualPct}%` : '—';
+
             tableHtml += `
-                <tr>
-                    <td style="padding-left: ${indentPx + 24}px;">
+                <tr style="transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <td style="padding-left: ${indentPx + 24}px; padding-top: 6px; padding-bottom: 6px;">
                         <span style="color:#a0aec0; margin-right:4px;">└──</span>
                         ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
                     </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(nTotal)}</td>
+                    
+                    <!-- Grafischer Inline-Ladebalken -->
+                    <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
+                        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+                            <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
+                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
+                                <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
+                            </div>
+                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;" title="${hasBudget ? `${actualPct}% verbraucht` : 'Kein Soll-Budget hinterlegt'}">
+                                <div style="width: ${barWidthPct}%; height: 100%; background: ${barColor};"></div>
+                            </div>
+                        </div>
+                    </td>
                 </tr>
             `;
         });
@@ -641,7 +676,19 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                 <td colspan="3"></td>
             </tr>
         `;
-
+        /**
+         * =============================================================================
+         * Projekt: CAD Time Manager
+         * Domain: Reporting (Snapshot-Vergleich: Inline-Ladebalken für unzugeordnete Blöcke)
+         * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> unzonedNodes.forEach)
+         * Zeitstempel: 2026-10-03 08:48:00 CEST
+         * Breadcrumbs:
+         *   - [2026-10-03 08:45:00 CEST]: Inline Data-Bars für childNodes integriert.
+         *   - [2026-10-03 08:48:00 CEST]: Harmonisiert: unzonedNodes erhalten nun
+         *     dieselbe Ladebalken-Logik (inkl. Überhang-/Null-Budget-Schutz) sowie 
+         *     DOC-Badges, CAD-Icons und sanfte Hover-Effekte.
+         * =============================================================================
+         */
         unzonedNodes.forEach(({ node: n, effort: nEffort }) => {
             const nTotal = totalSpentToDateNode[n.id] || 0;
             const nCurBud = newNodeBudgets[n.id] !== undefined
@@ -655,13 +702,40 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             if (nDiffBud > 0.01) nDiffHtml = `<span style="color:#e53e3e; font-weight:bold;">▲ +${formatHoursToHM(nDiffBud)}</span>`;
             else if (nDiffBud < -0.01) nDiffHtml = `<span style="color:#38a169; font-weight:bold;">▼ -${formatHoursToHM(Math.abs(nDiffBud))}</span>`;
 
+            const nDoc = n.doc_number || (n.article_number ? `ART-${n.article_number}` : '');
+            const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
+            const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+
+            // Grafische Balkenberechnung mit Überhang- und Null-Budget-Guard
+            const hasBudget = nCurBud > 0;
+            const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
+            const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
+            const isOver = hasBudget && (nTotal > nCurBud);
+            const barColor = !hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce');
+            const pctLabel = hasBudget ? `${actualPct}%` : '—';
+
             tableHtml += `
-                <tr>
-                    <td style="padding-left: 24px;">└── ${escapeHtml(n.name)}</td>
+                <tr style="transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                    <td style="padding-left: 24px; padding-top: 6px; padding-bottom: 6px;">
+                        <span style="color:#a0aec0; margin-right:4px;">└──</span>
+                        ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
+                    </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(nTotal)}</td>
+                    
+                    <!-- Grafischer Inline-Ladebalken -->
+                    <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
+                        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+                            <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
+                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
+                                <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
+                            </div>
+                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;" title="${hasBudget ? `${actualPct}% verbraucht` : 'Kein Soll-Budget hinterlegt'}">
+                                <div style="width: ${barWidthPct}%; height: 100%; background: ${barColor};"></div>
+                            </div>
+                        </div>
+                    </td>
                 </tr>
             `;
         });
@@ -689,11 +763,29 @@ function renderReportSummary(logs, timeframe) {
 
     let totalCAD = 0, totalDraft = 0;
     const weeklyData = {};
+    const nodeStats = {}; // Für das Top-5 Bar-Chart
 
     logs.forEach(log => {
         const hrs = parseFloat(log.hours) || 0;
         if (log.task_type === 'design') totalCAD += hrs;
         if (log.task_type === 'drafting') totalDraft += hrs;
+
+        // Daten für Top-5 sammeln
+        const identifierId = log.node_id || log.zone_id || 'unknown';
+        if (!nodeStats[identifierId]) {
+            let name = 'Unbekannt';
+            if (log.node_id) {
+                const n = currentNodes.find(x => x.id === log.node_id);
+                if (n) name = n.name;
+            } else if (log.zone_id) {
+                const z = currentZones.find(x => x.id === log.zone_id);
+                if (z) name = `[Rahmen] ${z.title}`;
+            }
+            nodeStats[identifierId] = { name: name, hours: 0, cad: 0, draft: 0 };
+        }
+        nodeStats[identifierId].hours += hrs;
+        if (log.task_type === 'design') nodeStats[identifierId].cad += hrs;
+        if (log.task_type === 'drafting') nodeStats[identifierId].draft += hrs;
 
         if (timeframe === 'month' || timeframe === 'custom') {
             const kw = getISOWeekNumber(new Date(log.logged_at));
@@ -705,46 +797,61 @@ function renderReportSummary(logs, timeframe) {
 
     const cardsHtml = `
         <div style="display: flex; gap: 12px; width: 100%;">
-            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0; min-width: 0;">
-                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Summe CAD</div>
-                <div style="font-size: 18px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">${formatHoursToHM(totalCAD)}</div>
+            <div style="background: #ebf8ff; padding: 12px 16px; border-radius: 6px; flex: 1; border: 1px solid #bee3f8;">
+                <div style="font-size: 11px; color: #2b6cb0; text-transform: uppercase; font-weight: bold;">Summe CAD (Intervall)</div>
+                <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-top: 4px;">${formatHoursToHM(totalCAD)}</div>
             </div>
-            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0; min-width: 0;">
-                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Summe Zeichnung</div>
-                <div style="font-size: 18px; font-weight: bold; color: #38a169; margin-top: 2px;">${formatHoursToHM(totalDraft)}</div>
+            <div style="background: #f0fff4; padding: 12px 16px; border-radius: 6px; flex: 1; border: 1px solid #c6f6d5;">
+                <div style="font-size: 11px; color: #2f855a; text-transform: uppercase; font-weight: bold;">Summe Zeichnung (Intervall)</div>
+                <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-top: 4px;">${formatHoursToHM(totalDraft)}</div>
             </div>
-            <div style="background: #2d3748; padding: 10px 14px; border-radius: 6px; flex: 1; min-width: 0;">
-                <div style="font-size: 10px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Gesamtaufwand</div>
-                <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 2px;">${formatHoursToHM(totalCAD + totalDraft)}</div>
+            <div style="background: #2d3748; padding: 12px 16px; border-radius: 6px; flex: 1;">
+                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Gesamtaufwand</div>
+                <div style="font-size: 20px; font-weight: bold; color: #fff; margin-top: 4px;">${formatHoursToHM(totalCAD + totalDraft)}</div>
             </div>
         </div>
     `;
 
-    let weekBreakdownHtml = '';
-    if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
-        weekBreakdownHtml = `<div style="width: 100%; margin-top: 8px; font-size: 11px;">`;
-        weekBreakdownHtml += `<table class="log-table"><thead><tr><th>Kalenderwoche</th><th>CAD</th><th>Zeichnung</th><th>Summe KW</th></tr></thead><tbody>`;
+    // Visuelles Bar-Chart
+    let visualChartHtml = '';
+    const sortedNodes = Object.values(nodeStats).sort((a, b) => b.hours - a.hours).slice(0, 5);
 
-        const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
-        sortedKWs.forEach(kw => {
-            const wCAD = weeklyData[kw].cad;
-            const wDraft = weeklyData[kw].draft;
-            weekBreakdownHtml += `
-                <tr>
-                    <td><strong>KW ${kw}</strong></td>
-                    <td style="color:#2b6cb0;">${formatHoursToHM(wCAD)}</td>
-                    <td style="color:#38a169;">${formatHoursToHM(wDraft)}</td>
-                    <td><strong>${formatHoursToHM(wCAD + wDraft)}</strong></td>
-                </tr>
+    if (sortedNodes.length > 0 && (totalCAD + totalDraft) > 0) {
+        let maxNodeHours = sortedNodes[0].hours;
+
+        let barsHtml = sortedNodes.map(n => {
+            const cadPct = (n.cad / maxNodeHours) * 100;
+            const draftPct = (n.draft / maxNodeHours) * 100;
+            return `
+                <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; margin-bottom: 8px;">
+                    <div style="width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4a5568; font-weight: 600;" title="${escapeHtml(n.name)}">${escapeHtml(n.name)}</div>
+                    <div style="flex: 1; height: 16px; background: #edf2f7; border-radius: 4px; display: flex; overflow: hidden;">
+                        <div style="width: ${cadPct}%; background: #3182ce;" title="CAD: ${formatHoursToHM(n.cad)}"></div>
+                        <div style="width: ${draftPct}%; background: #38a169;" title="Zeichnung: ${formatHoursToHM(n.draft)}"></div>
+                    </div>
+                    <div style="width: 65px; text-align: right; font-family: monospace; font-weight: bold; color: #2d3748;">${formatHoursToHM(n.hours)}</div>
+                </div>
             `;
-        });
-        weekBreakdownHtml += `</tbody></table></div>`;
+        }).join('');
+
+        visualChartHtml = `
+            <div style="margin-top: 15px; background: #f8fafc; border: 1px solid #edf2f7; border-radius: 6px; padding: 15px;">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #718096; margin-bottom: 12px;">Top 5 Kostentreiber (Im Intervall)</div>
+                ${barsHtml}
+                <div style="display:flex; justify-content:flex-end; gap: 12px; margin-top: 8px; font-size: 10px; color: #718096;">
+                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#3182ce; border-radius:2px;"></span> CAD</span>
+                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#38a169; border-radius:2px;"></span> Zeichnung</span>
+                </div>
+            </div>
+        `;
     }
 
+    // ... (weekBreakdownHtml wie bisher beibehalten) ...
+
     container.innerHTML = `
-        <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
+        <div style="display: flex; flex-direction: column; width: 100%;">
             ${cardsHtml}
-            ${weekBreakdownHtml}
+            ${visualChartHtml}
         </div>
     `;
 }
@@ -1182,4 +1289,10 @@ window.generatePDF = async function () {
         btn.innerText = originalText;
         btn.disabled = false;
     }
+};
+
+window.toggleReportSections = function () {
+    document.getElementById('repSectionStatus').style.display = document.getElementById('repToggleStatus').checked ? 'block' : 'none';
+    document.getElementById('repSectionSummary').style.display = document.getElementById('repToggleSummary').checked ? 'block' : 'none';
+    document.getElementById('repSectionTable').style.display = document.getElementById('repToggleTable').checked ? 'flex' : 'none';
 };

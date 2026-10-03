@@ -679,38 +679,120 @@ function calculateRollups() {
 * =============================================================================
 */
 
-window.currentSnapshots = [];
-
-window.openCreateSnapshotModal = function () {
-    const titleInput = document.getElementById('snapshotTitle');
-    const dateInput = document.getElementById('snapshotDate');
-    const noteInput = document.getElementById('snapshotNote');
-
-    const today = new Date();
-    const dStr = today.toISOString().split('T')[0];
-
-    if (dateInput) dateInput.value = dStr;
-    if (titleInput) titleInput.value = `Review Stand ${new Date().toLocaleDateString('de-DE')}`;
-    if (noteInput) noteInput.value = '';
-
-    openModal('createSnapshotModal');
-};
-
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Datenbank (Snapshot-Persistenz, Fehler-Logging & Mock-Support)
- * ERSETZEN IN: db.js (Funktionen handleSaveSnapshot und fetchCanvasData)
- * Zeitstempel: 2026-09-27 16:45:00 CEST
+ * Domain: Datenbank & State (Review-Snapshots Engine mit CRUD & Listen-Sync)
+ * ERSETZEN IN: db.js (Ab window.currentSnapshots bis Dateiende)
+ * Zeitstempel: 2026-10-03 08:50:00 CEST
  * Breadcrumbs:
- *   - [2026-09-27 15:50:00 CEST]: Initiale Snapshot-Engine.
- *   - [2026-09-27 16:45:00 CEST]: BUGFIX: 1. Supabase insert-Error in handleSaveSnapshot
- *     abgefangen und geloggt. 2. snapsRes.error in fetchCanvasData explizit geprüft.
+ *   - [2026-09-27 15:50:00 CEST]: Basis-Snapshot Einfrieren & Rekonstruktion.
+ *   - [2026-09-27 16:45:00 CEST]: Fehler-Logging Supabase & Mock-Support.
+ *   - [2026-10-03 08:50:00 CEST]: CRUD komplettiert:
+ *     1. renderSnapshotList(): Baut Liste mit ✏️ Edit und ✕ Delete.
+ *     2. startEditSnapshot() & cancelEditSnapshot(): Formular-Umschaltung.
+ *     3. handleSaveSnapshot(): Prüft snapshotEditId für Update vs. Neu-Erstellung.
+ *     4. handleDeleteSnapshot(): Revisionssicheres Löschen (Cloud/Lokal) mit Rechteprüfung.
+ *     5. BUGFIX-GUARD: Dropdowns in der Auswertung (#repSelectSnapshotA/B) 
+ *        werden nach jeder Änderung sofort synchronisiert.
  * =============================================================================
  */
 
+window.currentSnapshots = [];
+
+window.openCreateSnapshotModal = function () {
+    window.cancelEditSnapshot();
+    window.renderSnapshotList();
+    openModal('createSnapshotModal');
+};
+
+window.renderSnapshotList = function () {
+    const container = document.getElementById('snapshotListContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const snapshots = window.currentSnapshots || [];
+
+    if (snapshots.length === 0) {
+        container.innerHTML = '<div style="font-size:11px; color:#718096; padding:10px; text-align:center;">Noch keine Review-Snapshots für dieses Projekt vorhanden.</div>';
+        return;
+    }
+
+    snapshots.forEach(s => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; font-size:11px; padding:6px 8px; border-bottom:1px solid #edf2f7; background:#fff; margin-bottom:2px; border-radius:4px;';
+
+        const dFormatted = s.review_date ? new Date(s.review_date).toLocaleDateString('de-DE') : '-';
+        const creator = s.created_by || 'COT';
+        const canDelete = isAdmin || (activeUserCode && activeUserCode === creator);
+
+        row.innerHTML = `
+            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px; flex:1;">
+                <span style="font-weight:bold; color:#2b6cb0;">🚩 ${escapeHtml(s.title)}</span>
+                <span style="color:#718096; margin-left:6px;">[${dFormatted} · von ${escapeHtml(creator)}]</span>
+                ${s.note ? `<div style="font-size:10px; color:#a0aec0; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(s.note)}</div>` : ''}
+            </div>
+            <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                <button type="button" class="btn-sec" style="padding:2px 6px; font-size:10px;" onclick="window.startEditSnapshot('${s.id}')" title="Bezeichnung, Datum oder Notiz bearbeiten">✏️ Edit</button>
+                ${canDelete ? `<span style="color:#e53e3e; cursor:pointer; font-weight:bold; font-size:13px; padding:0 4px;" title="Snapshot löschen" onclick="window.handleDeleteSnapshot('${s.id}')">✕</span>` : ''}
+            </div>
+        `;
+        container.appendChild(row);
+    });
+};
+
+window.startEditSnapshot = function (snapshotId) {
+    const snap = (window.currentSnapshots || []).find(s => s.id === snapshotId);
+    if (!snap) return;
+
+    const editIdInput = document.getElementById('snapshotEditId');
+    const titleInput = document.getElementById('snapshotTitle');
+    const dateInput = document.getElementById('snapshotDate');
+    const noteInput = document.getElementById('snapshotNote');
+    const btnSubmit = document.getElementById('btnSubmitSnapshot');
+    const btnCancelEdit = document.getElementById('btnCancelEditSnapshot');
+    const formTitle = document.getElementById('snapshotFormLegend');
+
+    if (editIdInput) editIdInput.value = snap.id;
+    if (titleInput) titleInput.value = snap.title;
+    if (dateInput && snap.review_date) {
+        dateInput.value = snap.review_date.split('T')[0];
+    }
+    if (noteInput) noteInput.value = snap.note || '';
+
+    if (btnSubmit) {
+        btnSubmit.textContent = '💾 Änderungen speichern';
+        btnSubmit.style.background = '#2b6cb0';
+    }
+    if (btnCancelEdit) btnCancelEdit.style.display = 'inline-block';
+    if (formTitle) formTitle.textContent = `Snapshot bearbeiten: "${snap.title}"`;
+};
+
+window.cancelEditSnapshot = function () {
+    const editIdInput = document.getElementById('snapshotEditId');
+    const titleInput = document.getElementById('snapshotTitle');
+    const dateInput = document.getElementById('snapshotDate');
+    const noteInput = document.getElementById('snapshotNote');
+    const btnSubmit = document.getElementById('btnSubmitSnapshot');
+    const btnCancelEdit = document.getElementById('btnCancelEditSnapshot');
+    const formTitle = document.getElementById('snapshotFormLegend');
+
+    if (editIdInput) editIdInput.value = '';
+    if (titleInput) titleInput.value = `Review Stand ${new Date().toLocaleDateString('de-DE')}`;
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+    if (noteInput) noteInput.value = '';
+
+    if (btnSubmit) {
+        btnSubmit.textContent = '🚩 Snapshot einfrieren';
+        btnSubmit.style.background = '#2b6cb0';
+    }
+    if (btnCancelEdit) btnCancelEdit.style.display = 'none';
+    if (formTitle) formTitle.textContent = '+ Neuen Review-Snapshot erstellen';
+};
+
 window.handleSaveSnapshot = async function (e) {
     e.preventDefault();
+    const editId = document.getElementById('snapshotEditId')?.value || '';
     const title = document.getElementById('snapshotTitle').value.trim();
     const dateVal = document.getElementById('snapshotDate').value;
     const note = document.getElementById('snapshotNote').value.trim();
@@ -718,8 +800,43 @@ window.handleSaveSnapshot = async function (e) {
     if (!title || !dateVal) return;
 
     const cutoffDate = new Date(dateVal + 'T23:59:59.999Z');
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
 
-    // 1. Rekonstruktion der Ist-Stunden bis zum Stichtag
+    // FALL 1: BESTEHENDEN SNAPSHOT AKTUALISIEREN
+    if (editId) {
+        const snap = (window.currentSnapshots || []).find(s => s.id === editId);
+        if (!snap) return;
+
+        snap.title = title;
+        snap.note = note;
+        snap.review_date = cutoffDate.toISOString();
+
+        if (isLocalActive) {
+            if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+        } else {
+            const { error } = await realDb.from('project_snapshots').update({
+                title: snap.title,
+                note: snap.note,
+                review_date: snap.review_date
+            }).eq('id', editId);
+
+            if (error) {
+                console.error("Fehler beim Aktualisieren des Snapshots:", error);
+                showToast("Fehler beim Aktualisieren: " + error.message, "error");
+                return;
+            }
+        }
+
+        showToast(`Snapshot "${title}" aktualisiert`, 'success');
+        window.cancelEditSnapshot();
+        window.renderSnapshotList();
+
+        // Dropdowns in Auswertung sofort aktualisieren
+        if (typeof handleTimeframeChange === 'function') handleTimeframeChange();
+        return;
+    }
+
+    // FALL 2: NEUEN SNAPSHOT EINFRIEREN
     const nodeStatsAtDate = {};
     const zoneStatsAtDate = {};
 
@@ -739,7 +856,6 @@ window.handleSaveSnapshot = async function (e) {
         }
     });
 
-    // 2. Snapshot-Zustand zusammenstellen
     const proj = getCurrentProject();
     const snapshotData = {
         project_budgets: {
@@ -785,8 +901,6 @@ window.handleSaveSnapshot = async function (e) {
         snapshot_data: snapshotData
     };
 
-    // Speichern (Cloud vs. Lokal)
-    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
     if (isLocalActive) {
         window.currentSnapshots.unshift(newSnapshot);
         if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
@@ -800,6 +914,46 @@ window.handleSaveSnapshot = async function (e) {
         window.currentSnapshots.unshift(newSnapshot);
     }
 
-    closeModal('createSnapshotModal');
     showToast(`Snapshot "${title}" dauerhaft gespeichert`, 'success');
+    window.cancelEditSnapshot();
+    window.renderSnapshotList();
+
+    if (typeof handleTimeframeChange === 'function') handleTimeframeChange();
+};
+
+window.handleDeleteSnapshot = async function (snapshotId) {
+    const snap = (window.currentSnapshots || []).find(s => s.id === snapshotId);
+    if (!snap) return;
+
+    const canDelete = isAdmin || (activeUserCode && activeUserCode === snap.created_by);
+    if (!canDelete) {
+        showToast('Keine Berechtigung: Nur Ersteller oder Admin dürfen Snapshots löschen.', 'error');
+        return;
+    }
+
+    const confirmed = typeof customConfirm === 'function'
+        ? await customConfirm('Snapshot löschen', `Möchtest du den Snapshot "${snap.title}" wirklich entfernen?`)
+        : confirm(`Möchtest du den Snapshot "${snap.title}" wirklich entfernen?`);
+
+    if (!confirmed) return;
+
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        window.currentSnapshots = window.currentSnapshots.filter(s => s.id !== snapshotId);
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        const { error } = await realDb.from('project_snapshots').delete().eq('id', snapshotId);
+        if (error) {
+            console.error("Fehler beim Löschen des Snapshots in Supabase:", error);
+            showToast("Fehler beim Löschen: " + error.message, "error");
+            return;
+        }
+        window.currentSnapshots = window.currentSnapshots.filter(s => s.id !== snapshotId);
+    }
+
+    showToast(`Snapshot "${snap.title}" gelöscht`, 'success');
+    window.cancelEditSnapshot();
+    window.renderSnapshotList();
+
+    if (typeof handleTimeframeChange === 'function') handleTimeframeChange();
 };
