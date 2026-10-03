@@ -3140,10 +3140,27 @@ body.assigning-live-time {
  * Zeitstempel: 2026-10-03 10:05:00 CEST
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Reporting Baugruppen-Checkliste: Zero-Overlap & Flex-Shrink Guard)
+ * ERSETZEN IN: style.css (Am Dateiende der Bereich #repBlockChecklist)
+ * Zeitstempel: 2026-10-03 10:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 10:05:00 CEST]: Erste Checkbox-Isolierung.
+ *   - [2026-10-03 10:15:00 CEST]: BUGFIX ÜBERLAGERUNG:
+ *     1. flex-shrink: 0 und feste min-height/height: 24px hinzugefügt. Verhindert,
+ *        dass die Flex-Engine des Containers bei vielen Elementen die Zeilen 
+ *        unter ihre Schrifthöhe zusammendrückt und überlappen lässt.
+ *     2. line-height: 24px zentriert Icons, Checkbox und Badges auf einer Linie.
+ * =============================================================================
+ */
 #repBlockChecklist {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
 }
 
     #repBlockChecklist .rep-block-item {
@@ -3157,11 +3174,15 @@ body.assigning-live-time {
         color: #2d3748 !important;
         cursor: pointer !important;
         margin: 0 !important;
-        padding: 3px 5px !important;
+        padding: 2px 6px !important;
         border-radius: 4px !important;
         white-space: nowrap !important;
         overflow: hidden !important;
         width: 100% !important;
+        min-height: 24px !important;
+        height: 24px !important;
+        line-height: 24px !important;
+        flex-shrink: 0 !important;
         box-sizing: border-box !important;
         user-select: none !important;
     }

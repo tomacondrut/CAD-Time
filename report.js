@@ -153,6 +153,18 @@ window.populateReportFilters = function () {
  *     3. Robuste Flex-Hierarchie mit min-width: 0 gegen Text-Clipping.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting Filter (Baugruppen-Checkliste ohne Überlagerung)
+ * ERSETZEN IN: report.js (Funktion window.handleZoneFilterChange)
+ * Zeitstempel: 2026-10-03 10:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 10:05:00 CEST]: Dynamische Checkliste Basis.
+ *   - [2026-10-03 10:15:00 CEST]: BUGFIX: Inline flex-shrink:0 und height:24px 
+ *     direkt auf dem Label-Element verankert gegen Stauchung/Textkollisionen.
+ * =============================================================================
+ */
 window.handleZoneFilterChange = function () {
     const selZone = document.getElementById('repFilterZone');
     const groupEl = document.getElementById('repBlockFilterGroup');
@@ -168,7 +180,6 @@ window.handleZoneFilterChange = function () {
         return;
     }
 
-    // Alle untergeordneten Zonen-IDs ermitteln (Typ-sicher via String-Vergleich)
     const allMatchingZoneIds = new Set([String(zoneId)]);
     const collectDescendants = (parentId) => {
         (currentZones || []).filter(z => String(z.parent_zone_id) === String(parentId)).forEach(cz => {
@@ -178,7 +189,6 @@ window.handleZoneFilterChange = function () {
     };
     collectDescendants(zoneId);
 
-    // Alle Baugruppen/Bauteile ermitteln, die in diesem Bereich oder dessen Unterrahmen liegen
     const containedNodes = (currentNodes || []).filter(n =>
         n.block_type !== 'note' && allMatchingZoneIds.has(String(n.zone_id))
     );
@@ -188,15 +198,16 @@ window.handleZoneFilterChange = function () {
     checklistEl.innerHTML = '';
 
     if (containedNodes.length === 0) {
-        checklistEl.innerHTML = '<div style="font-size:10px; color:#718096; font-style:italic; padding:4px;">Keine Baugruppen in diesem Bereich.</div>';
+        checklistEl.innerHTML = '<div style="font-size:10px; color:#718096; font-style:italic; padding:6px;">Keine Baugruppen in diesem Bereich.</div>';
     } else {
         containedNodes.forEach(node => {
             const doc = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
-            const docBadge = doc ? `<span style="font-family:monospace; font-size:9px; background:#edf2f7; padding:1px 4px; border-radius:2px; flex-shrink:0;">${escapeHtml(doc)}</span>` : '';
+            const docBadge = doc ? `<span style="font-family:monospace; font-size:9px; background:#edf2f7; padding:1px 4px; border-radius:2px; flex-shrink:0; line-height:14px;">${escapeHtml(doc)}</span>` : '';
             const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
             const label = document.createElement('label');
             label.className = 'rep-block-item';
+            label.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; color:#2d3748; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-height:24px; height:24px; line-height:24px; flex-shrink:0; padding:2px 6px; border-radius:4px; box-sizing:border-box; user-select:none; margin:0;';
             label.title = node.name;
             label.innerHTML = `
                 <input type="checkbox" class="rep-block-checkbox" value="${node.id}" checked onchange="updateReportData()" />
@@ -211,7 +222,6 @@ window.handleZoneFilterChange = function () {
     groupEl.style.display = 'block';
     updateReportData();
 };
-
 window.toggleAllReportBlocks = function () {
     const checkboxes = Array.from(document.querySelectorAll('.rep-block-checkbox'));
     if (checkboxes.length === 0) return;
@@ -313,6 +323,65 @@ function createPieChartImage(spent, budget, baseColor) {
 // 3. DATENAUFBEREITUNG & HAUPT-DISPATCHER
 // =============================================================================
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Dynamische Budget- & Ist-Berechnung für gewählte Bereiche & Filter)
+ * ERSETZEN IN: report.js (Bereich createPieChartImage & updateReportData)
+ * Zeitstempel: 2026-10-03 10:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 09:45:00 CEST]: Feste Gesamtprojekt-Berechnung vor Filterung.
+ *   - [2026-10-03 10:15:00 CEST]: ERWEITERUNG:
+ *     1. Bei Auswahl eines Bereichs errechnet der Header-Block ("Projekt-Status")
+ *        exakt die Summe der Budgets (CAD & Zeichn.) und der Ist-Stunden nur für 
+ *        diesen Bereich und passt Titel/Labels dynamisch an.
+ *     2. Nur aktiv in der Checkliste angehakte Baugruppen fließen in das Budget 
+ *        und den Ist-Stand ein (inkl. Deduplikation bei Referenz-Instanzen).
+ *     3. createPieChartImage abgesichert für 0h Budgets (zeigt sauber 0% statt NaN).
+ * =============================================================================
+ */
+function createPieChartImage(spent, budget, baseColor) {
+    const cvs = document.createElement('canvas');
+    cvs.width = 120;
+    cvs.height = 120;
+    const ctx = cvs.getContext('2d');
+
+    const b = parseFloat(budget) || 0;
+    const s = Math.max(0, parseFloat(spent) || 0);
+    const hasBudget = b > 0;
+    const isOver = hasBudget ? (s > b) : (s > 0);
+    const fillCol = isOver ? '#e53e3e' : baseColor;
+    const slicePct = hasBudget ? Math.min(s / b, 1) : (s > 0 ? 1 : 0);
+
+    ctx.beginPath();
+    ctx.moveTo(60, 60);
+    ctx.arc(60, 60, 50, 0, 2 * Math.PI);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fill();
+
+    if (slicePct > 0) {
+        ctx.beginPath();
+        ctx.moveTo(60, 60);
+        ctx.arc(60, 60, 50, -Math.PI / 2, -Math.PI / 2 + (slicePct * 2 * Math.PI));
+        ctx.fillStyle = fillCol;
+        ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(60, 60, 30, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    ctx.fillStyle = isOver ? '#e53e3e' : '#2d3748';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textLabel = hasBudget ? `${Math.round((s / b) * 100)}%` : (s > 0 ? '—' : '0%');
+    ctx.fillText(textLabel, 60, 60);
+
+    return cvs.toDataURL('image/png');
+}
+
 let reportState = { logs: [], startDate: null, endDate: null, projData: null };
 
 window.updateReportData = function () {
@@ -366,88 +435,177 @@ window.updateReportData = function () {
         endDate = eVal ? new Date(eVal + 'T23:59:59Z') : new Date();
     }
 
-    // 1. Stichtags-Rekonstruktion Gesamtprojekt
+    // 1. ZONEN- & CHECKLISTEN-STATUS ERMITTELN
+    const isZoneFiltered = (filterZone !== 'all');
+    const allMatchingZoneIds = new Set();
+    let targetZoneObj = null;
+
+    if (isZoneFiltered) {
+        allMatchingZoneIds.add(String(filterZone));
+        const collectDescendants = (parentId) => {
+            (currentZones || []).filter(z => String(z.parent_zone_id) === String(parentId)).forEach(cz => {
+                allMatchingZoneIds.add(String(cz.id));
+                collectDescendants(cz.id);
+            });
+        };
+        collectDescendants(filterZone);
+        targetZoneObj = (currentZones || []).find(z => String(z.id) === String(filterZone)) || null;
+    }
+
+    const checkedCheckboxes = Array.from(document.querySelectorAll('.rep-block-checkbox:checked'));
+    const checkedBlockIds = new Set(checkedCheckboxes.map(cb => String(cb.value)));
+
+    // 2. DYNAMISCHE SOLL- & IST-REKONSTRUKTION ZUM STICHTAG
     const proj = getCurrentProject();
-    let projTotalD = 0, projTotalDr = 0;
+    let finalBudD = 0, finalBudDr = 0;
+    let finalSpentD = 0, finalSpentDr = 0;
 
-    (currentTimeLogs || []).filter(l => new Date(l.logged_at) <= endDate).forEach(l => {
-        const hrs = parseFloat(l.hours) || 0;
-        if (l.task_type === 'design') projTotalD += hrs;
-        if (l.task_type === 'drafting') projTotalDr += hrs;
-    });
-
-    reportState.projData = {
-        name: proj.name,
-        obj: proj.object_number,
-        budD: parseFloat(proj.total_budget_design) || 1,
-        budDr: parseFloat(proj.total_budget_drafting) || 1,
-        spentD: projTotalD,
-        spentDr: projTotalDr
+    const getNodeBudgets = (n) => {
+        if (snapB && snapB.snapshot_data && snapB.snapshot_data.nodes) {
+            const sn = snapB.snapshot_data.nodes.find(x => String(x.id) === String(n.id));
+            if (sn) {
+                return {
+                    d: parseFloat(sn.budget_design) || 0,
+                    dr: parseFloat(sn.budget_drafting) || 0
+                };
+            }
+        }
+        return {
+            d: parseFloat(n.budget_design_hours) || 0,
+            dr: parseFloat(n.budget_drafting_hours) || 0
+        };
     };
 
-    const pieDUrl = createPieChartImage(projTotalD, reportState.projData.budD, '#3182ce');
-    const pieDrUrl = createPieChartImage(projTotalDr, reportState.projData.budDr, '#38a169');
+    if (!isZoneFiltered) {
+        // Gesamtprojekt: Globale Budgets & aller Ist-Aufwand bis zum Stichtag
+        finalBudD = parseFloat(proj.total_budget_design) || 0;
+        finalBudDr = parseFloat(proj.total_budget_drafting) || 0;
+
+        (currentTimeLogs || []).filter(l => new Date(l.logged_at) <= endDate).forEach(l => {
+            const hrs = parseFloat(l.hours) || 0;
+            if (l.task_type === 'design') finalSpentD += hrs;
+            if (l.task_type === 'drafting') finalSpentDr += hrs;
+        });
+    } else {
+        // Konkreter Bereich: Budgets & Ist-Stunden nur für aktiv angehakte Baugruppen
+        const visitedLinkedBudgets = new Set();
+
+        (currentNodes || []).forEach(n => {
+            if (n.block_type === 'note') return;
+            if (!allMatchingZoneIds.has(String(n.zone_id))) return;
+            if (!checkedBlockIds.has(String(n.id))) return;
+
+            const uniqueKey = n.linked_id || n.id;
+            if (n.linked_id) {
+                if (visitedLinkedBudgets.has(uniqueKey)) return;
+                visitedLinkedBudgets.add(uniqueKey);
+            }
+            const b = getNodeBudgets(n);
+            finalBudD += b.d;
+            finalBudDr += b.dr;
+        });
+
+        // Eigenbudget des gewählten Rahmens (falls hinterlegt)
+        if (targetZoneObj) {
+            if (snapB && snapB.snapshot_data && snapB.snapshot_data.zones) {
+                const sz = snapB.snapshot_data.zones.find(x => String(x.id) === String(targetZoneObj.id));
+                if (sz) {
+                    finalBudD += parseFloat(sz.budget_design) || 0;
+                    finalBudDr += parseFloat(sz.budget_drafting) || 0;
+                }
+            } else {
+                finalBudD += parseFloat(targetZoneObj.budget_design_hours) || 0;
+                finalBudDr += parseFloat(targetZoneObj.budget_drafting_hours) || 0;
+            }
+        }
+
+        // Ist-Stunden nur der angehakten Blöcke und Zonen-Direktbuchungen bis Stichtag
+        (currentTimeLogs || []).forEach(l => {
+            if (new Date(l.logged_at) > endDate) return;
+            const hrs = parseFloat(l.hours) || 0;
+            if (hrs <= 0) return;
+
+            if (l.node_id) {
+                if (checkedBlockIds.has(String(l.node_id))) {
+                    if (l.task_type === 'design') finalSpentD += hrs;
+                    if (l.task_type === 'drafting') finalSpentDr += hrs;
+                }
+            } else if (l.zone_id) {
+                if (allMatchingZoneIds.has(String(l.zone_id))) {
+                    if (l.task_type === 'design') finalSpentD += hrs;
+                    if (l.task_type === 'drafting') finalSpentDr += hrs;
+                }
+            }
+        });
+    }
+
+    const zoneLabel = targetZoneObj ? `${targetZoneObj.doc_number ? `[${targetZoneObj.doc_number}] ` : ''}${targetZoneObj.title}` : 'Bereich';
+
+    reportState.projData = {
+        name: isZoneFiltered ? zoneLabel : proj.name,
+        obj: proj.object_number,
+        budD: finalBudD,
+        budDr: finalBudDr,
+        spentD: finalSpentD,
+        spentDr: finalSpentDr,
+        isZoneFiltered: isZoneFiltered,
+        zoneTitle: isZoneFiltered ? zoneLabel : null
+    };
+
+    const pieDUrl = createPieChartImage(finalSpentD, finalBudD, '#3182ce');
+    const pieDrUrl = createPieChartImage(finalSpentDr, finalBudDr, '#38a169');
+
+    // Header-Titel und Kacheln dynamisch aktualisieren
+    const statusHeaderEl = document.querySelector('#repSectionStatus strong');
+    if (statusHeaderEl) {
+        statusHeaderEl.textContent = isZoneFiltered
+            ? `Bereichs-Status: ${zoneLabel} (Gefiltert zum Stichtag)`
+            : 'Projekt-Status (Gesamtprojekt zum Stichtag)';
+    }
 
     const statusContainer = document.getElementById('repProjectStatusContainer');
     if (statusContainer) {
+        const cadTitle = isZoneFiltered ? `${escapeHtml(zoneLabel)} CAD Stichtag` : 'Projekt CAD Stichtag';
+        const drTitle = isZoneFiltered ? `${escapeHtml(zoneLabel)} Zeichnung Stichtag` : 'Projekt Zeichnung Stichtag';
+
         statusContainer.innerHTML = `
-            <div style="flex:1; display:flex; align-items:center; gap:15px;">
-                <img src="${pieDUrl}" style="width: 50px; height: 50px;">
-                <div>
-                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt CAD Stichtag</div>
-                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalD)} / ${formatHoursToHM(reportState.projData.budD)}</div>
+            <div style="flex:1; display:flex; align-items:center; gap:15px; overflow:hidden;">
+                <img src="${pieDUrl}" style="width: 50px; height: 50px; flex-shrink: 0;">
+                <div style="overflow:hidden;">
+                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${cadTitle}">${cadTitle}</div>
+                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(finalSpentD)} / ${formatHoursToHM(finalBudD)}</div>
                 </div>
             </div>
-            <div style="flex:1; display:flex; align-items:center; gap:15px;">
-                <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
-                <div>
-                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt Zeichnung Stichtag</div>
-                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalDr)} / ${formatHoursToHM(reportState.projData.budDr)}</div>
+            <div style="flex:1; display:flex; align-items:center; gap:15px; overflow:hidden;">
+                <img src="${pieDrUrl}" style="width: 50px; height: 50px; flex-shrink: 0;">
+                <div style="overflow:hidden;">
+                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${drTitle}">${drTitle}</div>
+                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(finalSpentDr)} / ${formatHoursToHM(finalBudDr)}</div>
                 </div>
             </div>
         `;
     }
 
-    // 2. Hierarchische Zonen- und Baugruppen-Filterung
-    const isZoneFiltered = (filterZone !== 'all');
-    const allMatchingZoneIds = new Set();
-
-    if (isZoneFiltered) {
-        allMatchingZoneIds.add(filterZone);
-        const collectDescendants = (parentId) => {
-            (currentZones || []).filter(z => z.parent_zone_id === parentId).forEach(cz => {
-                allMatchingZoneIds.add(cz.id);
-                collectDescendants(cz.id);
-            });
-        };
-        collectDescendants(filterZone);
-    }
-
-    const checkedCheckboxes = Array.from(document.querySelectorAll('.rep-block-checkbox:checked'));
-    const checkedBlockIds = new Set(checkedCheckboxes.map(cb => cb.value));
-
+    // 3. LOGBUCH-FILTERUNG (FÜR INTERVALL UND DETAIL-TABELLEN)
     let filteredLogs = (currentTimeLogs || []).filter(log => {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
 
-        // Baugruppen-Dropdown (falls aktiv)
-        if (filterBlock !== 'all' && log.node_id !== filterBlock) return false;
+        if (filterBlock !== 'all' && String(log.node_id) !== String(filterBlock)) return false;
 
-        // Bereichs- und Checklisten-Filter
         if (isZoneFiltered) {
             if (log.node_id) {
-                if (!checkedBlockIds.has(log.node_id)) return false;
+                if (!checkedBlockIds.has(String(log.node_id))) return false;
             } else if (log.zone_id) {
-                if (!allMatchingZoneIds.has(log.zone_id)) return false;
+                if (!allMatchingZoneIds.has(String(log.zone_id))) return false;
             } else {
                 return false;
             }
         }
 
-        // Fertigstellungs-Statusfilter
         if (filterStatus !== 'all' && log.node_id) {
-            const node = (currentNodes || []).find(n => n.id === log.node_id);
+            const node = (currentNodes || []).find(n => String(n.id) === String(log.node_id));
             if (node) {
                 const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
                 if (filterStatus === 'completed' && !isDone) return false;
