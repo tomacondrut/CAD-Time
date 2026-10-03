@@ -67,7 +67,7 @@
     </div>
 
     <!-- Dialog-Modal (z-index 3500) -->
-    <div id="dialogModal" class="modal-backdrop">
+    <div id="dialogModal" class="modal-backdrop" style="z-index: 9000 !important;">
         <div class="modal-content" style="width: 380px;">
             <div class="modal-header" id="dialogTitle">Hinweis</div>
             <p id="dialogMessage" style="font-size: 13px; color: #4a5568; margin-bottom: 15px;"></p>
@@ -599,14 +599,41 @@
 
                     <hr style="border: 0; border-top: 1px solid #cbd5e0; margin: 4px 0;" />
 
+                    <!--
+                        =============================================================================
+                        Projekt: CAD Time Manager
+                        Domain: Reporting Filter (Hierarchie-Zone & Dynamische Baugruppen-Checkliste)
+                        ERSETZEN IN: index.html (Im #reportModal linke Spalte)
+                        Zeitstempel: 2026-10-03 09:40:00 CEST
+                        Breadcrumbs:
+                          - [2026-10-03 09:40:00 CEST]:
+                            1. repFilterZone ruft bei Änderung handleZoneFilterChange() auf.
+                            2. repFilterBlock Dropdown durch dynamischen Checklisten-Container
+                               (#repBlockFilterGroup & #repBlockChecklist) ersetzt.
+                        =============================================================================
+                        -->
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label>Bereich / Kasten:</label>
-                        <select id="repFilterZone" onchange="updateReportData()"></select>
+                        <label>Bereich / Kasten (Ebene 1 & 2):</label>
+                        <select id="repFilterZone" onchange="window.handleZoneFilterChange()" style="padding: 4px; font-size: 11px;"></select>
                     </div>
 
+                    <!-- Erscheint erst, wenn oben ein konkreter Bereich gewählt wird -->
+                    <div class="form-group" id="repBlockFilterGroup" style="display: none; margin-bottom: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label style="margin-bottom: 0; font-size: 10px; color: var(--primary);">Baugruppen filtern:</label>
+                            <button type="button" class="btn-sec" style="padding: 1px 6px; font-size: 9px; line-height: 1.2;" onclick="window.toggleAllReportBlocks()">Alle / Keine</button>
+                        </div>
+                        <div id="repBlockChecklist" style="max-height: 150px; overflow-y: auto; background: #fff; border: 1px solid #cbd5e0; border-radius: 4px; padding: 6px; display: flex; flex-direction: column; gap: 4px;"></div>
+                    </div>
+
+                    <!-- EINFÜGEN IN: index.html (Im #reportModal nach #repFilterBlock) -->
                     <div class="form-group" style="margin-bottom: 0;">
-                        <label>Block / Baugruppe:</label>
-                        <select id="repFilterBlock" onchange="updateReportData()"></select>
+                        <label>Fertigstellungs-Status:</label>
+                        <select id="repFilterStatus" onchange="updateReportData()" style="padding: 4px; font-size: 11px;">
+                            <option value="all">Alle Elemente</option>
+                            <option value="completed">Nur Erledigte (✅)</option>
+                            <option value="open">Nur Offene / In Arbeit (⏳ / 🔧)</option>
+                        </select>
                     </div>
 
                     <hr style="border: 0; border-top: 1px solid #cbd5e0; margin: 4px 0;" />

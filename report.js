@@ -79,10 +79,26 @@ window.openReportModal = function () {
     openModal('reportModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Zwei-Ebenen Zonen-Hierarchie & Dynamische Block-Checkliste)
+ * ERSETZEN IN: report.js (Funktionen populateReportFilters, handleZoneFilterChange & updateReportData)
+ * Zeitstempel: 2026-10-03 09:40:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 09:25:00 CEST]: Status-Ausbau & Data-Bars.
+ *   - [2026-10-03 09:40:00 CEST]: 
+ *     1. populateReportFilters: repFilterZone limitiert auf genau 2 Ebenen 
+ *        (Ebene 0: 🚩 Ort/Hauptbereich, Ebene 1: └── 📦 Unterbereich). Tiefere Ebenen entfallen.
+ *     2. handleZoneFilterChange: Blendet #repBlockFilterGroup erst ein, wenn ein Bereich
+ *        gewählt ist, und befüllt Checkboxen aller darin liegenden Baugruppen.
+ *     3. updateReportData: Berücksichtigt nur noch die aktiv angehakten Baugruppen.
+ * =============================================================================
+ */
+
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
-    const selBlock = document.getElementById('repFilterBlock');
     const selStatus = document.getElementById('repFilterStatus');
 
     if (selUser) {
@@ -110,29 +126,100 @@ window.populateReportFilters = function () {
             });
         };
 
-        const sortedZones = sortZonesByOrder(currentZones || []);
-        sortedZones.forEach(z => {
-            let zIcon = '📍';
-            if (z.zone_type === 'assembly') zIcon = '📦';
-            else if (z.zone_type === 'comment') zIcon = '💬';
-            else if (z.zone_type === 'container') zIcon = '⬚';
+        // Ebene 0: Oberste Rahmen (Hauptbereiche / Standorte)
+        const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
 
-            selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
-        });
-    }
+        topZones.forEach(tz => {
+            const tzDoc = tz.doc_number ? `[${tz.doc_number}] ` : '';
+            selZone.add(new Option(`🚩 ${tzDoc}${tz.title}`, tz.id));
 
-    if (selBlock) {
-        selBlock.innerHTML = '<option value="all">Alle Blöcke</option>';
-        (currentNodes || []).forEach(n => {
-            if (n.block_type === 'note') return;
-            const type = n.block_type === 'part' ? 'Bauteil' : 'Baugruppe';
-            selBlock.add(new Option(`[${type}] ${n.name}`, n.id));
+            // Ebene 1: Direkte Kinder des obersten Rahmens (Unterbaugruppen / Abschnitte)
+            const childZones = sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === tz.id));
+            childZones.forEach(cz => {
+                const czDoc = cz.doc_number ? `[${cz.doc_number}] ` : '';
+                // \u00A0 erzeugt geschützte Leerzeichen für die Einrückung im HTML-Select
+                selZone.add(new Option(`\u00A0\u00A0\u00A0\u00A0└── 📦 ${czDoc}${cz.title}`, cz.id));
+            });
+            // Ebenen > 1 werden strikt ignoriert
         });
     }
 
     if (selStatus) {
         selStatus.value = 'all';
     }
+
+    // Checklisten-Zustand zurücksetzen
+    window.handleZoneFilterChange();
+};
+
+// Schaltet die Checkliste ein/aus und befüllt sie mit den Baugruppen des gewählten Bereichs
+window.handleZoneFilterChange = function () {
+    const selZone = document.getElementById('repFilterZone');
+    const groupEl = document.getElementById('repBlockFilterGroup');
+    const checklistEl = document.getElementById('repBlockChecklist');
+    if (!selZone || !groupEl || !checklistEl) return;
+
+    const zoneId = selZone.value;
+
+    if (zoneId === 'all') {
+        groupEl.style.display = 'none';
+        checklistEl.innerHTML = '';
+        updateReportData();
+        return;
+    }
+
+    // Alle untergeordneten Zonen-IDs ermitteln, die zu diesem Bereich gehören
+    const allMatchingZoneIds = [zoneId];
+    const collectDescendants = (parentId) => {
+        (currentZones || []).filter(z => z.parent_zone_id === parentId).forEach(cz => {
+            allMatchingZoneIds.push(cz.id);
+            collectDescendants(cz.id);
+        });
+    };
+    collectDescendants(zoneId);
+
+    // Alle Baugruppen/Bauteile ermitteln, die in diesem Bereich liegen
+    const containedNodes = (currentNodes || []).filter(n =>
+        n.block_type !== 'note' && allMatchingZoneIds.includes(n.zone_id)
+    );
+
+    containedNodes.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    checklistEl.innerHTML = '';
+
+    if (containedNodes.length === 0) {
+        checklistEl.innerHTML = '<div style="font-size:10px; color:#718096; font-style:italic;">Keine Baugruppen in diesem Bereich.</div>';
+    } else {
+        containedNodes.forEach(node => {
+            const doc = node.doc_number || (node.article_number ? `ART-${node.article_number}` : '');
+            const docBadge = doc ? `<span style="font-family:monospace; font-size:9px; background:#edf2f7; padding:1px 3px; border-radius:2px;">${escapeHtml(doc)}</span>` : '';
+            const iconSvg = node.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
+
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex; align-items:center; gap:6px; font-size:11px; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;';
+            label.title = node.name;
+            label.innerHTML = `
+                <input type="checkbox" class="rep-block-checkbox" value="${node.id}" checked onchange="updateReportData()" style="cursor:pointer; flex-shrink:0;" />
+                <span style="overflow:hidden; text-overflow:ellipsis; display:inline-flex; align-items:center; gap:4px;">
+                    ${docBadge} ${iconSvg} ${escapeHtml(node.name)}
+                </span>
+            `;
+            checklistEl.appendChild(label);
+        });
+    }
+
+    groupEl.style.display = 'block';
+    updateReportData();
+};
+
+// Schalter für Schnellauswahl "Alle / Keine"
+window.toggleAllReportBlocks = function () {
+    const checkboxes = Array.from(document.querySelectorAll('.rep-block-checkbox'));
+    if (checkboxes.length === 0) return;
+
+    const allChecked = checkboxes.every(cb => cb.checked);
+    checkboxes.forEach(cb => { cb.checked = !allChecked; });
+    updateReportData();
 };
 
 window.handleTimeframeChange = function () {
@@ -326,17 +413,29 @@ window.updateReportData = function () {
         `;
     }
 
-    // 2. Gefilterte Logs für das gewählte Intervall
+    // 2. Gefilterte Logs für das gewählte Intervall (inkl. Checklisten-Filter)
+    const checkedCheckboxes = Array.from(document.querySelectorAll('.rep-block-checkbox:checked'));
+    const checkedBlockIds = new Set(checkedCheckboxes.map(cb => cb.value));
+    const isZoneFiltered = (filterZone !== 'all');
+
     let filteredLogs = (currentTimeLogs || []).filter(log => {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
-        if (filterBlock !== 'all' && log.node_id !== filterBlock) return false;
 
-        if (filterZone !== 'all') {
-            if (log.zone_id && log.zone_id === filterZone) return true;
-            const node = (currentNodes || []).find(n => n.id === log.node_id);
-            if (!node || node.zone_id !== filterZone) return false;
+        if (isZoneFiltered) {
+            // Wenn Baugruppen angehakt sind: Nur gebuchte Stunden dieser Baugruppen werten
+            if (log.node_id) {
+                if (!checkedBlockIds.has(log.node_id)) return false;
+            } else if (log.zone_id) {
+                // Direkte Rahmen-Zeiten des gewählten Bereichs einbeziehen
+                if (log.zone_id !== filterZone) {
+                    const node = (currentNodes || []).find(n => n.id === log.node_id);
+                    if (!node || !checkedBlockIds.has(node.id)) return false;
+                }
+            } else {
+                return false;
+            }
         }
         return true;
     });
@@ -622,6 +721,8 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
 
             if (filterStatus === 'completed' && !isDone) return;
             if (filterStatus === 'open' && isDone) return;
+            // Baugruppen-Checklisten-Filter berücksichtigen
+            if (isZoneFiltered && !checkedBlockIds.has(n.id)) return;
 
             const nTotal = totalSpentToDateNode[n.id] || 0;
             const nCurBud = newNodeBudgets[n.id] !== undefined
