@@ -1,12 +1,27 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Reporting, Stichtags-Rekonstruktion & PDF Export (html2pdf.js)
- * Zeitstempel: 2026-08-22 18:30:00 CEST
+ * Domain: Reporting, Stichtags-Rekonstruktion, Status-Tracking & PDF-Export
+ * ERSETZEN IN: report.js (Gesamte Datei komplett ersetzen)
+ * Zeitstempel: 2026-10-03 09:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-22 bis 2026-08-31]: Initiale Stichtags-Engine, Zonen-Sortierung,
+ *     KW-Aufschlüsselung und 3-spaltige Summenkacheln.
+ *   - [2026-09-27 16:35:00 CEST]: Hierarchischer Rollup ab oberstem Rahmen,
+ *     Top-Down Sortierung nach Aufwand und Snapshot-B-Differenzmatrix.
+ *   - [2026-10-03 08:48:00 CEST]: Inline Data-Bars mit Überhangs- und Null-Budget-Schutz.
+ *   - [2026-10-03 09:25:00 CEST]: VOLLSTÄNDIGER STATUS-AUSBAU:
+ *     1. Status-Erkennung (Erledigt ✅ / Freigabe ⏳ / Offen %) für Blöcke & Zonen.
+ *     2. Zonen-Fertigstellungszähler (z.B. "3/4 Erledigt").
+ *     3. FilterrepFilterStatus für gezieltes Controlling offener vs. erledigter Elemente.
+ *     4. Top-5 Kostentreiber-Balkendiagramm und Section-Toggles integriert.
  * =============================================================================
  */
 
-// --- Datumshilfen ---
+// =============================================================================
+// 1. DATUMS- & ZEITHILFEN
+// =============================================================================
+
 function getISOWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
@@ -35,7 +50,6 @@ function getStartAndEndOfMonth(date) {
     return { start, end };
 }
 
-// Formatierung zu YYYY-MM-DD für Input-Felder
 function formatDateForInput(date) {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -43,141 +57,83 @@ function formatDateForInput(date) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-// --- Initialisierung & UI Steuerung ---
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Standard Heute & PDF für alle Benutzer freigeschaltet)
- * ERSETZEN IN: report.js (Funktion openReportModal)
- * Zeitstempel: 2026-08-30 14:30:00 CEST
- * Breadcrumbs:
- *   - [2026-08-22 18:30:00 CEST]: Initiale Reporting-Steuerung.
- *   - [2026-08-30 14:30:00 CEST]: 1. Standard-Zeitraum auf 'today' gesetzt.
- *     2. PDF-Button für alle Benutzer sichtbar geschaltet (Einfache User exportieren
- *     automatisch gefiltert auf ihr eigenes Kürzel).
- * =============================================================================
- */
+// =============================================================================
+// 2. INITIALISIERUNG & FILTER-STEUERUNG
+// =============================================================================
+
 window.openReportModal = function () {
     populateReportFilters();
 
-    // Standardmäßig den heutigen Tag auswählen
     const timeframeSelect = document.getElementById('repTimeframe');
     if (timeframeSelect) timeframeSelect.value = 'today';
 
     handleTimeframeChange();
 
-    // PDF-Export-Button für alle Mitarbeiter anzeigen
     const btnPdf = document.getElementById('btnExportPDF');
     if (btnPdf) btnPdf.style.display = 'inline-block';
 
+    if (typeof window.toggleReportSections === 'function') {
+        window.toggleReportSections();
+    }
+
     openModal('reportModal');
 };
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Zonen-Sortierung analog zur Sidebar)
- * ERSETZEN IN: report.js (Funktion populateReportFilters)
- * Zeitstempel: 2026-08-30 21:55:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 21:55:00 CEST]: Filterauswahl 'Bereich / Kasten' sortiert Rahmen
- *     analog zur Sidebar nach sort_order und Fläche (statt ungeordnetem Default-Array).
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Strikte sort_order Sortierung)
- * ERSETZEN IN: report.js (Funktion populateReportFilters)
- * Zeitstempel: 2026-08-30 22:05:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 22:05:00 CEST]: Filterauswahl 'Bereich / Kasten' sortiert Rahmen
- *     ausschließlich nach sort_order (Drag & Drop) ohne Flächenberechnung.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting Filter (Container-Kategorie)
- * ERSETZEN IN: report.js (Funktion populateReportFilters)
- * Zeitstempel: 2026-08-31 18:10:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 22:05:00 CEST]: Strikte sort_order Sortierung.
- *   - [2026-08-31 18:10:00 CEST]: Icon-Auswahl um 'container' (⬚) erweitert.
- * =============================================================================
- */
+
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
     const selBlock = document.getElementById('repFilterBlock');
+    const selStatus = document.getElementById('repFilterStatus');
 
-    selUser.innerHTML = '';
-    if (isAdmin) {
-        selUser.add(new Option('Alle Mitarbeiter', 'all'));
-        currentUsers.forEach(u => selUser.add(new Option(u.code, u.code)));
-        selUser.disabled = false;
-        selUser.value = 'all';
-    } else {
-        selUser.add(new Option(activeUserCode, activeUserCode));
-        selUser.value = activeUserCode;
-        selUser.disabled = true;
+    if (selUser) {
+        selUser.innerHTML = '';
+        if (isAdmin) {
+            selUser.add(new Option('Alle Mitarbeiter', 'all'));
+            (currentUsers || []).forEach(u => selUser.add(new Option(u.code, u.code)));
+            selUser.disabled = false;
+            selUser.value = 'all';
+        } else {
+            selUser.add(new Option(activeUserCode || 'COT', activeUserCode || 'COT'));
+            selUser.value = activeUserCode || 'COT';
+            selUser.disabled = true;
+        }
     }
 
-    selZone.innerHTML = '<option value="all">Alle Bereiche</option>';
+    if (selZone) {
+        selZone.innerHTML = '<option value="all">Alle Bereiche</option>';
 
-    const sortZonesByOrder = (zones) => {
-        return [...zones].sort((a, b) => {
-            const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
-            const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
-            return ordA - ordB;
+        const sortZonesByOrder = (zones) => {
+            return [...zones].sort((a, b) => {
+                const ordA = (a.sort_order !== null && a.sort_order !== undefined) ? a.sort_order : 9999;
+                const ordB = (b.sort_order !== null && b.sort_order !== undefined) ? b.sort_order : 9999;
+                return ordA - ordB;
+            });
+        };
+
+        const sortedZones = sortZonesByOrder(currentZones || []);
+        sortedZones.forEach(z => {
+            let zIcon = '📍';
+            if (z.zone_type === 'assembly') zIcon = '📦';
+            else if (z.zone_type === 'comment') zIcon = '💬';
+            else if (z.zone_type === 'container') zIcon = '⬚';
+
+            selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
         });
-    };
+    }
 
-    const sortedZones = sortZonesByOrder(currentZones || []);
-    sortedZones.forEach(z => {
-        let zIcon = '📍';
-        if (z.zone_type === 'assembly') zIcon = '📦';
-        else if (z.zone_type === 'comment') zIcon = '💬';
-        else if (z.zone_type === 'container') zIcon = '⬚';
+    if (selBlock) {
+        selBlock.innerHTML = '<option value="all">Alle Blöcke</option>';
+        (currentNodes || []).forEach(n => {
+            if (n.block_type === 'note') return;
+            const type = n.block_type === 'part' ? 'Bauteil' : 'Baugruppe';
+            selBlock.add(new Option(`[${type}] ${n.name}`, n.id));
+        });
+    }
 
-        selZone.add(new Option(`${zIcon} ${z.title}`, z.id));
-    });
-
-    selBlock.innerHTML = '<option value="all">Alle Blöcke</option>';
-    currentNodes.forEach(n => {
-        const type = n.block_type === 'part' ? 'Bauteil' : 'Baugruppe';
-        selBlock.add(new Option(`[${type}] ${n.name}`, n.id));
-    });
+    if (selStatus) {
+        selStatus.value = 'all';
+    }
 };
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & Filter-Steuerung
- * ERSETZEN IN: report.js (Funktionen handleTimeframeChange & updateReportData)
- * Zeitstempel: 2026-08-27 17:45:00 CEST
- * Breadcrumbs:
- *   - [2026-08-22 18:30:00 CEST]: Initiale Stichtags-Rekonstruktion & PDF-Export.
- *   - [2026-08-27 17:45:00 CEST]: Filter-Optionen 'today' und 'yesterday' integriert,
- *     Zonen-Logs (zone_id) in die Auswertungstabelle und den Filter-Scope aufgenommen.
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Review-Snapshot Vergleich mit hierarchischem Rollup)
- * ERSETZEN IN: report.js (Ab handleTimeframeChange bis Dateiende von renderReportSummary)
- * Zeitstempel: 2026-09-27 15:55:00 CEST
- * Breadcrumbs:
- *   - [2026-08-31]: Horizontale Kacheln.
- *   - [2026-09-27 15:55:00 CEST]: 1. Hierarchischer Bottom-Up Rollup:
- *     Stunden von Unterrahmen und Bauteilen fließen in den obersten Hauptrahmen ein.
- *   - [2026-09-27 15:55:00 CEST]: 2. Top-Down Sortierung: Oberste Rahmen 
- *     werden absteigend nach Intervall-Aufwand gelistet, darin liegende Bauteile 
- *     ebenfalls absteigend.
- *   - [2026-09-27 15:55:00 CEST]: 3. Differenz-Matrix für Zeitbudgets (Alt vs. Neu).
- * =============================================================================
- */
 
 window.handleTimeframeChange = function () {
     const timeframe = document.getElementById('repTimeframe').value;
@@ -216,7 +172,21 @@ window.handleTimeframeChange = function () {
     updateReportData();
 };
 
-// --- Echter Canvas Pie-Chart Generator (sicher für PDF) ---
+window.toggleReportSections = function () {
+    const tStatus = document.getElementById('repToggleStatus');
+    const tSummary = document.getElementById('repToggleSummary');
+    const tTable = document.getElementById('repToggleTable');
+
+    const sStatus = document.getElementById('repSectionStatus');
+    const sSummary = document.getElementById('repSectionSummary');
+    const sTable = document.getElementById('repSectionTable');
+
+    if (sStatus && tStatus) sStatus.style.display = tStatus.checked ? 'block' : 'none';
+    if (sSummary && tSummary) sSummary.style.display = tSummary.checked ? 'block' : 'none';
+    if (sTable && tTable) sTable.style.display = tTable.checked ? 'flex' : 'none';
+};
+
+// Canvas Donut-Chart Generator für HTML & PDF
 function createPieChartImage(spent, budget, baseColor) {
     const cvs = document.createElement('canvas');
     cvs.width = 120;
@@ -228,7 +198,7 @@ function createPieChartImage(spent, budget, baseColor) {
     const isOver = spent > b;
     const fillCol = isOver ? '#e53e3e' : baseColor;
 
-    // Hintergrund (grau)
+    // Hintergrund
     ctx.beginPath();
     ctx.moveTo(60, 60);
     ctx.arc(60, 60, 50, 0, 2 * Math.PI);
@@ -242,13 +212,13 @@ function createPieChartImage(spent, budget, baseColor) {
     ctx.fillStyle = fillCol;
     ctx.fill();
 
-    // Innerer Kreis (Donut-Loch)
+    // Inneres Loch
     ctx.beginPath();
     ctx.arc(60, 60, 30, 0, 2 * Math.PI);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
 
-    // Text in der Mitte
+    // Zentrierter Prozentwert
     ctx.fillStyle = '#2d3748';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
@@ -258,14 +228,17 @@ function createPieChartImage(spent, budget, baseColor) {
     return cvs.toDataURL('image/png');
 }
 
-// --- Engine & Datenaufbereitung ---
+// =============================================================================
+// 3. DATENAUFBEREITUNG & HAUPT-DISPATCHER
+// =============================================================================
+
 let reportState = { logs: [], startDate: null, endDate: null, projData: null };
 
 window.updateReportData = function () {
-    const filterUser = document.getElementById('repFilterUser').value;
-    const timeframe = document.getElementById('repTimeframe').value;
-    const filterZone = document.getElementById('repFilterZone').value;
-    const filterBlock = document.getElementById('repFilterBlock').value;
+    const filterUser = document.getElementById('repFilterUser')?.value || 'all';
+    const timeframe = document.getElementById('repTimeframe')?.value || 'today';
+    const filterZone = document.getElementById('repFilterZone')?.value || 'all';
+    const filterBlock = document.getElementById('repFilterBlock')?.value || 'all';
 
     const now = new Date();
     let startDate, endDate;
@@ -285,7 +258,7 @@ window.updateReportData = function () {
         startDate = new Date(snapA.review_date);
 
         if (selBId === 'live' || !selBId) {
-            endDate = new Date(); // Bis jetzt
+            endDate = new Date();
         } else {
             snapB = (window.currentSnapshots || []).find(s => s.id === selBId) || null;
             endDate = snapB ? new Date(snapB.review_date) : new Date();
@@ -305,17 +278,17 @@ window.updateReportData = function () {
         startDate = range.start;
         endDate = range.end;
     } else {
-        const sVal = document.getElementById('repStartDate').value;
-        const eVal = document.getElementById('repEndDate').value;
+        const sVal = document.getElementById('repStartDate')?.value;
+        const eVal = document.getElementById('repEndDate')?.value;
         startDate = sVal ? new Date(sVal + 'T00:00:00Z') : new Date(0);
         endDate = eVal ? new Date(eVal + 'T23:59:59Z') : new Date();
     }
 
-    // 1. STICHTAGS-REKONSTRUKTION GESAMTPROJEKT
+    // 1. Stichtags-Rekonstruktion Gesamtprojekt
     const proj = getCurrentProject();
     let projTotalD = 0, projTotalDr = 0;
 
-    currentTimeLogs.filter(l => new Date(l.logged_at) <= endDate).forEach(l => {
+    (currentTimeLogs || []).filter(l => new Date(l.logged_at) <= endDate).forEach(l => {
         const hrs = parseFloat(l.hours) || 0;
         if (l.task_type === 'design') projTotalD += hrs;
         if (l.task_type === 'drafting') projTotalDr += hrs;
@@ -333,25 +306,28 @@ window.updateReportData = function () {
     const pieDUrl = createPieChartImage(projTotalD, reportState.projData.budD, '#3182ce');
     const pieDrUrl = createPieChartImage(projTotalDr, reportState.projData.budDr, '#38a169');
 
-    document.getElementById('repProjectStatusContainer').innerHTML = `
-        <div style="flex:1; display:flex; align-items:center; gap:15px;">
-            <img src="${pieDUrl}" style="width: 50px; height: 50px;">
-            <div>
-                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt CAD Stichtag</div>
-                <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalD)} / ${formatHoursToHM(reportState.projData.budD)}</div>
+    const statusContainer = document.getElementById('repProjectStatusContainer');
+    if (statusContainer) {
+        statusContainer.innerHTML = `
+            <div style="flex:1; display:flex; align-items:center; gap:15px;">
+                <img src="${pieDUrl}" style="width: 50px; height: 50px;">
+                <div>
+                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt CAD Stichtag</div>
+                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalD)} / ${formatHoursToHM(reportState.projData.budD)}</div>
+                </div>
             </div>
-        </div>
-        <div style="flex:1; display:flex; align-items:center; gap:15px;">
-            <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
-            <div>
-                <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt Zeichnung Stichtag</div>
-                <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalDr)} / ${formatHoursToHM(reportState.projData.budDr)}</div>
+            <div style="flex:1; display:flex; align-items:center; gap:15px;">
+                <img src="${pieDrUrl}" style="width: 50px; height: 50px;">
+                <div>
+                    <div style="font-size:10px; color:#a0aec0; text-transform:uppercase;">Projekt Zeichnung Stichtag</div>
+                    <div style="font-size:13px; font-weight:bold; color:#2c3e50;">${formatHoursToHM(projTotalDr)} / ${formatHoursToHM(reportState.projData.budDr)}</div>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    }
 
-    // 2. GEFILTERTE LOGS FÜR DAS GEWÄHLTE INTERVALL
-    let filteredLogs = currentTimeLogs.filter(log => {
+    // 2. Gefilterte Logs für das gewählte Intervall
+    let filteredLogs = (currentTimeLogs || []).filter(log => {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
@@ -359,7 +335,7 @@ window.updateReportData = function () {
 
         if (filterZone !== 'all') {
             if (log.zone_id && log.zone_id === filterZone) return true;
-            const node = currentNodes.find(n => n.id === log.node_id);
+            const node = (currentNodes || []).find(n => n.id === log.node_id);
             if (!node || node.zone_id !== filterZone) return false;
         }
         return true;
@@ -377,30 +353,37 @@ window.updateReportData = function () {
     }
 };
 
-/**
- * =============================================================================
- * Hierarchischer Rollup & Absteigende Sortierung (Vom obersten Rahmen weg)
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Review-Snapshot Vergleich: Echter Gesamt-Iststand & Snapshot-B Support)
- * ERSETZEN IN: report.js (Funktion renderSnapshotReviewReport komplett ersetzen)
- * Zeitstempel: 2026-09-27 16:20:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 15:55:00 CEST]: Hierarchischer Bottom-Up Rollup & Top-Down Sortierung.
- *   - [2026-09-27 16:20:00 CEST]: BUGFIX: 1. Spalte 5 korrigiert (zeigt nun den echten
- *     kumulierten Gesamt-Iststand bis zum Stichtag statt der Intervall-Stunden).
- *     2. Budgets bei Snapshot-B-Vergleichen dynamisch aus snapshot_data bezogen.
- * =============================================================================
- */
+// =============================================================================
+// 4. REVIEW-SNAPSHOT VERGLEICHS-REPORT (MIT STATUS & HIERARCHIE)
+// =============================================================================
+
 function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDate) {
     const summaryContainer = document.getElementById('repSummaryContainer');
     const detailsContainer = document.getElementById('repDetailsContainer');
+    const filterStatus = document.getElementById('repFilterStatus')?.value || 'all';
     if (!summaryContainer || !detailsContainer) return;
 
-    // 1. INTERVALL-STUNDEN PRO ELEMENT BERECHNEN
+    // Ermittelt Status und Fortschritt zum gewählten Stichtag (Snapshot B oder Live)
+    const getNodeStatus = (nodeId) => {
+        if (snapB && snapB.snapshot_data && snapB.snapshot_data.nodes) {
+            const snapNode = snapB.snapshot_data.nodes.find(x => x.id === nodeId);
+            if (snapNode) {
+                return {
+                    status: snapNode.completion_status || 'open',
+                    pDesign: snapNode.progress_design || 0,
+                    pDrafting: snapNode.progress_drafting || 0
+                };
+            }
+        }
+        const liveNode = (currentNodes || []).find(x => x.id === nodeId);
+        return {
+            status: liveNode ? (liveNode.completion_status || 'open') : 'open',
+            pDesign: liveNode ? (liveNode.progress_design || 0) : 0,
+            pDrafting: liveNode ? (liveNode.progress_drafting || 0) : 0
+        };
+    };
+
+    // 1. Intervall-Stunden pro Element berechnen
     const intervalHoursNode = {};
     const intervalHoursZone = {};
     let totalCAD = 0, totalDraft = 0;
@@ -423,7 +406,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         }
     });
 
-    // 2. KUMULIERTE GESAMT-STUNDEN BIS END-DATUM ERMITTELN (FÜR SPALTE 5)
+    // 2. Kumulierte Gesamtstunden bis Stichtag (Spalte 5)
     const totalSpentToDateNode = {};
     const totalSpentToDateZone = {};
 
@@ -441,7 +424,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
     const getZoneDirectEffort = (zId) => (intervalHoursZone[zId]?.total || 0);
     const getNodeEffort = (nId) => (intervalHoursNode[nId]?.total || 0);
 
-    // Rekursiver Rollup für einen Rahmen (Intervall-Aufwand)
     function calculateSubtreeIntervalEffort(zoneId) {
         let sum = getZoneDirectEffort(zoneId);
         (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
@@ -453,7 +435,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         return sum;
     }
 
-    // Rekursiver Rollup für Gesamt-Iststand bis zum Stichtag (Spalte 5)
     function calculateSubtreeTotalSpent(zoneId) {
         let sum = totalSpentToDateZone[zoneId] || 0;
         (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
@@ -465,19 +446,39 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         return sum;
     }
 
-    // 3. TOP-DOWN SORTIERUNG: Oberste Rahmen nach Intervall-Gesamtaufwand absteigend sortieren
+    function getZoneCompletionStats(zoneId) {
+        let total = 0, done = 0;
+        (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
+            total++;
+            const st = getNodeStatus(n.id);
+            if (st.status === 'completed' || (st.pDesign === 100 && st.pDrafting === 100)) done++;
+        });
+        (currentZones || []).filter(z => z.parent_zone_id === zoneId).forEach(cz => {
+            const sub = getZoneCompletionStats(cz.id);
+            total += sub.total;
+            done += sub.done;
+        });
+        return { total, done };
+    }
+
     const topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => ({
         zone: z,
         subtreeEffort: calculateSubtreeIntervalEffort(z.id)
     }));
-
     topZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
 
-    // 4. HEADER-KACHELN FÜR DAS REVIEW-INTERVALL
+    let globalTotalNodes = 0, globalDoneNodes = 0;
+    (currentNodes || []).filter(n => n.block_type !== 'note').forEach(n => {
+        globalTotalNodes++;
+        const st = getNodeStatus(n.id);
+        if (st.status === 'completed' || (st.pDesign === 100 && st.pDrafting === 100)) globalDoneNodes++;
+    });
+
     const sADateStr = new Date(snapA.review_date).toLocaleDateString('de-DE');
     const sBDateStr = snapB ? new Date(snapB.review_date).toLocaleDateString('de-DE') : 'Heute (Live)';
     const sBTitle = snapB ? snapB.title : 'Live-Stand';
 
+    // 4. Header-Kacheln mit KPI
     summaryContainer.innerHTML = `
         <div style="background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
             <div style="font-size: 11px; font-weight: bold; color: #2b6cb0;">
@@ -485,28 +486,34 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             </div>
             ${snapA.note ? `<div style="font-size: 11px; color: #4a5568; margin-top: 2px;"><em>Notiz: ${escapeHtml(snapA.note)}</em></div>` : ''}
         </div>
-        <div style="display: flex; gap: 12px; width: 100%; margin-bottom: 8px;">
-            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0;">
-                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliches CAD (3D)</div>
-                <div style="font-size: 18px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">+${formatHoursToHM(totalCAD)}</div>
+        <div style="display: flex; gap: 10px; width: 100%; margin-bottom: 8px; flex-wrap: wrap;">
+            <div style="background: #edf2f7; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliches CAD</div>
+                <div style="font-size: 16px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">+${formatHoursToHM(totalCAD)}</div>
             </div>
-            <div style="background: #edf2f7; padding: 10px 14px; border-radius: 6px; flex: 1; border: 1px solid #e2e8f0;">
-                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliche Zeichnung (2D)</div>
-                <div style="font-size: 18px; font-weight: bold; color: #38a169; margin-top: 2px;">+${formatHoursToHM(totalDraft)}</div>
+            <div style="background: #edf2f7; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px; border: 1px solid #e2e8f0;">
+                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliche Zeichn.</div>
+                <div style="font-size: 16px; font-weight: bold; color: #38a169; margin-top: 2px;">+${formatHoursToHM(totalDraft)}</div>
             </div>
-            <div style="background: #2d3748; padding: 10px 14px; border-radius: 6px; flex: 1;">
-                <div style="font-size: 10px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Intervall-Gesamtaufwand</div>
-                <div style="font-size: 18px; font-weight: bold; color: #fff; margin-top: 2px;">+${formatHoursToHM(totalCAD + totalDraft)}</div>
+            <div style="background: #2d3748; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
+                <div style="font-size: 10px; color: #a0aec0; text-transform: uppercase; font-weight: bold;">Intervall Gesamt</div>
+                <div style="font-size: 16px; font-weight: bold; color: #fff; margin-top: 2px;">+${formatHoursToHM(totalCAD + totalDraft)}</div>
+            </div>
+            <div style="background: #f0fff4; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px; border: 1px solid #c6f6d5;">
+                <div style="font-size: 10px; color: #276749; text-transform: uppercase; font-weight: bold;">Erledigte Baugruppen</div>
+                <div style="font-size: 16px; font-weight: bold; color: #22543d; margin-top: 2px;">
+                    ${globalDoneNodes} / ${globalTotalNodes} <span style="font-size: 11px; font-weight: normal; color: #2f855a;">(${globalTotalNodes > 0 ? Math.round((globalDoneNodes / globalTotalNodes) * 100) : 0}%)</span>
+                </div>
             </div>
         </div>
     `;
 
-    // 5. STRUKTURIERTE TABELLE: HIERARCHISCH & ABSTEIGEND SORTIERT
+    // 5. Strukturierte Tabelle
     let tableHtml = `
         <table class="log-table">
             <thead>
                 <tr>
-                    <th>Bereich / Baugruppe (Nach Aufwand sortiert)</th>
+                    <th>Bereich / Baugruppe (Sortiert nach Aufwand)</th>
                     <th style="text-align: right; width: 110px;">Im Intervall gebucht</th>
                     <th style="text-align: right; width: 120px;">Budget (Alt ➔ Neu)</th>
                     <th style="text-align: right; width: 90px;">Budget-Delta</th>
@@ -516,34 +523,26 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             <tbody>
     `;
 
-    // Map alter Budgets aus SnapA & neuer Budgets aus SnapB (oder Live)
     const oldNodeBudgets = {};
     const oldZoneBudgets = {};
     const newNodeBudgets = {};
     const newZoneBudgets = {};
 
     if (snapA.snapshot_data) {
-        (snapA.snapshot_data.nodes || []).forEach(n => {
-            oldNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0);
-        });
-        (snapA.snapshot_data.zones || []).forEach(z => {
-            oldZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0);
-        });
+        (snapA.snapshot_data.nodes || []).forEach(n => { oldNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0); });
+        (snapA.snapshot_data.zones || []).forEach(z => { oldZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0); });
     }
 
     if (snapB && snapB.snapshot_data) {
-        (snapB.snapshot_data.nodes || []).forEach(n => {
-            newNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0);
-        });
-        (snapB.snapshot_data.zones || []).forEach(z => {
-            newZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0);
-        });
+        (snapB.snapshot_data.nodes || []).forEach(n => { newNodeBudgets[n.id] = (n.budget_design || 0) + (n.budget_drafting || 0); });
+        (snapB.snapshot_data.zones || []).forEach(z => { newZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0); });
     }
 
     function renderZoneRows(zoneObj, level) {
         const z = zoneObj.zone;
         const zEffort = zoneObj.subtreeEffort;
         const zTotalSpent = calculateSubtreeTotalSpent(z.id);
+        const zComp = getZoneCompletionStats(z.id);
 
         const curBud = newZoneBudgets[z.id] !== undefined
             ? newZoneBudgets[z.id]
@@ -560,11 +559,20 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         const bgCol = level === 0 ? '#edf2f7' : '#f8fafc';
         const docLabel = z.doc_number ? `[${escapeHtml(z.doc_number)}] ` : '';
 
+        let zoneDoneBadge = '';
+        if (zComp.total > 0) {
+            const isAllDone = (zComp.done === zComp.total);
+            const badgeBg = isAllDone ? '#c6f6d5' : '#e2e8f0';
+            const badgeCol = isAllDone ? '#22543d' : '#4a5568';
+            zoneDoneBadge = `<span style="font-size: 9px; font-weight: bold; background: ${badgeBg}; color: ${badgeCol}; padding: 1px 6px; border-radius: 10px; margin-left: 6px;">${isAllDone ? '✅ Alle ' : ''}${zComp.done}/${zComp.total} Erledigt</span>`;
+        }
+
         tableHtml += `
             <tr style="background: ${bgCol}; font-weight: bold; border-top: 2px solid #cbd5e0;">
-                <td style="padding-left: ${indentPx + 6}px;">
+                <td style="padding-left: ${indentPx + 6}px; padding-top: 6px; padding-bottom: 6px;">
                     <span style="color:${z.color_hex || '#2b6cb0'}; font-size:13px; margin-right:4px;">📁</span>
                     ${docLabel}${escapeHtml(z.title)}
+                    ${zoneDoneBadge}
                 </td>
                 <td style="text-align: right; color:#2b6cb0; font-family:monospace; font-size:12px;">+${formatHoursToHM(zEffort)}</td>
                 <td style="text-align: right; color:#4a5568; font-family:monospace;">${formatHoursToHM(oldBud)} ➔ ${formatHoursToHM(curBud)}</td>
@@ -573,22 +581,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             </tr>
         `;
 
-        /**
-        * =============================================================================
-        * Projekt: CAD Time Manager
-        * Domain: Reporting (Inline-Ladebalken mit Überhangs- & Null-Budget-Schutz)
-        * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> Innerhalb renderZoneRows)
-        * Zeitstempel: 2026-10-03 08:45:00 CEST
-        * Breadcrumbs:
-        *   - [2026-09-27 16:20:00 CEST]: Hierarchischer Rollup & Top-Down Sortierung.
-        *   - [2026-10-03 08:45:00 CEST]: Inline Data-Bars integriert. 
-        *     DISMISSED: Math.min für Text-Label (schnitt echte Überhänge wie 140% auf 100% ab).
-        *     NEU: Trennung von barWidthPct (max 100%) und actualPct (echter Wert).
-        *     Sonderbehandlung für nCurBud === 0 (Neutralgrau statt fälschlichem Rot).
-        * =============================================================================
-        */
-
-        // 1. Untergeordnete Blöcke nach Aufwand absteigend sortieren
         const childNodes = (currentNodes || [])
             .filter(n => n.zone_id === z.id && n.block_type !== 'note')
             .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
@@ -596,6 +588,13 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         childNodes.sort((a, b) => b.effort - a.effort);
 
         childNodes.forEach(({ node: n, effort: nEffort }) => {
+            const nSt = getNodeStatus(n.id);
+            const isDone = (nSt.status === 'completed') || (nSt.pDesign === 100 && nSt.pDrafting === 100);
+            const isPending = (nSt.status === 'pending_approval');
+
+            if (filterStatus === 'completed' && !isDone) return;
+            if (filterStatus === 'open' && isDone) return;
+
             const nTotal = totalSpentToDateNode[n.id] || 0;
             const nCurBud = newNodeBudgets[n.id] !== undefined
                 ? newNodeBudgets[n.id]
@@ -612,12 +611,21 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-            // Grafische Balkenberechnung mit Überhang- und Null-Budget-Guard
+            let statusBadge = '';
+            if (isDone) {
+                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#c6f6d5; color:#22543d; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">✅ Erledigt</span>`;
+            } else if (isPending) {
+                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#feebc8; color:#c05621; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">⏳ Freigabe</span>`;
+            } else {
+                const totalPct = Math.round((nSt.pDesign * 0.5) + (nSt.pDrafting * 0.5));
+                statusBadge = `<span style="font-size:9px; color:#718096; background:#edf2f7; padding:1px 5px; border-radius:3px; margin-left:6px;">${totalPct}%</span>`;
+            }
+
             const hasBudget = nCurBud > 0;
             const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
             const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
             const isOver = hasBudget && (nTotal > nCurBud);
-            const barColor = !hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce');
+            const barColor = isDone ? '#38a169' : (!hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce'));
             const pctLabel = hasBudget ? `${actualPct}%` : '—';
 
             tableHtml += `
@@ -625,19 +633,18 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                     <td style="padding-left: ${indentPx + 24}px; padding-top: 6px; padding-bottom: 6px;">
                         <span style="color:#a0aec0; margin-right:4px;">└──</span>
                         ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
+                        ${statusBadge}
                     </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    
-                    <!-- Grafischer Inline-Ladebalken -->
                     <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
                         <div style="display:flex; flex-direction:column; align-items:flex-end;">
                             <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
                                 <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
                                 <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
                             </div>
-                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;" title="${hasBudget ? `${actualPct}% verbraucht` : 'Kein Soll-Budget hinterlegt'}">
+                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;">
                                 <div style="width: ${barWidthPct}%; height: 100%; background: ${barColor};"></div>
                             </div>
                         </div>
@@ -646,7 +653,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             `;
         });
 
-        // 2. Untergeordnete Rahmen absteigend nach Intervall-Aufwand sortieren
         const subZones = (currentZones || [])
             .filter(cz => cz.parent_zone_id === z.id)
             .map(cz => ({ zone: cz, subtreeEffort: calculateSubtreeIntervalEffort(cz.id) }));
@@ -655,12 +661,9 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         subZones.forEach(subZoneObj => renderZoneRows(subZoneObj, level + 1));
     }
 
-    // Hauptdurchlauf: Oberste Rahmen ausgeben
-    topZones.forEach(topZoneObj => {
-        renderZoneRows(topZoneObj, 0);
-    });
+    topZones.forEach(topZoneObj => { renderZoneRows(topZoneObj, 0); });
 
-    // Freie Blöcke (ohne Rahmen) am Ende ausgeben
+    // Freie Blöcke ohne Rahmen
     const unzonedNodes = (currentNodes || [])
         .filter(n => !n.zone_id && n.block_type !== 'note')
         .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
@@ -671,25 +674,20 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
 
         tableHtml += `
             <tr style="background: #edf2f7; font-weight: bold; border-top: 2px solid #cbd5e0;">
-                <td style="padding-left: 6px;">📌 Freie Blöcke (Ohne Rahmenzuweisung)</td>
+                <td style="padding-left: 6px; padding-top: 6px; padding-bottom: 6px;">📌 Freie Blöcke (Ohne Rahmenzuweisung)</td>
                 <td style="text-align: right; color:#2b6cb0; font-family:monospace; font-size:12px;">+${formatHoursToHM(unzonedTotal)}</td>
                 <td colspan="3"></td>
             </tr>
         `;
-        /**
-         * =============================================================================
-         * Projekt: CAD Time Manager
-         * Domain: Reporting (Snapshot-Vergleich: Inline-Ladebalken für unzugeordnete Blöcke)
-         * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> unzonedNodes.forEach)
-         * Zeitstempel: 2026-10-03 08:48:00 CEST
-         * Breadcrumbs:
-         *   - [2026-10-03 08:45:00 CEST]: Inline Data-Bars für childNodes integriert.
-         *   - [2026-10-03 08:48:00 CEST]: Harmonisiert: unzonedNodes erhalten nun
-         *     dieselbe Ladebalken-Logik (inkl. Überhang-/Null-Budget-Schutz) sowie 
-         *     DOC-Badges, CAD-Icons und sanfte Hover-Effekte.
-         * =============================================================================
-         */
+
         unzonedNodes.forEach(({ node: n, effort: nEffort }) => {
+            const nSt = getNodeStatus(n.id);
+            const isDone = (nSt.status === 'completed') || (nSt.pDesign === 100 && nSt.pDrafting === 100);
+            const isPending = (nSt.status === 'pending_approval');
+
+            if (filterStatus === 'completed' && !isDone) return;
+            if (filterStatus === 'open' && isDone) return;
+
             const nTotal = totalSpentToDateNode[n.id] || 0;
             const nCurBud = newNodeBudgets[n.id] !== undefined
                 ? newNodeBudgets[n.id]
@@ -706,12 +704,18 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-            // Grafische Balkenberechnung mit Überhang- und Null-Budget-Guard
+            let statusBadge = '';
+            if (isDone) {
+                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#c6f6d5; color:#22543d; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">✅ Erledigt</span>`;
+            } else if (isPending) {
+                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#feebc8; color:#c05621; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">⏳ Freigabe</span>`;
+            }
+
             const hasBudget = nCurBud > 0;
             const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
             const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
             const isOver = hasBudget && (nTotal > nCurBud);
-            const barColor = !hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce');
+            const barColor = isDone ? '#38a169' : (!hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce'));
             const pctLabel = hasBudget ? `${actualPct}%` : '—';
 
             tableHtml += `
@@ -719,19 +723,18 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                     <td style="padding-left: 24px; padding-top: 6px; padding-bottom: 6px;">
                         <span style="color:#a0aec0; margin-right:4px;">└──</span>
                         ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
+                        ${statusBadge}
                     </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
                     <td style="text-align: right;">${nDiffHtml}</td>
-                    
-                    <!-- Grafischer Inline-Ladebalken -->
                     <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
                         <div style="display:flex; flex-direction:column; align-items:flex-end;">
                             <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
                                 <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
                                 <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
                             </div>
-                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;" title="${hasBudget ? `${actualPct}% verbraucht` : 'Kein Soll-Budget hinterlegt'}">
+                            <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;">
                                 <div style="width: ${barWidthPct}%; height: 100%; background: ${barColor};"></div>
                             </div>
                         </div>
@@ -745,43 +748,34 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
     detailsContainer.innerHTML = tableHtml;
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Horizontale Summenkacheln Nebeneinander)
- * ERSETZEN IN: report.js (Funktion renderReportSummary)
- * Zeitstempel: 2026-08-31 18:55:00 CEST
- * Breadcrumbs:
- *   - [2026-08-22 18:30:00 CEST]: Initiale Summenberechnung.
- *   - [2026-08-31 18:55:00 CEST]: Kacheln für CAD, Zeichnung und Gesamtaufwand
- *     strikte horizontale Anordnung (flex-row) mit flex: 1 zugewiesen.
- * =============================================================================
- */
+// =============================================================================
+// 5. STANDARD-SUMMARY (KACHELN, TOP-5 BAR CHART & KW-TABELLE)
+// =============================================================================
+
 function renderReportSummary(logs, timeframe) {
     const container = document.getElementById('repSummaryContainer');
     if (!container) return;
 
     let totalCAD = 0, totalDraft = 0;
     const weeklyData = {};
-    const nodeStats = {}; // Für das Top-5 Bar-Chart
+    const nodeStats = {};
 
     logs.forEach(log => {
         const hrs = parseFloat(log.hours) || 0;
         if (log.task_type === 'design') totalCAD += hrs;
         if (log.task_type === 'drafting') totalDraft += hrs;
 
-        // Daten für Top-5 sammeln
         const identifierId = log.node_id || log.zone_id || 'unknown';
         if (!nodeStats[identifierId]) {
             let name = 'Unbekannt';
             if (log.node_id) {
-                const n = currentNodes.find(x => x.id === log.node_id);
+                const n = (currentNodes || []).find(x => x.id === log.node_id);
                 if (n) name = n.name;
             } else if (log.zone_id) {
-                const z = currentZones.find(x => x.id === log.zone_id);
+                const z = (currentZones || []).find(x => x.id === log.zone_id);
                 if (z) name = `[Rahmen] ${z.title}`;
             }
-            nodeStats[identifierId] = { name: name, hours: 0, cad: 0, draft: 0 };
+            nodeStats[identifierId] = { name, hours: 0, cad: 0, draft: 0 };
         }
         nodeStats[identifierId].hours += hrs;
         if (log.task_type === 'design') nodeStats[identifierId].cad += hrs;
@@ -812,14 +806,13 @@ function renderReportSummary(logs, timeframe) {
         </div>
     `;
 
-    // Visuelles Bar-Chart
     let visualChartHtml = '';
     const sortedNodes = Object.values(nodeStats).sort((a, b) => b.hours - a.hours).slice(0, 5);
 
     if (sortedNodes.length > 0 && (totalCAD + totalDraft) > 0) {
-        let maxNodeHours = sortedNodes[0].hours;
+        const maxNodeHours = sortedNodes[0].hours;
 
-        let barsHtml = sortedNodes.map(n => {
+        const barsHtml = sortedNodes.map(n => {
             const cadPct = (n.cad / maxNodeHours) * 100;
             const draftPct = (n.draft / maxNodeHours) * 100;
             return `
@@ -846,45 +839,45 @@ function renderReportSummary(logs, timeframe) {
         `;
     }
 
-    // ... (weekBreakdownHtml wie bisher beibehalten) ...
+    let weekBreakdownHtml = '';
+    if ((timeframe === 'month' || timeframe === 'custom') && Object.keys(weeklyData).length > 0) {
+        weekBreakdownHtml = `<div style="width: 100%; margin-top: 8px; font-size: 11px;">`;
+        weekBreakdownHtml += `<table class="log-table"><thead><tr><th>Kalenderwoche</th><th>CAD</th><th>Zeichnung</th><th>Summe KW</th></tr></thead><tbody>`;
+
+        const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+        sortedKWs.forEach(kw => {
+            const wCAD = weeklyData[kw].cad;
+            const wDraft = weeklyData[kw].draft;
+            weekBreakdownHtml += `
+                <tr>
+                    <td><strong>KW ${kw}</strong></td>
+                    <td style="color:#2b6cb0;">${formatHoursToHM(wCAD)}</td>
+                    <td style="color:#38a169;">${formatHoursToHM(wDraft)}</td>
+                    <td><strong>${formatHoursToHM(wCAD + wDraft)}</strong></td>
+                </tr>
+            `;
+        });
+        weekBreakdownHtml += `</tbody></table></div>`;
+    }
 
     container.innerHTML = `
-        <div style="display: flex; flex-direction: column; width: 100%;">
+        <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
             ${cardsHtml}
             ${visualChartHtml}
+            ${weekBreakdownHtml}
         </div>
     `;
 }
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & Tabellen-Rendering (Zonen-Logs Auflösung)
- * ERSETZEN IN: report.js (Funktionen renderReportDetailsTable & generatePDF)
- * Zeitstempel: 2026-08-28 21:30:00 CEST
- * Breadcrumbs:
- *   - [2026-08-27 17:45:00 CEST]: Filter-Optionen 'today'/'yesterday'.
- *   - [2026-08-28 21:30:00 CEST]: Zonen-Logs Auflösung korrigiert. Wenn log.zone_id 
- *     vorliegt (node_id = null), wird der Rahmenname sauber als Bereich und 
- *     als Baugruppe "[Rahmen / Kasten]" ausgegeben, statt "-" und "Unbekannt".
- * =============================================================================
- */
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & Tabellen-Rendering (Zonen-Logs Textbereinigung)
- * ERSETZEN IN: report.js (Funktion renderReportDetailsTable)
- * Zeitstempel: 2026-08-28 20:33:00 CEST
- * Breadcrumbs:
- *   - [2026-08-28 21:30:00 CEST]: Zonen-Logs Auflösung korrigiert.
- *   - [2026-08-28 20:33:00 CEST]: Pin-Symbol und Zusatz "(Direktbuchung)" entfernt.
- *     Ausgabe erfolgt nun schlicht mit dem reinen Rahmen-/Zonennamen.
- * =============================================================================
- */
+// =============================================================================
+// 6. STANDARD-LOGBUCH TABELLE (MIT STATUS-BADGES)
+// =============================================================================
 
 function renderReportDetailsTable(logs) {
     const container = document.getElementById('repDetailsContainer');
+    const filterStatus = document.getElementById('repFilterStatus')?.value || 'all';
+    if (!container) return;
+
     if (logs.length === 0) {
         container.innerHTML = '<div style="font-size:12px; color:#718096; padding:10px;">Keine Zeiteinträge gefunden.</div>';
         return;
@@ -897,7 +890,7 @@ function renderReportDetailsTable(logs) {
           <th>Datum</th>
           <th>Kürzel</th>
           <th>Bereich / Rahmen</th>
-          <th>Baugruppe</th>
+          <th>Baugruppe (Status)</th>
           <th>Kat.</th>
           <th>Zeit</th>
           <th>Kommentar</th>
@@ -909,18 +902,31 @@ function renderReportDetailsTable(logs) {
     logs.forEach(log => {
         let nodeName = 'Unbekannt';
         let zoneName = '-';
+        let statusBadge = '';
 
         if (log.node_id) {
-            const node = currentNodes.find(n => n.id === log.node_id);
+            const node = (currentNodes || []).find(n => n.id === log.node_id);
             if (node) {
                 nodeName = node.name;
+                const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
+                const isPending = (node.completion_status === 'pending_approval');
+
+                if (filterStatus === 'completed' && !isDone) return;
+                if (filterStatus === 'open' && isDone) return;
+
+                if (isDone) {
+                    statusBadge = ` <span style="font-size: 9px; font-weight: bold; background: #c6f6d5; color: #22543d; padding: 1px 5px; border-radius: 3px;">✅ Erledigt</span>`;
+                } else if (isPending) {
+                    statusBadge = ` <span style="font-size: 9px; font-weight: bold; background: #feebc8; color: #c05621; padding: 1px 5px; border-radius: 3px;">⏳ Freigabe</span>`;
+                }
+
                 if (node.zone_id) {
-                    const zone = currentZones.find(z => z.id === node.zone_id);
+                    const zone = (currentZones || []).find(z => z.id === node.zone_id);
                     if (zone) zoneName = zone.title;
                 }
             }
         } else if (log.zone_id) {
-            const zone = currentZones.find(z => z.id === log.zone_id);
+            const zone = (currentZones || []).find(z => z.id === log.zone_id);
             if (zone) {
                 zoneName = zone.title;
                 nodeName = zone.title;
@@ -943,7 +949,7 @@ function renderReportDetailsTable(logs) {
           <td>${dateStr}</td>
           <td><strong>${escapeHtml(log.user_code)}</strong></td>
           <td style="color:#718096;">${escapeHtml(zoneName)}</td>
-          <td>${escapeHtml(nodeName)}</td>
+          <td>${escapeHtml(nodeName)}${statusBadge}</td>
           <td>${kat}</td>
           <td><strong>${timeStr}</strong></td>
           <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
@@ -955,47 +961,9 @@ function renderReportDetailsTable(logs) {
 }
 
 // =============================================================================
-// 4. PDF EXPORT GENERATOR
+// 7. PDF EXPORT GENERATOR (HTML2PDF)
 // =============================================================================
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & PDF Export (Textbereinigung & Zonen-Konsistenz)
- * ERSETZEN IN: report.js (Funktion generatePDF)
- * Zeitstempel: 2026-08-30 22:18:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 22:05:00 CEST]: Zonen-Sortierung harmonisiert.
- *   - [2026-08-30 22:18:00 CEST]: PDF-Tabelle bereinigt: Zonen-Direktbuchungen 
- *     geben analog zur HTML-Ansicht den reinen Namen ohne '📍 (Direktbuchung)' aus.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & PDF Export (KW-Aufschlüsselung & Horizontale Summen)
- * ERSETZEN IN: report.js (Funktion generatePDF)
- * Zeitstempel: 2026-08-31 19:00:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 22:18:00 CEST]: PDF-Tabelle bereinigt.
- *   - [2026-08-31 19:00:00 CEST]: 1. KW-Wochenaufschlüsselung bei Monats- und 
- *     benutzerdefinierten Zeiträumen in den PDF-Export integriert.
- *     2. Summenkacheln im PDF einheitlich 3-spaltig (CAD, Zeichnung, Gesamt) ausgerichtet.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting & PDF Export (Snapshot-Vergleich & Hierarchische Matrix)
- * ERSETZEN IN: report.js (Funktion window.generatePDF komplett ersetzen)
- * Zeitstempel: 2026-09-27 16:35:00 CEST
- * Breadcrumbs:
- *   - [2026-08-31 19:00:00 CEST]: KW-Wochenaufschlüsselung & 3-spaltige Summenkacheln.
- *   - [2026-09-27 16:35:00 CEST]: BUGFIX: Weiche für 'snapshot_compare' integriert.
- *     Im Review-Modus exportiert das PDF nun exakt die hierarchische Aufstellung
- *     (Soll/Ist, Budget-Deltas, absteigend vom obersten Rahmen sortiert) inklusive
- *     Review-Intervall-Banner und Stichtags-Donuts statt des einfachen Logbuchs.
- * =============================================================================
- */
+
 window.generatePDF = async function () {
     const btn = document.getElementById('btnExportPDF');
     if (!btn) return;
@@ -1042,9 +1010,6 @@ window.generatePDF = async function () {
             </style>
         `;
 
-        // ---------------------------------------------------------------------
-        // FALL A: REVIEW-VERGLEICH (SNAPSHOTS)
-        // ---------------------------------------------------------------------
         if (timeframe === 'snapshot_compare') {
             const selAId = document.getElementById('repSelectSnapshotA')?.value;
             const selBId = document.getElementById('repSelectSnapshotB')?.value;
@@ -1108,12 +1073,9 @@ window.generatePDF = async function () {
                 </div>
             `;
         } else {
-            // -----------------------------------------------------------------
-            // FALL B: STANDARD-REPORT (Heute, Gestern, Woche, Monat, Custom)
-            // -----------------------------------------------------------------
             const pageHeader = `
                 <div class="pdf-header">
-                    <h1>Projekt-Controlling & Zeitauswertung</h1>
+                    <h1>Projekt-Controlling &amp; Zeitauswertung</h1>
                     <div class="pdf-header-meta">
                         <div><strong>Projekt:</strong> ${escapeHtml(pData.obj)} – ${escapeHtml(pData.name)}</div>
                         <div><strong>Auswertungszeitraum:</strong> ${dStart} bis ${dEnd}</div>
@@ -1129,18 +1091,23 @@ window.generatePDF = async function () {
             reportState.logs.forEach(log => {
                 let nodeName = 'Unbekannt';
                 let zoneName = '-';
+                let statusBadge = '';
 
                 if (log.node_id) {
-                    const node = currentNodes.find(n => n.id === log.node_id);
+                    const node = (currentNodes || []).find(n => n.id === log.node_id);
                     if (node) {
                         nodeName = node.name;
+                        const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
+                        if (isDone) statusBadge = ' [✅ Erledigt]';
+                        else if (node.completion_status === 'pending_approval') statusBadge = ' [⏳ Freigabe]';
+
                         if (node.zone_id) {
-                            const zone = currentZones.find(z => z.id === node.zone_id);
+                            const zone = (currentZones || []).find(z => z.id === node.zone_id);
                             if (zone) zoneName = zone.title;
                         }
                     }
                 } else if (log.zone_id) {
-                    const zone = currentZones.find(z => z.id === log.zone_id);
+                    const zone = (currentZones || []).find(z => z.id === log.zone_id);
                     if (zone) {
                         zoneName = zone.title;
                         nodeName = zone.title;
@@ -1172,7 +1139,7 @@ window.generatePDF = async function () {
                         <td>${dateStr}</td>
                         <td><strong>${escapeHtml(log.user_code)}</strong></td>
                         <td style="color:#718096;">${escapeHtml(zoneName)}</td>
-                        <td>${escapeHtml(nodeName)}</td>
+                        <td>${escapeHtml(nodeName)}${statusBadge}</td>
                         <td>${kat}</td>
                         <td><strong>${timeStr}</strong></td>
                         <td style="color:#718096; font-style:italic;">${escapeHtml(log.note || '-')}</td>
@@ -1196,7 +1163,7 @@ window.generatePDF = async function () {
                         <tbody>
                 `;
 
-                const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
+                const sortedKWs = Object.keys(weeklyData).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
                 sortedKWs.forEach(kw => {
                     const wCAD = weeklyData[kw].cad;
                     const wDraft = weeklyData[kw].draft;
@@ -1289,10 +1256,4 @@ window.generatePDF = async function () {
         btn.innerText = originalText;
         btn.disabled = false;
     }
-};
-
-window.toggleReportSections = function () {
-    document.getElementById('repSectionStatus').style.display = document.getElementById('repToggleStatus').checked ? 'block' : 'none';
-    document.getElementById('repSectionSummary').style.display = document.getElementById('repToggleSummary').checked ? 'block' : 'none';
-    document.getElementById('repSectionTable').style.display = document.getElementById('repToggleTable').checked ? 'flex' : 'none';
 };

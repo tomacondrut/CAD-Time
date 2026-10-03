@@ -646,10 +646,22 @@ html, body {
     padding: 15px; /* Puffer auf kleinen / mobilen Screens */
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (Globaler Dialog Z-Index Boost)
+ * ERSETZEN IN: style.css (Zeile ~380, Block #dialogModal)
+ * Zeitstempel: 2026-10-03 09:10:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31]: z-index: 3500 gesetzt.
+ *   - [2026-10-03 09:10:00 CEST]: BUGFIX: z-index von 3500 auf 9000 angehoben.
+ *     Verhindert, dass Bestätigungs-Popups (customConfirm) von Modals mit 
+ *     z-index 3600/3700 (#createSnapshotModal, #colorCategoryModal) verdeckt werden.
+ * =============================================================================
+ */
 #dialogModal {
-    z-index: 3500;
+    z-index: 9000 !important;
 }
-
 .modal-content {
     background: #fff;
     border-radius: 8px;
