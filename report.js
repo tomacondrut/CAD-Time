@@ -538,11 +538,31 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         (snapB.snapshot_data.zones || []).forEach(z => { newZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0); });
     }
 
+    /**
+  * =============================================================================
+  * Projekt: CAD Time Manager
+  * Domain: Reporting (Hierarchie-Icons 🚩/📦, linksbündige Status-Spalte & Zeilen-Highlight)
+  * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> Ab renderZoneRows bis unzonedNodes-Ende)
+  * Zeitstempel: 2026-10-03 09:30:00 CEST
+  * Breadcrumbs:
+  *   - [2026-10-03 09:15:00 CEST]: Status-Erkennung & Data-Bars.
+  *   - [2026-10-03 09:30:00 CEST]: OPTISCHE RUHE & HIERARCHIE:
+  *     1. DISMISSED: Einheitliches Ordner-Icon (📁) für alle Ebenen.
+  *        NEU: Oberste Rahmen (Ebene 0 / Orte) erhalten das Fähnchen (🚩),
+  *        alle Unterrahmen (Ebene > 0) erhalten das Inventor-Baugruppen-SVG (CAD_ICONS.assembly).
+  *     2. DISMISSED: Text-Badge "[✅ Erledigt]" am Zeilenende (unruhig durch variable Textlängen).
+  *        NEU: Kompaktes Häkchen (✅) bzw. Sanduhr (⏳) in fixer 22px-Spalte LINKS vor DOC-/Artikelnr.
+  *     3. HIGHLIGHT: Abgeschlossene Elemente erhalten die Zeilenfarbe #f0fff4 (sanftes Grün),
+  *        wodurch der Fertigstellungsgrad ohne Suchen im gesamten Baum sofort ins Auge springt.
+  * =============================================================================
+  */
+
     function renderZoneRows(zoneObj, level) {
         const z = zoneObj.zone;
         const zEffort = zoneObj.subtreeEffort;
         const zTotalSpent = calculateSubtreeTotalSpent(z.id);
         const zComp = getZoneCompletionStats(z.id);
+        const isAllDone = (zComp.total > 0 && zComp.done === zComp.total);
 
         const curBud = newZoneBudgets[z.id] !== undefined
             ? newZoneBudgets[z.id]
@@ -556,21 +576,28 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         else if (diffBud < -0.01) diffBudHtml = `<span style="color:#38a169; font-weight:bold;">▼ -${formatHoursToHM(Math.abs(diffBud))}</span>`;
 
         const indentPx = level * 18;
-        const bgCol = level === 0 ? '#edf2f7' : '#f8fafc';
         const docLabel = z.doc_number ? `[${escapeHtml(z.doc_number)}] ` : '';
 
+        // 1. Icon-Differenzierung: Oberste Ebene = Fähnchen 🚩, Unterebene = Baugruppen-SVG
+        const zoneIconHtml = (level === 0)
+            ? `<span style="font-size: 13px; margin-right: 5px;" title="Hauptbereich / Ort">🚩</span>`
+            : `<span style="display: inline-flex; align-items: center; margin-right: 5px;" title="Baugruppe">${window.CAD_ICONS ? CAD_ICONS.assembly : '📦'}</span>`;
+
+        // Kompakter Zähler ohne überflüssigen Text (z.B. "3/4 ✅")
         let zoneDoneBadge = '';
         if (zComp.total > 0) {
-            const isAllDone = (zComp.done === zComp.total);
             const badgeBg = isAllDone ? '#c6f6d5' : '#e2e8f0';
             const badgeCol = isAllDone ? '#22543d' : '#4a5568';
-            zoneDoneBadge = `<span style="font-size: 9px; font-weight: bold; background: ${badgeBg}; color: ${badgeCol}; padding: 1px 6px; border-radius: 10px; margin-left: 6px;">${isAllDone ? '✅ Alle ' : ''}${zComp.done}/${zComp.total} Erledigt</span>`;
+            zoneDoneBadge = `<span style="font-size: 9px; font-weight: bold; background: ${badgeBg}; color: ${badgeCol}; padding: 1px 6px; border-radius: 10px; margin-left: 6px;">${zComp.done}/${zComp.total} ✅</span>`;
         }
 
+        const zoneRowBg = isAllDone ? '#f0fff4' : (level === 0 ? '#edf2f7' : '#f8fafc');
+        const zoneBorderCol = isAllDone ? '#9ae6b4' : '#cbd5e0';
+
         tableHtml += `
-            <tr style="background: ${bgCol}; font-weight: bold; border-top: 2px solid #cbd5e0;">
+            <tr style="background: ${zoneRowBg}; font-weight: bold; border-top: 2px solid ${zoneBorderCol};">
                 <td style="padding-left: ${indentPx + 6}px; padding-top: 6px; padding-bottom: 6px;">
-                    <span style="color:${z.color_hex || '#2b6cb0'}; font-size:13px; margin-right:4px;">📁</span>
+                    ${zoneIconHtml}
                     ${docLabel}${escapeHtml(z.title)}
                     ${zoneDoneBadge}
                 </td>
@@ -581,6 +608,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             </tr>
         `;
 
+        // 2. Untergeordnete Blöcke im Rahmen
         const childNodes = (currentNodes || [])
             .filter(n => n.zone_id === z.id && n.block_type !== 'note')
             .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
@@ -611,16 +639,19 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-            let statusBadge = '';
+            // 3. Status-Badge: Fixe 22px-Breite linksbündig VOR dem DOC-Badge
+            let statusIcon = '';
             if (isDone) {
-                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#c6f6d5; color:#22543d; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">✅ Erledigt</span>`;
+                statusIcon = '<span style="font-size: 11px;" title="Erledigt">✅</span>';
             } else if (isPending) {
-                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#feebc8; color:#c05621; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">⏳ Freigabe</span>`;
+                statusIcon = '<span style="font-size: 11px;" title="Wartet auf Freigabe">⏳</span>';
             } else {
                 const totalPct = Math.round((nSt.pDesign * 0.5) + (nSt.pDrafting * 0.5));
-                statusBadge = `<span style="font-size:9px; color:#718096; background:#edf2f7; padding:1px 5px; border-radius:3px; margin-left:6px;">${totalPct}%</span>`;
+                statusIcon = totalPct > 0 ? `<span style="font-size: 9px; color: #718096; font-family: monospace;">${totalPct}%</span>` : '';
             }
+            const statusSlotHtml = `<span style="display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 16px; margin-right: 4px; flex-shrink: 0;">${statusIcon}</span>`;
 
+            // 4. Ladebalken-Berechnung
             const hasBudget = nCurBud > 0;
             const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
             const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
@@ -628,12 +659,21 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const barColor = isDone ? '#38a169' : (!hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce'));
             const pctLabel = hasBudget ? `${actualPct}%` : '—';
 
+            // Vollflächiger grüner Hintergrund bei erledigtem Status
+            const rowBg = isDone ? '#f0fff4' : 'transparent';
+            const rowHoverBg = isDone ? '#dcfce7' : '#f8fafc';
+
             tableHtml += `
-                <tr style="transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                    <td style="padding-left: ${indentPx + 24}px; padding-top: 6px; padding-bottom: 6px;">
-                        <span style="color:#a0aec0; margin-right:4px;">└──</span>
-                        ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
-                        ${statusBadge}
+                <tr style="background: ${rowBg}; transition: background 0.15s ease;" onmouseover="this.style.background='${rowHoverBg}'" onmouseout="this.style.background='${rowBg}'">
+                    <td style="padding-left: ${indentPx + 24}px; padding-top: 5px; padding-bottom: 5px;">
+                        <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap;">
+                            <span style="color:#a0aec0; margin-right: 4px;">└──</span>
+                            ${statusSlotHtml}
+                            ${nDocBadge}
+                            <span style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis;">
+                                ${iconSvg} ${escapeHtml(n.name)}
+                            </span>
+                        </div>
                     </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
@@ -641,7 +681,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                     <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
                         <div style="display:flex; flex-direction:column; align-items:flex-end;">
                             <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
-                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
+                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : (isDone ? '#22543d' : '#2d3748')};">${formatHoursToHM(nTotal)}</span>
                                 <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
                             </div>
                             <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;">
@@ -653,6 +693,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             `;
         });
 
+        // 5. Rekursion für Unterrahmen
         const subZones = (currentZones || [])
             .filter(cz => cz.parent_zone_id === z.id)
             .map(cz => ({ zone: cz, subtreeEffort: calculateSubtreeIntervalEffort(cz.id) }));
@@ -663,7 +704,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
 
     topZones.forEach(topZoneObj => { renderZoneRows(topZoneObj, 0); });
 
-    // Freie Blöcke ohne Rahmen
+    // Freie Blöcke (ohne Rahmen)
     const unzonedNodes = (currentNodes || [])
         .filter(n => !n.zone_id && n.block_type !== 'note')
         .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
@@ -704,12 +745,16 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-            let statusBadge = '';
+            let statusIcon = '';
             if (isDone) {
-                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#c6f6d5; color:#22543d; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">✅ Erledigt</span>`;
+                statusIcon = '<span style="font-size: 11px;" title="Erledigt">✅</span>';
             } else if (isPending) {
-                statusBadge = `<span style="font-size:9px; font-weight:bold; background:#feebc8; color:#c05621; padding:1px 6px; border-radius:3px; margin-left:6px; display:inline-flex; align-items:center; gap:2px;">⏳ Freigabe</span>`;
+                statusIcon = '<span style="font-size: 11px;" title="Wartet auf Freigabe">⏳</span>';
+            } else {
+                const totalPct = Math.round((nSt.pDesign * 0.5) + (nSt.pDrafting * 0.5));
+                statusIcon = totalPct > 0 ? `<span style="font-size: 9px; color: #718096; font-family: monospace;">${totalPct}%</span>` : '';
             }
+            const statusSlotHtml = `<span style="display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 16px; margin-right: 4px; flex-shrink: 0;">${statusIcon}</span>`;
 
             const hasBudget = nCurBud > 0;
             const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
@@ -718,12 +763,20 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const barColor = isDone ? '#38a169' : (!hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce'));
             const pctLabel = hasBudget ? `${actualPct}%` : '—';
 
+            const rowBg = isDone ? '#f0fff4' : 'transparent';
+            const rowHoverBg = isDone ? '#dcfce7' : '#f8fafc';
+
             tableHtml += `
-                <tr style="transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                    <td style="padding-left: 24px; padding-top: 6px; padding-bottom: 6px;">
-                        <span style="color:#a0aec0; margin-right:4px;">└──</span>
-                        ${nDocBadge}${iconSvg} ${escapeHtml(n.name)}
-                        ${statusBadge}
+                <tr style="background: ${rowBg}; transition: background 0.15s ease;" onmouseover="this.style.background='${rowHoverBg}'" onmouseout="this.style.background='${rowBg}'">
+                    <td style="padding-left: 24px; padding-top: 5px; padding-bottom: 5px;">
+                        <div style="display: flex; align-items: center; overflow: hidden; white-space: nowrap;">
+                            <span style="color:#a0aec0; margin-right: 4px;">└──</span>
+                            ${statusSlotHtml}
+                            ${nDocBadge}
+                            <span style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis;">
+                                ${iconSvg} ${escapeHtml(n.name)}
+                            </span>
+                        </div>
                     </td>
                     <td style="text-align: right; font-weight:bold; color:${nEffort > 0 ? '#2b6cb0' : '#a0aec0'}; font-family:monospace;">+${formatHoursToHM(nEffort)}</td>
                     <td style="text-align: right; color:#718096; font-family:monospace;">${formatHoursToHM(nOldBud)} ➔ ${formatHoursToHM(nCurBud)}</td>
@@ -731,7 +784,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                     <td style="text-align: right; color:#4a5568; font-family:monospace; padding-right: 15px;">
                         <div style="display:flex; flex-direction:column; align-items:flex-end;">
                             <div style="display:flex; justify-content:space-between; width:100%; max-width:95px; font-size:10px; margin-bottom: 2px;">
-                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : '#2d3748'};">${formatHoursToHM(nTotal)}</span>
+                                <span style="font-weight:bold; color:${isOver ? '#e53e3e' : (isDone ? '#22543d' : '#2d3748')};">${formatHoursToHM(nTotal)}</span>
                                 <span style="font-weight:${isOver ? 'bold' : 'normal'}; color:${isOver ? '#e53e3e' : '#718096'};">${pctLabel}</span>
                             </div>
                             <div style="width: 100%; max-width: 95px; height: 5px; background: #edf2f7; border-radius: 3px; overflow: hidden;">
