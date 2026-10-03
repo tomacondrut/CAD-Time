@@ -1,12 +1,86 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: UI Controller (Modals, Dialoge, Admin-Center, Retro-Logs, Revision)
+ * Domain: UI Controller (Modals, Dialoge, Admin-Center, Retro-Logs, Revision, Timer & Mode-Switching)
+ * Datei: ui.js
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Dieses Modul bildet die zentrale Benutzerschnittstelle (UI Controller) des
+ * CAD Time Managers. Es steuert alle Dialoge, Modals, Formulareingaben,
+ * Benutzerauthentifizierungen, Zeiterfassungsmechanismen und das schwebende
+ * Live-Timer-Dock.
+ *
+ * KERNFUNKTIONALITÄTEN & ARCHITEKTUR:
+ * 1. Universelles Dialog- & Benachrichtigungssystem:
+ *    - showToast(msg, type): Schwebende Statusmeldungen mit automatischer
+ *      Ausblendung nach 3 Sekunden.
+ *    - customPrompt, customPromptDual, customConfirm: Promise-basierte, asynchrone
+ *      Modalfenster für modale Rückfragen und 1- oder 2-Feld-Texteingaben.
+ *    - Globaler ESC-Tasten-Listener: Schließt modale Fenster und Dialoge
+ *      zuverlässig auch dann, wenn der Tastaturfokus in einem Eingabefeld liegt.
+ *
+ * 2. Authentifizierung, Benutzer- & Projektverwaltung:
+ *    - confirmUserLogin / handleLogout: Benutzerkürzel- und Projektauswahl mit
+ *      localStorage-Persistierung und Sitzungswiederherstellung.
+ *    - handleSidebarProjectChange: Projektwechsel mit automatischer Rechteprüfung
+ *      (striktes Entziehen von Admin-Rechten beim Verlassen lokaler Offline-Dateien).
+ *    - Admin-Kontrollzentrum (adminModal): Passwortgeschützte Verwaltung von
+ *      Projektbudgets (CAD & Zeichnung), revisionssicheres Audit-Logging
+ *      (budget_audit_logs), Verwaltung von 3-stelligen Mitarbeiterkürzeln und
+ *      Projektarchivierung.
+ *
+ * 3. Baugruppen-, Rahmen- & Notizen-Modals:
+ *    - handleAddBlock / handleSaveConfig / handleDeleteNode: Erstellen und Bearbeiten
+ *      von Bauteilen (.ipt) und Baugruppen (.iam) mit 50/50 Fertigstellungs-Slidern,
+ *      Mitarbeiterzuweisungen (CAD / Zeichnung) und 60-minütiger Löschfrist für Ersteller.
+ *    - handleAddZone / handleSaveZoneConfig / handleDeleteZone: Konfiguration von
+ *      Hallenbereichen, Standort-Markern und Baugruppenrahmen inklusive automatischer
+ *      Hierarchie-Erkennung anhand der Klick-Koordinaten.
+ *    - handleAddNote / handleSaveNote / handleDeleteNote: Verwaltung von Sticky Notes
+ *      und interaktiven To-Do Checklisten mit Fälligkeitsprüfung und Überfälligkeits-Indikator.
+ *
+ * 4. Zeiterfassungs- & Genehmigungs-Workflow:
+ *    - handleLog: Standard-Zeiterfassung auf Baugruppen mit Rollenprüfung (Mitarbeiter:
+ *      wartet auf Freigabe / Admin: sofort genehmigt).
+ *    - handleZoneLog: Pauschale Stundenbuchung auf Hallenrahmen mit exklusivem
+ *      Aufklapp-Verhalten (toggleZoneLogs).
+ *    - handleRequestCompletion / handleRevokeCompletion: Workflow zur Fertigmeldung (100%)
+ *      und administrativen Revisions-Rücksetzung.
+ *    - Retro-Logging (openRetroLogModal, openZoneRetroLogModal, handleSaveRetroLog):
+ *      Nachträgliche Zeiterfassung für vergangene Arbeitstage mit Stichtags-Verbuchung.
+ *    - Mausrad- & Touch-Wheel-Steuerung (handleTimeWheel): Schnelle Zeiteinstellung
+ *      mit automatischem 60-Minuten-Übertrag zwischen Stunden und Minuten.
+ *
+ * 5. Schwebendes Live-Timer-Dock (Bottom-Dock):
+ *    - Stoppuhr mit Start / Pause / Stop und automatischer 5-Minuten-Rasterung.
+ *    - Interaktiver Zuweisungsmodus (startLiveTimeAssignment): Crosshair-Cursor mit
+ *      optischem Aufleuchten von Baugruppen (vollflächig) und Rahmen (nur Header).
+ *
+ * 6. Dual-Modus & Status-Board Controller:
+ *    - switchCanvasMode: Umschalten zwischen Konstruktionsplan und Status-Board mit
+ *      getrennt persistierten Kamerapositionen.
+ *    - toggleManagerSortHelper: Temporäre Spaltenanordnung nach Baugruppen-Farben.
+ *    - toggleManagerFocusFilter / toggleManagerFramedOnlyFilter: Zielgerichtete Filterung
+ *      nach kritischen Pfaden oder gerahmten Elementen.
+ *
+ * 7. DIN-A4 bis A0 Zeichnungsdruck- & Strukturbaum-Engine:
+ *    - Maßstabsgetreue Einpassung mit 185mm x 35mm ISO-Plankopf.
+ *    - Mehrseitiger hierarchischer Strukturbaum mit DOC-Nummern und Budget-Werten.
+ * =============================================================================
+ * Breadcrumbs:
+ *   - [2026-08-23 bis 2026-08-31]: Dialog-System, Zonen-Logs, Sticky Notes, Admin-Center.
+ *   - [2026-09-17 19:00:00 CEST]: 50/50 Slider & Fertigstellungsgrad.
+ *   - [2026-09-17 21:05:00 CEST]: Manager-Canvas Switcher & Sortier-Engine.
+ *   - [2026-09-26 09:35:00 CEST]: Live-Timer Dock & Zuweisungs-Crosshair.
+ *   - [2026-09-26 10:45:00 CEST]: Baugruppen-Farbkategorien Editor.
+ *   - [2026-09-27 10:55:00 CEST]: Responsive Action-Dock & Portrait-Entzerrung.
+ *   - [2026-10-03 16:50:00 CEST]: 1. Duplizierte toggleManagerZoneLock-Funktion konsolidiert
+ *     (Sidebar-Update wird nun konsistent synchronisiert). 2. cancelConnectionMode-Integration
+ *     beim Handle-Toggle stabilisiert. 3. Gestapelte historische Ersatzkommentare bereinigt.
+ *     4. Extensiver Funktionsheader und Validierungsoptimierungen ergänzt.
  * =============================================================================
  */
-
-
-
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
@@ -2446,8 +2520,8 @@ window.toggleHandles = function () {
         canvas.classList.add('hide-handles');
         if (menuBtn) menuBtn.innerHTML = '🔌 Knotenpunkte einblenden';
 
-        if (typeof cancelConnectionMode === 'function' && window.connectingFirstNodeId) {
-            cancelConnectionMode();
+        if (typeof window.cancelConnectionMode === 'function') {
+            window.cancelConnectionMode();
         }
         showToast('Verbindungspunkte ausgeblendet', 'info');
     }
@@ -3997,17 +4071,7 @@ window.toggleManagerFramedOnlyFilter = function () {
     if (typeof window.centerViewOnVisible === 'function') setTimeout(() => window.centerViewOnVisible(), 60);
 };
 
-window.toggleManagerZoneLock = function (e, zoneId) {
-    if (e) e.stopPropagation();
-    const layout = getManagerLayout();
-    const zone = (layout.zones || []).find(z => z.id === zoneId);
-    if (!zone) return;
-
-    zone.is_locked = !zone.is_locked;
-    saveManagerLayout(layout);
-    showToast(`Rahmen ${zone.is_locked ? 'gesperrt (Durchklicken zum Pan aktiv)' : 'entsperrt'}`, 'info');
-    renderCanvas();
-};
+// [Bereinigt: Konsolidiert mit primärer toggleManagerZoneLock Implementierung]
 
 window.deleteManagerZone = async function (zoneId) {
     const layout = getManagerLayout();

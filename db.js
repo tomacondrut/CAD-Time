@@ -2,82 +2,140 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Datenbank, Supabase-Proxy, State & Hierarchie-Rollup Engine
- * ERSETZEN IN: db.js (Gesamte Datei)
- * Zeitstempel: 2026-08-30 10:27:00 CEST
+ * Datei: db.js
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Diese Datei bildet das datenbanktechnische Fundament des CAD Time Managers.
+ * Sie verwaltet den globalen Anwendungs-State, steuert die Persistierung in
+ * Supabase (PostgreSQL) sowie im lokalen Browser-Speicher und führt komplexe
+ * mathematische Aggregationen (Hierarchie-Rollups & Stichtags-Deltas) durch.
+ *
+ * KERNKOMPONENTEN & ARCHITEKTUR:
+ * 1. Supabase-Client & Offline-Schutz:
+ *    - Initialisiert die Echtzeit-Verbindung zur Supabase-Cloud.
+ *    - Enthält einen Schutzmechanismus (Fallback auf localDbMock), falls die
+ *      CDN-Bibliothek (supabase-js) im Offline-Betrieb nicht geladen werden kann.
+ *
+ * 2. localDbMock (Offline-Datenbank-Emulation):
+ *    - Vollständige JavaScript-Emulation des Supabase-Query-Interfaces
+ *      (.from().select().eq().order().single(), .insert(), .update(), .delete()).
+ *    - Unterstützt sämtliche Tabellen: 'project_nodes', 'project_edges',
+ *      'project_zones', 'time_logs', 'zone_flow_arrows' und 'project_snapshots'.
+ *    - Ermöglicht das vollkommen autarke Arbeiten mit lokalen HTML-Dateien ohne
+ *      Server-Verbindung.
+ *
+ * 3. Supabase-Proxy ('db'):
+ *    - Transparenter ES6-Proxy um die Supabase-Instanz.
+ *    - Erkennt anhand des Präfix 'local_' in window.activeProjectId, ob das
+ *      aktive Projekt lokal ist, und leitet Datenabfragen nahtlos an localDbMock um.
+ *    - Schützt Cloud-Projekte vor versehentlichem Überschreiben und hält lokale
+ *      Projektdaten strikt im Browser/IndexedDB isoliert.
+ *
+ * 4. Zentraler State-Store (Globale Arrays & Sets):
+ *    - Hält die aktuellen Datensätze im Arbeitsspeicher:
+ *      currentProjects, currentNodes, currentEdges, currentZones, currentTimeLogs,
+ *      currentUsers, currentAuditLogs, currentFlowArrows, currentSnapshots.
+ *    - Verwaltet flüchtige Interaktions-Zustände: selectedNodeIds, expandedNodes,
+ *      collapsedParents, hiddenTopZoneIds.
+ *
+ * 5. Farbkategorien-Synchronisation (COLOR_PRESETS):
+ *    - Verwaltet die Zuweisung von Baugruppentypen zu Hex-Farben (Förderbänder,
+ *      Bandelemente, Knicke, Schurren etc.).
+ *    - Synchronisiert mit der Server-Tabelle 'app_config' und speichert einen
+ *      lokalen Cache im localStorage.
+ *
+ * 6. Hierarchische Rollup-Engine ('calculateRollups'):
+ *    - Führt eine rekursive Bottom-Up Aggregation der verbuchten Stunden durch.
+ *    - Wandert entlang gerichteter Kanten (project_edges) von Bauteilen zu
+ *      übergeordneten Baugruppen und summiert CAD- (design) und Zeichnungsstunden
+ *      (drafting) zyklensicher (Visited-Set) auf.
+ *
+ * 7. Review-Snapshot Engine:
+ *    - Erzeugt revisionssichere Stichtags-Snapshots (Stichtagsdatum, Soll-Budgets,
+ *      Ist-Stunden, 50/50 Fertigstellungsgrade aller Elemente).
+ *    - Bietet CRUD-Methoden: openCreateSnapshotModal, renderSnapshotList,
+ *      startEditSnapshot, cancelEditSnapshot, handleSaveSnapshot, handleDeleteSnapshot.
+ * =============================================================================
  * Breadcrumbs:
- *   - [2026-08-23 21:10:00 CEST]: Initiale DB-Anbindung, paralleles Laden aller 
- *     Projektdaten inkl. Materialfluss-Pfeile (zone_flow_arrows).
- *   - [2026-08-28 22:50:00 - 2026-08-29 21:15:00 CEST]: Farbpaletten-Optimierung 
- *     (High-Contrast Edition & Farbkreis-Sortierung).
- *   - [2026-08-30 10:20:00 CEST]: Supabase-Proxy integriert zur strikten Isolation 
- *     lokaler Projekte vor unbeabsichtigtem Cloud-Sync.
- *   - [2026-08-30 10:45:00 CEST]: Hardcodiertes ADMIN_PASS entfernt und dynamische 
- *     Abfrage über Supabase-Tabelle 'app_config' zur Proxy-Whitelist hinzugefügt.
- *   - [2026-08-30 10:50:00 CEST]: Doppelte Deklarationen von fetchCanvasData bereinigt 
- *     und direkte realDb-Instanz für Systemabfragen stabilisiert.
+ *   - [2026-08-23 21:10:00 CEST]: Initiale DB-Anbindung, paralleles Laden aller Daten.
+ *   - [2026-08-28 - 2026-08-29 CEST]: High-Contrast Farbsystem.
+ *   - [2026-08-30 10:20:00 CEST]: Supabase-Proxy für strikte Trennung Cloud vs. Lokal.
+ *   - [2026-08-31 18:25:00 CEST]: Array- und Objekt-Guard bei Inserts im localDbMock.
+ *   - [2026-09-26 11:05:00 CEST]: Baugruppen-Farbkategorien mit Supabase 'app_config'.
+ *   - [2026-09-27 16:35:00 CEST]: Defensives Laden von Snapshots in fetchCanvasData.
+ *   - [2026-10-03 08:50:00 CEST]: Snapshot-Verwaltung mit vollständigem CRUD.
+ *   - [2026-10-03 16:50:00 CEST]: 1. Offline-Schutz für Supabase-Client (Fallback auf
+ *     localDbMock bei fehlendem CDN). 2. localDbMock um volle Unterstützung für
+ *     project_snapshots in select/insert/update/delete erweitert. 3. Verallgemeinertes
+ *     order() und single() Chaining. 4. Extensiver Funktionsheader ergänzt.
  * =============================================================================
  */
 
 const SUPABASE_URL = 'https://oazqaykiffiznfgrmihi.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_9XeDSb2HEkzK8yDL1ralIQ_HERPIq3C';
-const realDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Datenbank & Lokaler Mock (Sofortiger Response & Single-Select Fix)
- * ERSETZEN IN: db.js (Konstante localDbMock)
- * Zeitstempel: 2026-08-30 10:35:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 10:20:00 CEST]: Initiale Mock-Engine.
- *   - [2026-08-30 10:35:00 CEST]: Promise-Rückgabe für insert().select().single()
- *     vollständig kompatibel zur Supabase-Client-Syntax gemacht, damit neu 
- *     erstellte Blöcke und Verbindungen ohne Reload/Projektwechsel sofort gerendert werden.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Datenbank & Lokaler Mock (Array/Objekt Guard & Abfrage-Kompatibilität)
- * ERSETZEN IN: db.js (Konstante localDbMock)
- * Zeitstempel: 2026-08-31 18:25:00 CEST
- * Breadcrumbs:
- *   - [2026-08-30 10:35:00 CEST]: Promise-Rückgabe für insert().select().single().
- *   - [2026-08-31 18:25:00 CEST]: Array.isArray Guard bei Inserts ergänzt, damit 
- *     sowohl Objekte als auch Arrays im lokalen Modus fehlerfrei gespeichert werden.
- * =============================================================================
- */
+// Sichere Initialisierung mit Fallback für Offline-Nutzung
+let realDb;
+try {
+    if (typeof supabase !== 'undefined' && supabase && typeof supabase.createClient === 'function') {
+        realDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } else {
+        console.warn("Supabase CDN nicht geladen. Lokaler Offline-Modus aktiv.");
+        realDb = null;
+    }
+} catch (e) {
+    console.warn("Fehler bei Supabase-Initialisierung:", e);
+    realDb = null;
+}
+
 const localDbMock = {
     from: function (table) {
+        const getTableArray = () => {
+            if (table === 'project_nodes') return window.currentNodes || [];
+            if (table === 'project_edges') return window.currentEdges || [];
+            if (table === 'project_zones') return window.currentZones || [];
+            if (table === 'time_logs') return window.currentTimeLogs || [];
+            if (table === 'zone_flow_arrows') return window.currentFlowArrows || [];
+            if (table === 'project_snapshots') return window.currentSnapshots || [];
+            if (table === 'projects') return window.currentProjects || [];
+            if (table === 'app_users') return window.currentUsers || [];
+            if (table === 'budget_audit_logs') return window.currentAuditLogs || [];
+            return [];
+        };
+
         return {
             select: (cols = '*') => ({
                 eq: (col, val) => ({
-                    order: () => {
-                        let targetArr = [];
-                        if (table === 'project_nodes') targetArr = currentNodes;
-                        else if (table === 'project_edges') targetArr = currentEdges;
-                        else if (table === 'project_zones') targetArr = currentZones;
-                        else if (table === 'time_logs') targetArr = currentTimeLogs;
-                        else if (table === 'zone_flow_arrows') targetArr = window.currentFlowArrows || [];
-                        return Promise.resolve({ data: targetArr.filter(x => x[col] === val), error: null });
+                    order: (orderCol = 'id', opt = { ascending: true }) => {
+                        let targetArr = getTableArray().filter(x => x[col] === val);
+                        targetArr.sort((a, b) => {
+                            if (a[orderCol] < b[orderCol]) return opt.ascending ? -1 : 1;
+                            if (a[orderCol] > b[orderCol]) return opt.ascending ? 1 : -1;
+                            return 0;
+                        });
+                        return Promise.resolve({ data: targetArr, error: null });
                     },
                     single: () => {
-                        let targetArr = [];
-                        if (table === 'project_nodes') targetArr = currentNodes;
-                        else if (table === 'project_zones') targetArr = currentZones;
+                        let targetArr = getTableArray();
                         return Promise.resolve({ data: targetArr.find(x => x[col] === val) || null, error: null });
                     },
                     then: (resolve) => {
-                        let targetArr = [];
-                        if (table === 'project_nodes') targetArr = currentNodes;
-                        else if (table === 'project_edges') targetArr = currentEdges;
-                        else if (table === 'project_zones') targetArr = currentZones;
-                        else if (table === 'time_logs') targetArr = currentTimeLogs;
-                        return resolve({ data: targetArr.filter(x => x[col] === val), error: null });
+                        let targetArr = getTableArray().filter(x => x[col] === val);
+                        return resolve({ data: targetArr, error: null });
                     }
                 }),
-                order: () => Promise.resolve({ data: [], error: null }),
-                single: () => Promise.resolve({ data: null, error: null })
+                order: (orderCol = 'id', opt = { ascending: true }) => {
+                    let targetArr = [...getTableArray()];
+                    targetArr.sort((a, b) => {
+                        if (a[orderCol] < b[orderCol]) return opt.ascending ? -1 : 1;
+                        if (a[orderCol] > b[orderCol]) return opt.ascending ? 1 : -1;
+                        return 0;
+                    });
+                    return Promise.resolve({ data: targetArr, error: null });
+                },
+                single: () => Promise.resolve({ data: getTableArray()[0] || null, error: null }),
+                then: (resolve) => resolve({ data: getTableArray(), error: null })
             }),
             insert: (dataOrArr) => {
                 const arr = Array.isArray(dataOrArr) ? dataOrArr : [dataOrArr];
@@ -95,6 +153,10 @@ const localDbMock = {
                     if (!window.currentFlowArrows) window.currentFlowArrows = [];
                     window.currentFlowArrows.push(...insertedItems);
                 }
+                else if (table === 'project_snapshots') {
+                    if (!window.currentSnapshots) window.currentSnapshots = [];
+                    window.currentSnapshots.push(...insertedItems);
+                }
 
                 if (window.handleSaveFile) window.handleSaveFile(true); // Silent Auto-save
 
@@ -108,11 +170,7 @@ const localDbMock = {
             },
             update: (obj) => ({
                 eq: (col, val) => {
-                    let targetArr = [];
-                    if (table === 'project_nodes') targetArr = currentNodes;
-                    else if (table === 'project_zones') targetArr = currentZones;
-                    else if (table === 'time_logs') targetArr = currentTimeLogs;
-
+                    let targetArr = getTableArray();
                     const item = targetArr.find(x => x[col] === val);
                     if (item) Object.assign(item, obj);
                     if (window.handleSaveFile) window.handleSaveFile(true);
@@ -126,6 +184,9 @@ const localDbMock = {
                     else if (table === 'time_logs') currentTimeLogs = currentTimeLogs.filter(x => x[col] !== val);
                     else if (table === 'zone_flow_arrows' && window.currentFlowArrows) {
                         window.currentFlowArrows = window.currentFlowArrows.filter(x => x[col] !== val);
+                    }
+                    else if (table === 'project_snapshots' && window.currentSnapshots) {
+                        window.currentSnapshots = window.currentSnapshots.filter(x => x[col] !== val);
                     }
 
                     if (window.handleSaveFile) window.handleSaveFile(true);
@@ -142,9 +203,11 @@ const localDbMock = {
         };
     }
 };
+
 // Globaler DB-Proxy: Leitet Anfragen je nach Projekt-Präfix ('local_') um
-const db = new Proxy(realDb, {
+const db = new Proxy(realDb || localDbMock, {
     get(target, prop) {
+        if (!realDb) return localDbMock[prop];
         if (prop === 'from') {
             return function (table) {
                 const isLocalActive = window.activeProjectId && window.activeProjectId.startsWith('local_');

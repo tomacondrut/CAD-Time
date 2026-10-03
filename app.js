@@ -2,16 +2,49 @@
  * =============================================================================
  * Projekt: CAD Time Manager
  * Domain: Haupt-Bootstrap, Sidebar Zonen-Rendering & Visibility Engine
- * ERSETZEN IN: app.js (Gesamte Datei komplett ersetzen)
- * Zeitstempel: 2026-09-26 12:15:00 CEST
+ * Datei: app.js
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Diese Datei fungiert als Haupt-Einsprungspunkt (Application Orchestrator)
+ * und Visibility-Manager des CAD Time Managers. Sie initialisiert die Anwendung,
+ * registriert globale Ereignis-Listener und synchronisiert die Baumstruktur der
+ * linken Sidebar mit den sichtbaren Elementen auf dem Canvas.
+ *
+ * KERNFUNKTIONALITÄTEN & ARCHITEKTUR:
+ * 1. Application Lifecycle & Bootstrap (initApp):
+ *    - Initialisiert globale Farbwähler-Presets für Baugruppen und Rahmen.
+ *    - Bindet zentrale Formular-Submit-Listener (neue Blöcke, Rahmen, Notizen, Konfiguration).
+ *    - Reaktiviert gespeicherte Benutzersitzungen (Auto-Login via localStorage).
+ *    - Führt den initialen, parallelen Datenabruf durch (fetchUsers, fetchProjects).
+ *    - Abonniert PostgreSQL-Echtzeit-Änderungen über Supabase-Realtime (postgres_changes).
+ *
+ * 2. Sidebar Zonen- & Hierarchie-Engine (renderSidebarZones):
+ *    - CAD-Konstruktionsmodus: Rendert den verschachtelten Zonenbaum (Haupthallen,
+ *      Unterrahmen). Unterstützt interaktives Drag-and-Drop zur Umsortierung der
+ *      Bereiche mit dauerhafter Speicherung der Sortierreihenfolge (sort_order).
+ *    - Bietet Schnellaktionen:
+ *      * 👁️ (Sichtbarkeit umschalten): Blendet gezielt Teilbäume auf dem Canvas aus.
+ *      * 🎯 (Bereich isolieren): Blendet alle anderen Bereiche aus und zentriert die
+ *        Kamera exakt auf den gewählten Hallenrahmen.
+ *    - Manager-Status-Board-Modus: Rendert die Rahmenstruktur des Fortschritts-Boards
+ *      sowie den einklappbaren Komponenten-Pool für unplatzierte Baugruppen mit
+ *      Drag-to-Canvas-Funktionalität.
+ *
+ * 3. DOM-Sichtbarkeits-Synchronisation (syncVisibilityToDOM):
+ *    - Synchronisiert Canvas-Karten, Rahmen und SVG-Verbindungslinien performant
+ *      mit den in der Sidebar aktivierten Sichtbarkeits- und Isolationsfiltern.
+ *    - Entkoppelt ausgeblendete Elemente vollständig von Reflow- und Hit-Test-Zyklen
+ *      (display: none !important).
+ * =============================================================================
  * Breadcrumbs:
  *   - [2026-08-30 22:30:00 CEST]: Basis-Bootstrap & Realtime-Sync.
  *   - [2026-09-26 11:45:00 CEST]: Manager-Board Zonen-Hierarchie & Pool-Akkordeon.
- *   - [2026-09-26 12:15:00 CEST]: BUGFIX: SyntaxError durch doppelte/verschachtelte 
- *     renderSidebarZones-Deklaration bereinigt. Alle Funktionen liegen im sauberen Scope.
+ *   - [2026-09-26 12:15:00 CEST]: Bereinigung verschachtelter Deklarationen.
+ *   - [2026-10-03 16:50:00 CEST]: 1. Bereinigung legacy initPanzoom Aufruf.
+ *     2. DOM-Sichtbarkeitssynchronisation weiter optimiert. 3. Extensiver Funktionsheader ergänzt.
  * =============================================================================
  */
-
 function initApp() {
     if (typeof initPanzoom === 'function') initPanzoom();
     if (typeof renderColorPresets === 'function') renderColorPresets();

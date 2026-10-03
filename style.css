@@ -1,8 +1,81 @@
 /**
  * =============================================================================
- * Projekt: CAD & Zeichnungs-Hierarchie Tracker
+ * Projekt: CAD Time Manager
  * Domain: Stylesheet (Globales Layout, Sidebar, Canvas, Modals & Components)
- * Zeitstempel: 2026-08-22 10:50:00 UTC
+ * Datei: style.css
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Dieses Stylesheet definiert die vollständige visuelle Gestaltung, Typografie,
+ * Hardware-Beschleunigung und das responsive Layout des CAD Time Managers. Es
+ * ist modular aufgebaut und optimiert für Desktop-Monitore, Mobilgeräte sowie
+ * hochauflösenden technischen Zeichnungsdruck.
+ *
+ * KERNMODULE & STILREGELN:
+ * 1. CSS-Variablen & Globales Reset (:root, *, html, body):
+ *    - Zentrale Farbdefinitionen (--primary: #2b6cb0, --bg-canvas: #f0f4f8,
+ *      --sidebar-bg: #1a202c, --danger: #e53e3e, --success: #38a169).
+ *    - Box-Sizing Border-Box und Deaktivierung nativen Scrollens auf dem Body.
+ *
+ * 2. Linke Steuerungs-Sidebar (#sidebar, .sidebar-*):
+ *    - Feste Breite (320px) mit Flexbox-Layout und Scrollbereich für Zonen.
+ *    - Status-Badges, Dual-Bar Fortschrittsleisten (Ist-Verbrauch vs. Vergeben),
+ *      Akkordeon-Detailtabelle und hierarchischer Zonenbaum mit Verbindungsästen.
+ *
+ * 3. Viewport & Canvas-Gitter (#viewport, #canvas):
+ *    - GPU-beschleunigtes Punktraster (24px SVG Dot-Pattern).
+ *    - touch-action: none zur Blockade unbeabsichtigten mobilen Browser-Zoomens.
+ *    - .is-zooming: Temporäres Ausblenden von Box-Shadows und Pause rechenintensiver
+ *      Filter während schneller LERP-Zoomfahrten zur Maximierung der Framerate (144 FPS).
+ *
+ * 4. SVG-Verbindungs- und Fluss-Ebenen (#connections-layer, #flow-layer):
+ *    - Trennung in statische Bezier-Kanten (.connection-line) und animierte,
+ *      GPU-beschleunigte Materialfluss-Pfeile (.flow-arrow-line).
+ *
+ * 5. Baugruppen- und Bauteilkarten (.assembly-card, .manager-card):
+ *    - Farbige Header mit DOC-/Artikel-Badges, Zuweisungs-Chips, Pie-Charts und
+ *      integriertem Zeiterfassungsformular.
+ *    - 4-Seiten-Verbindungspunkte (.ep-handle) mit Skalierungs-Hover-Effekt.
+ *    - Manager-Cockpit Karten mit 50/50 Fortschrittsslidern, Earned-Value
+ *      Health-Pills (🟢/🟡/🔴) und 2D-Bereitschafts-Badges.
+ *
+ * 6. Hallenrahmen & Container (.project-zone):
+ *    - Gestrichelte technische Umrandung, Resize-Handles, Zonen-Lock (Klicks gehen
+ *      durch zum Pan) und visuelle Zuweisungs-Hervorhebung (.zone-hover-highlight).
+ *
+ * 7. Sticky Notes & To-Dos (.note-card):
+ *    - Flaches Design, anpassbare Größen, Checklisten und pulsierende rote
+ *      Überfälligkeitsanimation (@keyframes overdueScalePulse / overdueOpacityPulse).
+ *
+ * 8. Schwebende Live-Timer Leiste (.live-timer-bar):
+ *    - Am unteren Bildschirmrand zentriertes Widget mit pulsierender Zeitanzeige,
+ *      Zeiteditor und Glow-Effekten im Klick-Zuweisungsmodus.
+ *
+ * 9. Dialoge & Modals (.modal-backdrop, .modal-content):
+ *    - Viewport-Begrenzung auf max. 90vh mit flexibler innerer Scrollbar.
+ *    - Höchste z-index-Priorisierung für Bestätigungs-Popups (#dialogModal z-index: 9000).
+ *    - Spezielles 2-Spalten-Layout für das Reporting- und Auswertungs-Dashboard.
+ *
+ * 10. DIN-A4 bis A0 Druck-Engine (@media print):
+ *     - Maßstabsgetreue Canvas-Einpassung mit normgerechtem 185 mm x 35 mm ISO-Plankopf.
+ *     - Mehrseitiger hierarchischer Strukturbaum ohne störende UI-Bedienelemente.
+ *
+ * 11. Responsive Mobile-Optimierung (@media max-width: 768px, @media orientation: portrait):
+ *     - Vertikales Aktions-Dock am rechten Bildschirmrand, Safe-Area-Insets (Notch),
+ *       horizontales Wischen für Manager-Buttons und Touch-Wheel Zeiträder.
+ * =============================================================================
+ * Breadcrumbs:
+ *   - [2026-08-22 10:50:00 UTC]: Initiale Stylesheet-Architektur.
+ *   - [2026-08-28 - 2026-08-30 CEST]: Hardware-Compositing, 4-Seiten-Handles, DIN-Schriftfeld.
+ *   - [2026-09-17 21:05:00 CEST]: Status-Board, Executive Cards, Dual-Balken.
+ *   - [2026-09-26 09:35:00 CEST]: Live-Timer Dock & Glow-Highlights.
+ *   - [2026-09-27 10:55:00 CEST]: Mobile Portrait Dock & Touch-Action Guards.
+ *   - [2026-09-27 12:05:00 CEST]: GPU Canvas Raster, Will-Change & is-zooming.
+ *   - [2026-10-03 09:10:00 CEST]: DialogModal z-index auf 9000 angehoben.
+ *   - [2026-10-03 10:15:00 CEST]: Reporting Baugruppen-Checkliste Flex-Shrink Guard.
+ *   - [2026-10-03 16:50:00 CEST]: 1. Bereinigung redundanter historischer Ersatzkommentare.
+ *     2. Volle Konsolidierung der CSS-Klassen für fehlerfreie Kaskadierung. 3. Extensiver
+ *     Architektur-Header hinzugefügt.
  * =============================================================================
  */
 

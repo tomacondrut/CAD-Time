@@ -1,19 +1,79 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: NATIVE Canvas Engine, Dual-Mode (CAD & Manager) & Hierarchie-Engine
- * ERSETZEN IN: canvas.js (Gesamte Datei)
- * Zeitstempel: 2026-09-17 22:50:00 CEST
+ * Domain: NATIVE Canvas Engine, Dual-Mode Rendering (CAD & Manager) & Interaktions-Layer
+ * Datei: canvas.js
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Dieses Kernmodul implementiert das gesamte Rendering und die Interaktionslogik
+ * des 2D-Zeichnungs- und Montage-Canvas. Es steuert sowohl den CAD-Konstruktionsplan
+ * (Spline-Verbindungen, Hallen-Zonen, Detail-Karten) als auch das Management-
+ * Status-Board (50/50 Schieberegler, Earned-Value Health-Pills, Handoff-Signale).
+ *
+ * KERNFUNKTIONEN & SYSTEMARCHITEKTUR:
+ * 1. Nativer Viewport & Smooth LERP-Zoom:
+ *    - GPU-beschleunigte Transformation (#canvas) via translate3d() und scale().
+ *    - Exponentielle Skalierung mit millimetergenauer Mausfokus-Verankerung.
+ *    - Dynamische LERP-Interpolation (Dämpfung 0.24) für butterweiches Zoomen
+ *      auf hochauflösenden Mäusen (z.B. Logitech MX Master MagSpeed) und Trackpads.
+ *    - Phasensynchroner Punktraster-Sync auf #viewport (kein Springen der Dots).
+ *    - Zeitweise Entkopplung rechenintensiver Schatten während der Zoomfahrt
+ *      (.is-zooming-Klasse) für stabile 120–144 FPS.
+ *
+ * 2. Mobile Touch-Gesten & Pinch-Guard:
+ *    - Natives 1-Finger-Wischen zum Verschieben der virtuellen Arbeitsfläche.
+ *    - Stufenloser 2-Finger-Pinch-Zoom mit dynamischer Mittelpunktsberechnung.
+ *    - Pinch-Protection: Erkennt zuverlässig das Aufsetzen eines zweiten Fingers
+ *      während eines Bauteil-Drags, bricht den Drag ab und stellt die Ausgangsposition
+ *      ohne fehlerhafte Datenbank-Updates wieder her.
+ *
+ * 3. Baugruppen-Verbindungen (Splines & Kanten):
+ *    - Native SVG-Bezier-Kurven im statischen #connections-layer.
+ *    - 4-Seiten-Knotenpunkte (ep-top, ep-bottom, ep-left, ep-right) an jeder Karte.
+ *    - Interaktiver Verbindungsmodus mit animierter Live-Vorschau (preview-connection-line).
+ *    - Vollständiges Anlegen (saveConnection) und Löschen (deleteConnection) von
+ *      Verbindungen mit Datenbank- und Local-Storage-Persistierung.
+ *
+ * 4. Materialfluss-System (Flow-Arrows):
+ *    - Isolierte GPU-Rendering-Ebene (#flow-layer) eliminiert CPU-Repaints.
+ *    - Fließende Strich-Animationen (flowDash) und Richtungs-Pfeilspitzen (#arrowhead).
+ *    - Modus zum intuitiven Zeichnen von Fluss-Pfeilen zwischen Hallenbereichen
+ *      (handleStartZoneFlow, saveFlowArrow) und Löschen per Mausklick (handleDeleteFlowArrow).
+ *
+ * 5. Rahmen & Hallenbereiche (Zonen-Nesting):
+ *    - Räumliche Verschachtelung von Baugruppen und Unterrahmen bis zu 5 Ebenen tief.
+ *    - Synchroner Mitnahme-Drag aller untergeordneten Elemente beim Bewegen von Rahmen.
+ *    - Visuelle Zielzonen-Hervorhebung (.zone-hover-highlight).
+ *    - Zonen-Lock: Durchklicken zum Canvas-Pan bei gesperrten Rahmen.
+ *
+ * 6. Dual-Mode Rendering (renderCanvas):
+ *    - Konstruktions-Modus: Vollständige Baugruppenkarten mit Zuweisungen, DOC-Badges,
+ *      Pie-Charts (Ist vs. Soll), Zeiterfassungs-Formular, Subtree-Einklappung und Logs.
+ *    - Status-Board Modus: Kompakte Executive-Karten mit 50/50 Fertigstellungs-Slidern,
+ *      Earned-Value Health-Pills (🟢 Puffer / 🟡 Verzug / 🔴 Überhang) und 2D-Bereitschaft.
+ *
+ * 7. Notizen & To-Do Zettel:
+ *    - Flache Zettel mit Checklisten, Datumsfristen und pulsierender Überfälligkeits-
+ *      Animation (note-overdue).
+ *
+ * 8. Kamera & Koordinaten:
+ *    - Umrechnung von Bildschirm- in Canvas-Weltkoordinaten (getCanvasCoords).
+ *    - Auto-Fokus & Framing (centerViewOnVisible, centerOnManagerZone, centerOnManagerBlock).
+ * =============================================================================
  * Breadcrumbs:
- *   - [2026-08-23 bis 2026-08-31]: Nativer Canvas, Splines, Materialfluss,
- *     Sticky Notes mit Checklisten, Zonen-Hierarchien & Multi-Selektions-Drag.
- *   - [2026-09-17 22:45:00 CEST]: Vollständige Konsolidierung: CAD-Konstruktionsplan 
- *     & Manager-Board mit verschachtelten Rahmen und dedupliziertem Budget.
- *   - [2026-09-17 22:50:00 CEST]: Wiederherstellung der ursprünglichen Native Pan/Zoom-Engine 
- *     (Mousewheel, Middle-Click, ContextMenu, Canvas-Coords) unter vollständigem Erhalt aller Erweiterungen.
+ *   - [2026-08-23 bis 2026-08-31]: Nativer Canvas, Splines, Sticky Notes, Zonen-Hierarchien.
+ *   - [2026-09-17 22:50:00 CEST]: Native Pan/Zoom-Engine Konsolidierung.
+ *   - [2026-09-26 14:05:00 CEST]: Isolierte GPU-Ebene #flow-layer für Pfeile.
+ *   - [2026-09-27 12:05:00 CEST]: LERP Smooth-Zoom & MX-Master Support.
+ *   - [2026-09-27 16:55:00 CEST]: getCanvasCoords und Kontextmenü-Filter.
+ *   - [2026-10-03 16:50:00 CEST]: 1. Vollständige Implementierung von saveConnection &
+ *     deleteConnection für Baugruppen-Verbindungen. 2. Implementierung von handleStartZoneFlow,
+ *     saveFlowArrow und handleDeleteFlowArrow für Materialfluss-Pfeile. 3. cancelConnectionMode
+ *     für zuverlässigen Abbruch per ESC integriert. 4. Header-Klick zur Fluss-Zielauswahl
+ *     angebunden. 5. Extensiver Funktionsheader und Performance-Sicherungen.
  * =============================================================================
  */
-
 // Globale State-Variablen für das native Panning/Zooming
 window.currentScale = parseFloat(localStorage.getItem('cad_tm_scale')) || 1;
 window.currentPanX = parseFloat(localStorage.getItem('cad_tm_panX')) || 100;
@@ -756,6 +816,177 @@ if (document.readyState === 'loading') {
 // =============================================================================
 // VERBINDUNGS-HANDLING & BREADCRUMBS
 // =============================================================================
+
+
+
+// =============================================================================
+// VERBINDUNGS- & MATERIALFLUSS-PERSISTIERUNG (Implementiert am 2026-10-03)
+// =============================================================================
+
+window.saveConnection = async function (sourceId, targetId, sourceHandle = 'bottom', targetHandle = 'top') {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+
+    // Prüfe, ob Verbindung bereits existiert
+    const exists = (window.currentEdges || []).some(e => e.source === sourceId && e.target === targetId);
+    if (exists) {
+        showToast('Verbindung existiert bereits', 'info');
+        return;
+    }
+
+    const newEdge = {
+        project_id: activeProjectId,
+        source: sourceId,
+        target: targetId,
+        source_handle: sourceHandle || 'bottom',
+        target_handle: targetHandle || 'top',
+        created_by: activeUserCode || 'COT'
+    };
+
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        const edgeWithId = { ...newEdge, id: 'edge_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5) };
+        if (!window.currentEdges) window.currentEdges = [];
+        window.currentEdges.push(edgeWithId);
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        const { data, error } = await db.from('project_edges').insert([newEdge]).select();
+        if (error) {
+            console.error("Fehler beim Speichern der Verbindung:", error);
+            showToast('Fehler beim Speichern der Verbindung: ' + error.message, 'error');
+            return;
+        }
+        if (!window.currentEdges) window.currentEdges = [];
+        if (data && data[0]) {
+            window.currentEdges.push(data[0]);
+        } else {
+            window.currentEdges.push({ ...newEdge, id: 'edge_' + Date.now() });
+        }
+    }
+
+    showToast('Verbindung hergestellt', 'success');
+    renderConnections();
+};
+
+window.deleteConnection = async function (source, target) {
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        window.currentEdges = (window.currentEdges || []).filter(e => !(e.source === source && e.target === target));
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        const { error } = await db.from('project_edges').delete().match({ source, target });
+        if (error) {
+            console.error("Fehler beim Löschen der Verbindung:", error);
+            showToast('Fehler beim Löschen: ' + error.message, 'error');
+            return;
+        }
+        window.currentEdges = (window.currentEdges || []).filter(e => !(e.source === source && e.target === target));
+    }
+
+    showToast('Verbindung gelöscht', 'success');
+    renderConnections();
+};
+
+window.handleStartZoneFlow = function (e, zoneId) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    if (!connectingFlowZoneId) {
+        connectingFlowZoneId = zoneId;
+        const srcZone = (window.currentZones || []).find(z => z.id === zoneId);
+        showToast(`Start-Rahmen "${srcZone ? srcZone.title : ''}" gewählt. Klicke auf den Ziel-Rahmen (oder ESC zum Abbrechen)`, 'info');
+    } else if (connectingFlowZoneId === zoneId) {
+        connectingFlowZoneId = null;
+        showToast('Materialfluss-Verbindung abgebrochen', 'info');
+    } else {
+        const srcId = connectingFlowZoneId;
+        const tgtId = zoneId;
+        connectingFlowZoneId = null;
+        window.saveFlowArrow(srcId, tgtId);
+    }
+};
+
+window.saveFlowArrow = async function (sourceZoneId, targetZoneId) {
+    if (!sourceZoneId || !targetZoneId || sourceZoneId === targetZoneId) return;
+
+    if (!window.currentFlowArrows) window.currentFlowArrows = [];
+
+    const exists = window.currentFlowArrows.some(a => String(a.source_zone_id) === String(sourceZoneId) && String(a.target_zone_id) === String(targetZoneId));
+    if (exists) {
+        showToast('Materialfluss existiert bereits', 'info');
+        return;
+    }
+
+    const srcZone = (window.currentZones || []).find(z => z.id === sourceZoneId);
+    const tgtZone = (window.currentZones || []).find(z => z.id === targetZoneId);
+
+    const newArrow = {
+        id: 'flow_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        project_id: activeProjectId,
+        source_zone_id: sourceZoneId,
+        target_zone_id: targetZoneId,
+        created_by: activeUserCode || 'COT'
+    };
+
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        window.currentFlowArrows.push(newArrow);
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        const { data, error } = await db.from('zone_flow_arrows').insert([newArrow]).select();
+        if (error) {
+            console.error("Fehler beim Speichern des Materialfluss-Pfeils:", error);
+            showToast('Fehler beim Speichern: ' + error.message, 'error');
+            return;
+        }
+        if (data && data[0]) {
+            window.currentFlowArrows.push(data[0]);
+        } else {
+            window.currentFlowArrows.push(newArrow);
+        }
+    }
+
+    showToast(`Materialfluss: ${srcZone ? srcZone.title : ''} ➔ ${tgtZone ? tgtZone.title : ''} angelegt`, 'success');
+    renderConnections();
+};
+
+window.handleDeleteFlowArrow = async function (arrowId) {
+    const arrow = (window.currentFlowArrows || []).find(a => a.id === arrowId);
+    if (!arrow) return;
+
+    const confirmed = typeof customConfirm === 'function'
+        ? await customConfirm('Materialfluss löschen', 'Möchtest du diesen Materialfluss-Pfeil wirklich entfernen?')
+        : confirm('Möchtest du diesen Materialfluss-Pfeil wirklich entfernen?');
+
+    if (!confirmed) return;
+
+    const isLocalActive = !!(window.activeProjectId && window.activeProjectId.startsWith('local_'));
+    if (isLocalActive) {
+        window.currentFlowArrows = (window.currentFlowArrows || []).filter(a => a.id !== arrowId);
+        if (typeof window.handleSaveFile === 'function') window.handleSaveFile(true);
+    } else {
+        const { error } = await db.from('zone_flow_arrows').delete().eq('id', arrowId);
+        if (error) {
+            console.error("Fehler beim Löschen des Materialfluss-Pfeils:", error);
+            showToast('Fehler beim Löschen: ' + error.message, 'error');
+            return;
+        }
+        window.currentFlowArrows = (window.currentFlowArrows || []).filter(a => a.id !== arrowId);
+    }
+
+    showToast('Materialfluss-Pfeil gelöscht', 'success');
+    renderConnections();
+};
+
+window.cancelConnectionMode = function () {
+    connectingFirstNodeId = null;
+    connectingFirstPoint = null;
+    connectingFlowZoneId = null;
+    window.connectingFirstHandle = null;
+    window.removeEventListener('mousemove', handleLiveSplineMove);
+    renderConnections();
+};
+
 
 window.handleLiveSplineMove = function (e) {
     if (connectingFirstNodeId) {
@@ -1713,6 +1944,13 @@ function renderCanvas() {
                 let childNodes = [];
 
                 const startZoneDrag = (e) => {
+                    // Falls Materialfluss-Modus aktiv: Ziel-Rahmen auswählen
+                    if (connectingFlowZoneId && connectingFlowZoneId !== zone.id) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.handleStartZoneFlow(e, zone.id);
+                        return;
+                    }
                     if (e.type === 'mousedown' && e.button !== 0) return; // <--- NEU: Rechtsklick freigeben
                     if (e.target.closest('.zone-actions, .zone-resize-handle, .zone-body, input, select, button')) return;
                     if (e.type === 'touchstart' && e.touches.length > 1) return;

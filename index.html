@@ -1,3 +1,63 @@
+<!--
+=============================================================================
+Projekt: CAD Time Manager
+Domain: Haupt-HTML-Template & Viewport-Struktur
+Datei: index.html
+Zeitstempel: 2026-10-03 16:50:00 CEST
+=============================================================================
+FUNKTIONSBESCHREIBUNG (EXTENSIV):
+Diese Datei stellt das semantische DOM-Gerüst des CAD Time Managers bereit.
+Sie integriert alle visuellen Layer, Navigationsleisten, Dialogfenster und bindet
+die modulare JavaScript-Anwendungslogik ein.
+
+STRUKTUR & DOM-BEREICHE:
+1. Meta-Tags & externe CDN-Bibliotheken:
+   - Viewport-Definition mit touch-action und Pinchen-Schutz auf Mobilgeräten.
+   - Einbindung von Panzoom (Fallback), Supabase JS Client v2 und html2pdf.js.
+
+2. Canvas-Kontextmenü (#canvasContextMenu):
+   - Rechtsklick-Menü mit kontextabhängiger Umschaltung (Konstruktionsplan vs.
+     Status-Board, Freifläche vs. Karte/Rahmen).
+
+3. Dialog- und Hinweisfenster (#dialogModal):
+   - Universeller Bestätigungs- und Eingabedialog (z-index: 9000).
+
+4. Umfassender System-Leitfaden (#infoGuideModal):
+   - 6 thematische Registerkarten (Navigation, Blöcke & Rahmen, Status-Board,
+     Zeiterfassung, Reviews & Snapshots, Speicher & Druck).
+
+5. Modals für Elemente, Zeiterfassung & Verwaltung:
+   - #userLoginOverlay: Initialer Login und Projektauswahl.
+   - #newBlockModal / #configModal: Anlegen & Konfigurieren von Baugruppen und Bauteilen.
+   - #newZoneModal / #editZoneModal: Konfiguration von Hallenbereichen und Rahmen.
+   - #retroLogModal: Nachträgliche Zeiterfassung für vergangene Arbeitstage.
+   - #archiveModal: Projektarchiv für abgeschlossene Aufträge.
+   - #adminModal: Erweitertes Kontrollzentrum für Projektbudgets, Benutzerkürzel & Audit-Logs.
+   - #newNoteModal / #editNoteModal: Sticky Notes & interaktive To-Do Listen.
+   - #printModal: Druckdialog für DIN A4–A0 Zeichnungsblätter und hierarchische Strukturbaumberichte.
+   - #colorCategoryModal: Farb- und Typenzuweisung für Fördertechnik-Baugruppen.
+   - #createSnapshotModal: Stichtags-Snapshots erstellen, bearbeiten und löschen.
+   - #reportModal: 2-Spalten Controlling-Dashboard für Projektstatus, KPIs und Snapshot-Deltas.
+
+6. Arbeitsbereich (#app-container):
+   - Linke Sidebar (#sidebar): Projektwahlschalter, Budgetleisten, Zonenbaum.
+   - Viewport (#viewport): Haupt-Arbeitsfläche mit #canvas, #connections-layer (Splines),
+     #flow-layer (Materialflusspfeile), Modus-Umschalter, Top-Action-Dock und #liveTimerBar.
+
+7. Skript-Architektur:
+   - ui.js -> db.js -> report.js -> canvas.js -> file_manager.js -> app.js
+=============================================================================
+Breadcrumbs:
+  - [2026-08-23 bis 2026-08-31]: Initiales Layout, Modals, Zonen-Hierarchien.
+  - [2026-09-17 21:05:00 CEST]: Status-Board Umschalter & Manager-Modals.
+  - [2026-09-26 09:35:00 CEST]: Schwebendes Live-Timer Bottom-Dock.
+  - [2026-09-27 10:55:00 CEST]: Vertikales Action-Dock für Mobile-Portrait.
+  - [2026-10-03 08:50:00 CEST]: Snapshot-Verwaltungszentrum mit CRUD.
+  - [2026-10-03 10:05:00 CEST]: 2-Spalten Reporting- und Auswertungs-Dashboard.
+  - [2026-10-03 16:50:00 CEST]: 1. Bereinigung gestapelter historischer Kommentarblöcke.
+    2. Vollständige Integration des Moduls report.js. 3. Extensiver Dokumentationsheader.
+=============================================================================
+-->
 <!DOCTYPE html>
 <html lang="de">
 <head>

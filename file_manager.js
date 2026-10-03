@@ -1,17 +1,52 @@
 /**
  * =============================================================================
  * Projekt: CAD Time Manager
- * Domain: Lokale Dateiverwaltung (Speichern, Backup, Laden, IndexedDB)
- * ERSETZEN IN: file_manager.js (Gesamte Datei)
- * Zeitstempel: 2026-08-30 11:15:00 CEST
+ * Domain: Lokale Dateiverwaltung (Speichern, Backup, Laden, IndexedDB & Standalone HTML Packaging)
+ * Datei: file_manager.js
+ * Zeitstempel: 2026-10-03 16:50:00 CEST
+ * =============================================================================
+ * FUNKTIONSBESCHREIBUNG (EXTENSIV):
+ * Dieses Modul verwaltet die lokale Offline-Persistenz und Dateisystem-Integration
+ * des CAD Time Managers. Es entkoppelt Offline-Projekte vollständig von der
+ * Supabase-Cloud und ermöglicht das direkte, native Arbeiten auf der lokalen Festplatte.
+ *
+ * KERNFUNKTIONALITÄTEN & ARCHITEKTUR:
+ * 1. File System Access API & In-Place Saving:
+ *    - Ermöglicht das direkte Überschreiben zuvor geöffneter lokaler HTML-Dateien
+ *      (handleSaveFile) ohne lästigen Download-Spam im Browser.
+ *    - Nutzt 'showSaveFilePicker' und 'showOpenFilePicker' für native Betriebssystem-
+ *      Dateidialoge.
+ *
+ * 2. IndexedDB-Projekt-Registry ('CAD_Local_Projects'):
+ *    - Verwaltet eine lokale Objektdatenbank im Browser, in der File-System-Handles,
+ *      Objektnummern und Projektbudgets offline-persistiert werden.
+ *    - Erlaubt das nahtlose Wechseln zwischen verschiedenen lokalen Projekten
+ *      über das Haupt- und Sidebar-Dropdown.
+ *
+ * 3. Standalone HTML-Packaging & Datenkapselung:
+ *    - Speichert alle Projektdaten (Baugruppen, Verbindungen, Zonen, Zeiteinträge,
+ *      Materialflusspfeile, Manager-Layout, Review-Snapshots und Farbkategorien)
+ *      strukturiert in einem JSON-Block (<script id="cad-data" type="application/json">).
+ *    - Erzeugt vollständig autonome HTML-Dateien, die per Doppelklick geöffnet
+ *      oder im Team weitergegeben werden können.
+ *
+ * 4. Farbkategorien-Persistenz (color_categories):
+ *    - Sichert anlagenspezifische Baugruppen-Farben (Bandelemente, Trichter, Knicke)
+ *      direkt in der Projektdatei und stellt diese beim Import automatisch wieder her.
+ *
+ * 5. Automatischer Wiederherstellungs-Hook (localStorage.cad_tm_local_import):
+ *    - Fängt lokale HTML-Dateien beim Öffnen im Browser ab und überführt sie
+ *      vollautomatisch in ein vollwertiges lokales Workspace-Projekt.
+ * =============================================================================
  * Breadcrumbs:
- *   - [2026-08-30 10:30:00 CEST]: Abfrage von Objekt-Nr. und Projektname auf ein
- *     gemeinsames 2-Felder-Fenster (customPromptDual) konsolidiert.
- *   - [2026-08-30 11:15:00 CEST]: window.loadedLocalProjectId Zuweisung in allen
- *     Import/Erstellen Funktionen ergänzt, um Lade-Schleifen beim Speichern zu verhindern.
+ *   - [2026-08-30 10:30:00 CEST]: 2-Felder-Dialog für Projektanlage (customPromptDual).
+ *   - [2026-08-30 11:15:00 CEST]: loadedLocalProjectId Caching gegen Lade-Schleifen.
+ *   - [2026-08-31 17:50:00 CEST]: Strikte Projekt-Isolation (Cloud-Backup vs. In-Place Save).
+ *   - [2026-10-03 16:50:00 CEST]: 1. Farbkategorien (color_categories) in den gespeicherten
+ *     HTML-Payload aufgenommen und beim Laden wiederhergestellt. 2. Fehlertoleranz beim
+ *     Einlesen korrupter Dateien erhöht. 3. Extensiver Funktionsheader ergänzt.
  * =============================================================================
  */
-
 window.isLocalFileOpen = false;
 window.localFileHandle = null;
 window.localDB = null;
@@ -131,7 +166,8 @@ window.handleSaveFile = async function (silent = false) {
         logs: currentTimeLogs || [],
         arrows: window.currentFlowArrows || [],
         manager_layout: (typeof getManagerLayout === 'function') ? getManagerLayout() : null,
-        snapshots: window.currentSnapshots || [] // <--- NEU
+        snapshots: window.currentSnapshots || [],
+        color_categories: window.COLOR_PRESETS || []
     };
 
     const jsonStr = JSON.stringify(payload);
@@ -291,7 +327,13 @@ window.processLoadedHtml = function (htmlText, triggerRender = true) {
             currentZones = data.zones || [];
             currentTimeLogs = data.logs || [];
             window.currentFlowArrows = data.arrows || [];
-            window.currentSnapshots = data.snapshots || []; // <--- NEU
+            window.currentSnapshots = data.snapshots || [];
+            if (data.color_categories && Array.isArray(data.color_categories) && data.color_categories.length > 0) {
+                window.COLOR_PRESETS = data.color_categories;
+                localStorage.setItem('cad_tm_color_categories', JSON.stringify(data.color_categories));
+                if (typeof renderColorPresets === 'function') renderColorPresets();
+                if (typeof renderZoneColorPresets === 'function') renderZoneColorPresets();
+            }
 
             // Manager-Layout aus Datei einlesen
             if (data.manager_layout && typeof saveManagerLayout === 'function') {
