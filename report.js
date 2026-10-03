@@ -3,18 +3,23 @@
  * Projekt: CAD Time Manager
  * Domain: Reporting, Stichtags-Rekonstruktion, Status-Tracking & PDF-Export
  * ERSETZEN IN: report.js (Gesamte Datei komplett ersetzen)
- * Zeitstempel: 2026-10-03 09:25:00 CEST
+ * Zeitstempel: 2026-10-03 09:45:00 CEST
  * Breadcrumbs:
  *   - [2026-08-22 bis 2026-08-31]: Initiale Stichtags-Engine, Zonen-Sortierung,
  *     KW-Aufschlüsselung und 3-spaltige Summenkacheln.
  *   - [2026-09-27 16:35:00 CEST]: Hierarchischer Rollup ab oberstem Rahmen,
  *     Top-Down Sortierung nach Aufwand und Snapshot-B-Differenzmatrix.
- *   - [2026-10-03 08:48:00 CEST]: Inline Data-Bars mit Überhangs- und Null-Budget-Schutz.
- *   - [2026-10-03 09:25:00 CEST]: VOLLSTÄNDIGER STATUS-AUSBAU:
- *     1. Status-Erkennung (Erledigt ✅ / Freigabe ⏳ / Offen %) für Blöcke & Zonen.
- *     2. Zonen-Fertigstellungszähler (z.B. "3/4 Erledigt").
- *     3. FilterrepFilterStatus für gezieltes Controlling offener vs. erledigter Elemente.
- *     4. Top-5 Kostentreiber-Balkendiagramm und Section-Toggles integriert.
+ *   - [2026-10-03 08:48:00 CEST]: Inline Data-Bars mit Überhangs- & Null-Budget-Schutz.
+ *   - [2026-10-03 09:25:00 CEST]: Status-Erkennung (✅/⏳/%), Zonen-Abschlusszähler,
+ *     Top-5 Kostentreiber-Balkendiagramm und Section-Toggles.
+ *   - [2026-10-03 09:45:00 CEST]: BUGFIX & HARMONISIERUNG:
+ *     1. ReferenceError behoben: isZoneFiltered und checkedBlockIds in 
+ *        renderSnapshotReviewReport sauber im Funktions-Scope initialisiert.
+ *     2. Bereichs-Filter fokussiert: Bei Auswahl eines Bereichs rendert die
+ *        Review-Tabelle strikt nur diesen Bereich; freie Blöcke werden ausgeblendet.
+ *     3. Zonen-Direktbuchungen im Filter über allMatchingZoneIds abgesichert.
+ *     4. Hierarchie-Icons (🚩 Ebene 0 / 📦 Ebene 1), linksbündige Status-Slots
+ *        und #f0fff4 Zeilen-Highlights für erledigte Elemente konsolidiert.
  * =============================================================================
  */
 
@@ -79,23 +84,6 @@ window.openReportModal = function () {
     openModal('reportModal');
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Reporting (Zwei-Ebenen Zonen-Hierarchie & Dynamische Block-Checkliste)
- * ERSETZEN IN: report.js (Funktionen populateReportFilters, handleZoneFilterChange & updateReportData)
- * Zeitstempel: 2026-10-03 09:40:00 CEST
- * Breadcrumbs:
- *   - [2026-10-03 09:25:00 CEST]: Status-Ausbau & Data-Bars.
- *   - [2026-10-03 09:40:00 CEST]: 
- *     1. populateReportFilters: repFilterZone limitiert auf genau 2 Ebenen 
- *        (Ebene 0: 🚩 Ort/Hauptbereich, Ebene 1: └── 📦 Unterbereich). Tiefere Ebenen entfallen.
- *     2. handleZoneFilterChange: Blendet #repBlockFilterGroup erst ein, wenn ein Bereich
- *        gewählt ist, und befüllt Checkboxen aller darin liegenden Baugruppen.
- *     3. updateReportData: Berücksichtigt nur noch die aktiv angehakten Baugruppen.
- * =============================================================================
- */
-
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
@@ -137,10 +125,9 @@ window.populateReportFilters = function () {
             const childZones = sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === tz.id));
             childZones.forEach(cz => {
                 const czDoc = cz.doc_number ? `[${cz.doc_number}] ` : '';
-                // \u00A0 erzeugt geschützte Leerzeichen für die Einrückung im HTML-Select
                 selZone.add(new Option(`\u00A0\u00A0\u00A0\u00A0└── 📦 ${czDoc}${cz.title}`, cz.id));
             });
-            // Ebenen > 1 werden strikt ignoriert
+            // Ebenen > 1 werden im Dropdown bewusst ignoriert
         });
     }
 
@@ -148,11 +135,10 @@ window.populateReportFilters = function () {
         selStatus.value = 'all';
     }
 
-    // Checklisten-Zustand zurücksetzen
+    // Checklisten-Zustand initialisieren
     window.handleZoneFilterChange();
 };
 
-// Schaltet die Checkliste ein/aus und befüllt sie mit den Baugruppen des gewählten Bereichs
 window.handleZoneFilterChange = function () {
     const selZone = document.getElementById('repFilterZone');
     const groupEl = document.getElementById('repBlockFilterGroup');
@@ -212,7 +198,6 @@ window.handleZoneFilterChange = function () {
     updateReportData();
 };
 
-// Schalter für Schnellauswahl "Alle / Keine"
 window.toggleAllReportBlocks = function () {
     const checkboxes = Array.from(document.querySelectorAll('.rep-block-checkbox'));
     if (checkboxes.length === 0) return;
@@ -273,7 +258,6 @@ window.toggleReportSections = function () {
     if (sTable && tTable) sTable.style.display = tTable.checked ? 'flex' : 'none';
 };
 
-// Canvas Donut-Chart Generator für HTML & PDF
 function createPieChartImage(spent, budget, baseColor) {
     const cvs = document.createElement('canvas');
     cvs.width = 120;
@@ -285,27 +269,23 @@ function createPieChartImage(spent, budget, baseColor) {
     const isOver = spent > b;
     const fillCol = isOver ? '#e53e3e' : baseColor;
 
-    // Hintergrund
     ctx.beginPath();
     ctx.moveTo(60, 60);
     ctx.arc(60, 60, 50, 0, 2 * Math.PI);
     ctx.fillStyle = '#e2e8f0';
     ctx.fill();
 
-    // Gefüllter Sektor
     ctx.beginPath();
     ctx.moveTo(60, 60);
     ctx.arc(60, 60, 50, -Math.PI / 2, -Math.PI / 2 + (pct * 2 * Math.PI));
     ctx.fillStyle = fillCol;
     ctx.fill();
 
-    // Inneres Loch
     ctx.beginPath();
     ctx.arc(60, 60, 30, 0, 2 * Math.PI);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
 
-    // Zentrierter Prozentwert
     ctx.fillStyle = '#2d3748';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
@@ -326,6 +306,7 @@ window.updateReportData = function () {
     const timeframe = document.getElementById('repTimeframe')?.value || 'today';
     const filterZone = document.getElementById('repFilterZone')?.value || 'all';
     const filterBlock = document.getElementById('repFilterBlock')?.value || 'all';
+    const filterStatus = document.getElementById('repFilterStatus')?.value || 'all';
 
     const now = new Date();
     let startDate, endDate;
@@ -413,30 +394,53 @@ window.updateReportData = function () {
         `;
     }
 
-    // 2. Gefilterte Logs für das gewählte Intervall (inkl. Checklisten-Filter)
+    // 2. Hierarchische Zonen- und Baugruppen-Filterung
+    const isZoneFiltered = (filterZone !== 'all');
+    const allMatchingZoneIds = new Set();
+
+    if (isZoneFiltered) {
+        allMatchingZoneIds.add(filterZone);
+        const collectDescendants = (parentId) => {
+            (currentZones || []).filter(z => z.parent_zone_id === parentId).forEach(cz => {
+                allMatchingZoneIds.add(cz.id);
+                collectDescendants(cz.id);
+            });
+        };
+        collectDescendants(filterZone);
+    }
+
     const checkedCheckboxes = Array.from(document.querySelectorAll('.rep-block-checkbox:checked'));
     const checkedBlockIds = new Set(checkedCheckboxes.map(cb => cb.value));
-    const isZoneFiltered = (filterZone !== 'all');
 
     let filteredLogs = (currentTimeLogs || []).filter(log => {
         const logDate = new Date(log.logged_at);
         if (logDate < startDate || logDate > endDate) return false;
         if (filterUser !== 'all' && log.user_code !== filterUser) return false;
 
+        // Baugruppen-Dropdown (falls aktiv)
+        if (filterBlock !== 'all' && log.node_id !== filterBlock) return false;
+
+        // Bereichs- und Checklisten-Filter
         if (isZoneFiltered) {
-            // Wenn Baugruppen angehakt sind: Nur gebuchte Stunden dieser Baugruppen werten
             if (log.node_id) {
                 if (!checkedBlockIds.has(log.node_id)) return false;
             } else if (log.zone_id) {
-                // Direkte Rahmen-Zeiten des gewählten Bereichs einbeziehen
-                if (log.zone_id !== filterZone) {
-                    const node = (currentNodes || []).find(n => n.id === log.node_id);
-                    if (!node || !checkedBlockIds.has(node.id)) return false;
-                }
+                if (!allMatchingZoneIds.has(log.zone_id)) return false;
             } else {
                 return false;
             }
         }
+
+        // Fertigstellungs-Statusfilter
+        if (filterStatus !== 'all' && log.node_id) {
+            const node = (currentNodes || []).find(n => n.id === log.node_id);
+            if (node) {
+                const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
+                if (filterStatus === 'completed' && !isDone) return false;
+                if (filterStatus === 'open' && isDone) return false;
+            }
+        }
+
         return true;
     });
 
@@ -460,6 +464,12 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
     const summaryContainer = document.getElementById('repSummaryContainer');
     const detailsContainer = document.getElementById('repDetailsContainer');
     const filterStatus = document.getElementById('repFilterStatus')?.value || 'all';
+    const filterZone = document.getElementById('repFilterZone')?.value || 'all';
+    const isZoneFiltered = (filterZone !== 'all');
+
+    const checkedCheckboxes = Array.from(document.querySelectorAll('.rep-block-checkbox:checked'));
+    const checkedBlockIds = new Set(checkedCheckboxes.map(cb => cb.value));
+
     if (!summaryContainer || !detailsContainer) return;
 
     // Ermittelt Status und Fortschritt zum gewählten Stichtag (Snapshot B oder Live)
@@ -548,6 +558,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
     function getZoneCompletionStats(zoneId) {
         let total = 0, done = 0;
         (currentNodes || []).filter(n => n.zone_id === zoneId && n.block_type !== 'note').forEach(n => {
+            if (isZoneFiltered && !checkedBlockIds.has(n.id)) return;
             total++;
             const st = getNodeStatus(n.id);
             if (st.status === 'completed' || (st.pDesign === 100 && st.pDrafting === 100)) done++;
@@ -560,14 +571,24 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         return { total, done };
     }
 
-    const topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => ({
-        zone: z,
-        subtreeEffort: calculateSubtreeIntervalEffort(z.id)
-    }));
-    topZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
+    // Zonen für den Tabellen-Einstieg bestimmen (Fokus bei Bereichs-Filterung)
+    let topZones = [];
+    if (isZoneFiltered) {
+        const specificZone = (currentZones || []).find(z => z.id === filterZone);
+        if (specificZone) {
+            topZones = [{ zone: specificZone, subtreeEffort: calculateSubtreeIntervalEffort(specificZone.id) }];
+        }
+    } else {
+        topZones = (currentZones || []).filter(z => !z.parent_zone_id).map(z => ({
+            zone: z,
+            subtreeEffort: calculateSubtreeIntervalEffort(z.id)
+        }));
+        topZones.sort((a, b) => b.subtreeEffort - a.subtreeEffort);
+    }
 
     let globalTotalNodes = 0, globalDoneNodes = 0;
     (currentNodes || []).filter(n => n.block_type !== 'note').forEach(n => {
+        if (isZoneFiltered && !checkedBlockIds.has(n.id)) return;
         globalTotalNodes++;
         const st = getNodeStatus(n.id);
         if (st.status === 'completed' || (st.pDesign === 100 && st.pDrafting === 100)) globalDoneNodes++;
@@ -637,25 +658,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         (snapB.snapshot_data.zones || []).forEach(z => { newZoneBudgets[z.id] = (z.budget_design || 0) + (z.budget_drafting || 0); });
     }
 
-    /**
-  * =============================================================================
-  * Projekt: CAD Time Manager
-  * Domain: Reporting (Hierarchie-Icons 🚩/📦, linksbündige Status-Spalte & Zeilen-Highlight)
-  * ERSETZEN IN: report.js (In renderSnapshotReviewReport -> Ab renderZoneRows bis unzonedNodes-Ende)
-  * Zeitstempel: 2026-10-03 09:30:00 CEST
-  * Breadcrumbs:
-  *   - [2026-10-03 09:15:00 CEST]: Status-Erkennung & Data-Bars.
-  *   - [2026-10-03 09:30:00 CEST]: OPTISCHE RUHE & HIERARCHIE:
-  *     1. DISMISSED: Einheitliches Ordner-Icon (📁) für alle Ebenen.
-  *        NEU: Oberste Rahmen (Ebene 0 / Orte) erhalten das Fähnchen (🚩),
-  *        alle Unterrahmen (Ebene > 0) erhalten das Inventor-Baugruppen-SVG (CAD_ICONS.assembly).
-  *     2. DISMISSED: Text-Badge "[✅ Erledigt]" am Zeilenende (unruhig durch variable Textlängen).
-  *        NEU: Kompaktes Häkchen (✅) bzw. Sanduhr (⏳) in fixer 22px-Spalte LINKS vor DOC-/Artikelnr.
-  *     3. HIGHLIGHT: Abgeschlossene Elemente erhalten die Zeilenfarbe #f0fff4 (sanftes Grün),
-  *        wodurch der Fertigstellungsgrad ohne Suchen im gesamten Baum sofort ins Auge springt.
-  * =============================================================================
-  */
-
     function renderZoneRows(zoneObj, level) {
         const z = zoneObj.zone;
         const zEffort = zoneObj.subtreeEffort;
@@ -677,12 +679,11 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
         const indentPx = level * 18;
         const docLabel = z.doc_number ? `[${escapeHtml(z.doc_number)}] ` : '';
 
-        // 1. Icon-Differenzierung: Oberste Ebene = Fähnchen 🚩, Unterebene = Baugruppen-SVG
+        // Ebene 0: 🚩 Ort / Hauptbereich | Ebene > 0: 📦 Baugruppe
         const zoneIconHtml = (level === 0)
             ? `<span style="font-size: 13px; margin-right: 5px;" title="Hauptbereich / Ort">🚩</span>`
             : `<span style="display: inline-flex; align-items: center; margin-right: 5px;" title="Baugruppe">${window.CAD_ICONS ? CAD_ICONS.assembly : '📦'}</span>`;
 
-        // Kompakter Zähler ohne überflüssigen Text (z.B. "3/4 ✅")
         let zoneDoneBadge = '';
         if (zComp.total > 0) {
             const badgeBg = isAllDone ? '#c6f6d5' : '#e2e8f0';
@@ -707,7 +708,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             </tr>
         `;
 
-        // 2. Untergeordnete Blöcke im Rahmen
+        // 1. Blöcke im Rahmen
         const childNodes = (currentNodes || [])
             .filter(n => n.zone_id === z.id && n.block_type !== 'note')
             .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
@@ -721,7 +722,8 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
 
             if (filterStatus === 'completed' && !isDone) return;
             if (filterStatus === 'open' && isDone) return;
-            // Baugruppen-Checklisten-Filter berücksichtigen
+
+            // Baugruppen-Checklistenfilter
             if (isZoneFiltered && !checkedBlockIds.has(n.id)) return;
 
             const nTotal = totalSpentToDateNode[n.id] || 0;
@@ -740,7 +742,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const nDocBadge = nDoc ? `<span style="font-family:monospace; font-size:9px; background:#e2e8f0; padding:1px 4px; border-radius:3px; margin-right:4px;">${escapeHtml(nDoc)}</span>` : '';
             const iconSvg = n.block_type === 'part' ? (window.CAD_ICONS ? CAD_ICONS.part : '⚙️') : (window.CAD_ICONS ? CAD_ICONS.assembly : '📦');
 
-            // 3. Status-Badge: Fixe 22px-Breite linksbündig VOR dem DOC-Badge
+            // Status-Slot mit fester 22px-Breite linksbündig VOR dem DOC-Badge
             let statusIcon = '';
             if (isDone) {
                 statusIcon = '<span style="font-size: 11px;" title="Erledigt">✅</span>';
@@ -752,7 +754,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             }
             const statusSlotHtml = `<span style="display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 16px; margin-right: 4px; flex-shrink: 0;">${statusIcon}</span>`;
 
-            // 4. Ladebalken-Berechnung
+            // Inline-Ladebalken
             const hasBudget = nCurBud > 0;
             const actualPct = hasBudget ? Math.round((nTotal / nCurBud) * 100) : 0;
             const barWidthPct = hasBudget ? Math.min(actualPct, 100) : (nTotal > 0 ? 100 : 0);
@@ -760,7 +762,6 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             const barColor = isDone ? '#38a169' : (!hasBudget ? '#a0aec0' : (isOver ? '#e53e3e' : '#3182ce'));
             const pctLabel = hasBudget ? `${actualPct}%` : '—';
 
-            // Vollflächiger grüner Hintergrund bei erledigtem Status
             const rowBg = isDone ? '#f0fff4' : 'transparent';
             const rowHoverBg = isDone ? '#dcfce7' : '#f8fafc';
 
@@ -794,7 +795,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
             `;
         });
 
-        // 5. Rekursion für Unterrahmen
+        // 2. Untergeordnete Rahmen
         const subZones = (currentZones || [])
             .filter(cz => cz.parent_zone_id === z.id)
             .map(cz => ({ zone: cz, subtreeEffort: calculateSubtreeIntervalEffort(cz.id) }));
@@ -805,12 +806,12 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
 
     topZones.forEach(topZoneObj => { renderZoneRows(topZoneObj, 0); });
 
-    // Freie Blöcke (ohne Rahmen)
+    // Freie Blöcke (ohne Rahmen) nur anzeigen, wenn kein spezifischer Bereich gefiltert ist
     const unzonedNodes = (currentNodes || [])
         .filter(n => !n.zone_id && n.block_type !== 'note')
         .map(n => ({ node: n, effort: getNodeEffort(n.id) }));
 
-    if (unzonedNodes.length > 0) {
+    if (unzonedNodes.length > 0 && !isZoneFiltered) {
         unzonedNodes.sort((a, b) => b.effort - a.effort);
         const unzonedTotal = unzonedNodes.reduce((acc, curr) => acc + curr.effort, 0);
 
@@ -1024,7 +1025,7 @@ function renderReportSummary(logs, timeframe) {
 }
 
 // =============================================================================
-// 6. STANDARD-LOGBUCH TABELLE (MIT STATUS-BADGES)
+// 6. STANDARD-LOGBUCH TABELLE (MIT STATUS-BADGES & ZEILENFARBE)
 // =============================================================================
 
 function renderReportDetailsTable(logs) {
@@ -1057,12 +1058,13 @@ function renderReportDetailsTable(logs) {
         let nodeName = 'Unbekannt';
         let zoneName = '-';
         let statusBadge = '';
+        let isDone = false;
 
         if (log.node_id) {
             const node = (currentNodes || []).find(n => n.id === log.node_id);
             if (node) {
                 nodeName = node.name;
-                const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
+                isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
                 const isPending = (node.completion_status === 'pending_approval');
 
                 if (filterStatus === 'completed' && !isDone) return;
@@ -1098,8 +1100,11 @@ function renderReportDetailsTable(logs) {
             timeStr = log.note && (log.note.includes('Revision') || log.note.includes('Ablehnen')) ? '↺' : '✔';
         }
 
+        const rowBg = isDone ? '#f0fff4' : 'transparent';
+        const rowHoverBg = isDone ? '#dcfce7' : '#f8fafc';
+
         html += `
-        <tr>
+        <tr style="background: ${rowBg}; transition: background 0.15s ease;" onmouseover="this.style.background='${rowHoverBg}'" onmouseout="this.style.background='${rowBg}'">
           <td>${dateStr}</td>
           <td><strong>${escapeHtml(log.user_code)}</strong></td>
           <td style="color:#718096;">${escapeHtml(zoneName)}</td>
@@ -1246,12 +1251,13 @@ window.generatePDF = async function () {
                 let nodeName = 'Unbekannt';
                 let zoneName = '-';
                 let statusBadge = '';
+                let isDone = false;
 
                 if (log.node_id) {
                     const node = (currentNodes || []).find(n => n.id === log.node_id);
                     if (node) {
                         nodeName = node.name;
-                        const isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
+                        isDone = (node.completion_status === 'completed') || (node.progress_design === 100 && node.progress_drafting === 100);
                         if (isDone) statusBadge = ' [✅ Erledigt]';
                         else if (node.completion_status === 'pending_approval') statusBadge = ' [⏳ Freigabe]';
 
@@ -1288,8 +1294,10 @@ window.generatePDF = async function () {
                     }
                 }
 
+                const rowBg = isDone ? '#f0fff4' : '#ffffff';
+
                 tableRows += `
-                    <tr>
+                    <tr style="background: ${rowBg};">
                         <td>${dateStr}</td>
                         <td><strong>${escapeHtml(log.user_code)}</strong></td>
                         <td style="color:#718096;">${escapeHtml(zoneName)}</td>
