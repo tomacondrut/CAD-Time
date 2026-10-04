@@ -300,10 +300,7 @@ html, body {
     will-change: transform;
 }
 
-/* Deaktiviert während schneller Mausradfahrten lediglich die Pointer-Events zur Entlastung */
-#viewport.is-zooming {
-    pointer-events: none;
-}
+
 
 
 /* Native SVG Connection Layer */
@@ -2087,19 +2084,6 @@ html, body {
 
 .mgr-handoff-badge.ready-2d {
     animation: livePulseSoft 2s infinite ease-in-out !important;
-}
-
-/* 2. Während der Zoomfahrt (LERP): Range-Slider und Hover-Prüfungen pausieren */
-#viewport.is-zooming .mgr-prog-slider {
-    pointer-events: none !important;
-}
-
-#viewport.is-zooming .mgr-status-popover {
-    display: none !important;
-}
-
-#viewport.is-zooming .manager-card {
-    box-shadow: none !important;
 }
 
 /**

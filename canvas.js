@@ -333,6 +333,22 @@ window.smoothAnimateTo = function (targetScale, targetPanX, targetPanY, duration
     canvasAnimFrameId = requestAnimationFrame(step);
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Stufenloser Zoom bis 10x & unterbrechungsfreies Rad)
+ * ERSETZEN IN: canvas.js (Ab window.zoomCanvas bis Ende des wheel-Listeners)
+ * Zeitstempel: 2026-10-04 11:45:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-04 11:35:00 CEST]: rAF-Interpolator smoothAnimateTo.
+ *   - [2026-10-04 11:45:00 CEST]: BUGFIX ZOOM & WHEEL:
+ *     1. Max-Scale von 3.0 auf 10.0 (1000%) angehoben (Min-Scale 0.02).
+ *     2. Störungsfreies Mausrad: Ankerpunkt wird bei kontinuierlichem Scrollen
+ *        stabil gehalten, kein Abbruch durch pointer-events Drops.
+ *     3. is-zooming DOM-Klassenmutationen entfernt (Linien bleiben 100% sichtbar).
+ * =============================================================================
+ */
+
 window.zoomCanvas = function (factor) {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -343,7 +359,8 @@ window.zoomCanvas = function (factor) {
     const worldX = (cx - window.currentPanX) / window.currentScale;
     const worldY = (cy - window.currentPanY) / window.currentScale;
 
-    const newScale = Math.min(Math.max(0.05, window.currentScale * factor), 3.0);
+    // Skalierung bis 10.0 (1000%) freigegeben
+    const newScale = Math.min(Math.max(0.02, window.currentScale * factor), 10.0);
     const newPanX = cx - (worldX * newScale);
     const newPanY = cy - (worldY * newScale);
 
@@ -378,6 +395,85 @@ if (btnZoomReset) {
         }
     };
 }
+
+// ---------------------------------------------------------
+// SMOOTH MAUSRAD-ZOOM (Kontinuierlicher Flow ohne Aussetzer)
+// ---------------------------------------------------------
+let zoomTargetScale = window.currentScale;
+let anchorWorldX = 0;
+let anchorWorldY = 0;
+let anchorMouseX = 0;
+let anchorMouseY = 0;
+let zoomAnimFrameId = null;
+
+const stopZoomAnimation = () => {
+    zoomTargetScale = window.currentScale;
+    if (zoomAnimFrameId) {
+        cancelAnimationFrame(zoomAnimFrameId);
+        zoomAnimFrameId = null;
+    }
+};
+
+viewport.addEventListener('mousedown', stopZoomAnimation, { capture: true });
+viewport.addEventListener('touchstart', stopZoomAnimation, { capture: true });
+
+viewport.addEventListener('wheel', (e) => {
+    if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
+        return;
+    }
+    e.preventDefault();
+
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) {
+        dy *= 28;
+    } else if (e.deltaMode === 2) {
+        dy *= 350;
+    }
+    dy = Math.max(-600, Math.min(600, dy));
+
+    const rect = viewport.getBoundingClientRect();
+    const curMouseX = e.clientX - rect.left;
+    const curMouseY = e.clientY - rect.top;
+
+    // Ankerpunkt stabil halten: Nur neu fixieren, wenn die Maus tatsächlich versetzt wurde
+    if (!zoomAnimFrameId || Math.hypot(curMouseX - anchorMouseX, curMouseY - anchorMouseY) > 2) {
+        anchorMouseX = curMouseX;
+        anchorMouseY = curMouseY;
+        anchorWorldX = (anchorMouseX - window.currentPanX) / window.currentScale;
+        anchorWorldY = (anchorMouseY - window.currentPanY) / window.currentScale;
+    }
+
+    const zoomIntensity = 0.0015;
+    const zoomFactor = Math.exp(-dy * zoomIntensity);
+    // Skalierung von 0.02x bis 10.0x stufenlos erlaubt
+    zoomTargetScale = Math.min(Math.max(0.02, zoomTargetScale * zoomFactor), 10.0);
+
+    if (!zoomAnimFrameId) {
+        const smoothZoomLoop = () => {
+            const diffScale = zoomTargetScale - window.currentScale;
+
+            // Dynamische Abbruchschwelle relativ zur aktuellen Skalierung
+            if (Math.abs(diffScale) < 0.0004 * window.currentScale) {
+                window.currentScale = zoomTargetScale;
+                window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+                window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
+                applyCanvasTransform();
+                zoomAnimFrameId = null;
+                return;
+            }
+
+            // Dämpfung 0.22 für butterweichen, präzisen CAD-Zoom
+            window.currentScale += diffScale * 0.22;
+            window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+            window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
+
+            applyCanvasTransform();
+            zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+        };
+
+        zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+    }
+}, { passive: false });
 
 /**
  * =============================================================================
@@ -715,7 +811,7 @@ function initNativeCanvasEngine() {
             if (pinchStartDist <= 0) return;
 
             const factor = curDist / pinchStartDist;
-            const newScale = Math.min(Math.max(0.05, pinchStartScale * factor), 3.0);
+            const newScale = Math.min(Math.max(0.02, pinchStartScale * factor), 10.0);
 
             const rect = viewport.getBoundingClientRect();
             const curMidX = ((t1.clientX + t2.clientX) / 2) - rect.left;
@@ -798,90 +894,7 @@ function initNativeCanvasEngine() {
  * =============================================================================
  */
 
-    // ---------------------------------------------------------
-    // SMOOTH MAUSRAD-ZOOM (Logitech MX Master & Exakter Maus-Fokus)
-    // ---------------------------------------------------------
-    let zoomTargetScale = window.currentScale;
-    let anchorWorldX = 0;
-    let anchorWorldY = 0;
-    let anchorMouseX = 0;
-    let anchorMouseY = 0;
-    let zoomAnimFrameId = null;
 
-    const stopZoomAnimation = () => {
-        zoomTargetScale = window.currentScale;
-        if (zoomAnimFrameId) {
-            cancelAnimationFrame(zoomAnimFrameId);
-            zoomAnimFrameId = null;
-            viewport.classList.remove('is-zooming');
-        }
-    };
-
-    viewport.addEventListener('mousedown', stopZoomAnimation, { capture: true });
-    viewport.addEventListener('touchstart', stopZoomAnimation, { capture: true });
-
-    viewport.addEventListener('wheel', (e) => {
-        if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
-            return;
-        }
-        e.preventDefault();
-
-        // 1. deltaMode vereinheitlichen (0 = Pixel [Trackpad/Freilauf], 1 = Zeilen [Raster], 2 = Seiten)
-        let dy = e.deltaY;
-        if (e.deltaMode === 1) {
-            dy *= 28;
-        } else if (e.deltaMode === 2) {
-            dy *= 350;
-        }
-        dy = Math.max(-600, Math.min(600, dy));
-
-        // 2. Cursor-Position im Viewport ermitteln
-        const rect = viewport.getBoundingClientRect();
-        anchorMouseX = e.clientX - rect.left;
-        anchorMouseY = e.clientY - rect.top;
-
-        // 3. Exakter Weltpunkt unter dem Fadenkreuz zum aktuellen Zeitpunkt
-        anchorWorldX = (anchorMouseX - window.currentPanX) / window.currentScale;
-        anchorWorldY = (anchorMouseY - window.currentPanY) / window.currentScale;
-
-        // 4. Exponentielle Skalierung
-        const zoomIntensity = 0.0015;
-        const zoomFactor = Math.exp(-dy * zoomIntensity);
-        zoomTargetScale = Math.min(Math.max(0.05, zoomTargetScale * zoomFactor), 3.0);
-
-        // 5. Animations-Schleife (60–144 Hz)
-        if (!zoomAnimFrameId) {
-            viewport.classList.add('is-zooming'); // Schaltet teure Schatten & Animationen temporär ab
-
-            const smoothZoomLoop = () => {
-                const diffScale = zoomTargetScale - window.currentScale;
-
-                // Abbruchschwelle
-                if (Math.abs(diffScale) < 0.0006) {
-                    window.currentScale = zoomTargetScale;
-                    window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
-                    window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
-                    applyCanvasTransform(false);
-
-                    zoomAnimFrameId = null;
-                    viewport.classList.remove('is-zooming');
-                    return;
-                }
-
-                // Dämpfungsfaktor (0.24 = weiches, gleitendes CAD-Gefühl)
-                window.currentScale += diffScale * 0.24;
-
-                // Mathematisch perfekte Zentrierung: Keine separate Pan-Dämpfung!
-                window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
-                window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
-
-                applyCanvasTransform(false);
-                zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
-            };
-
-            zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
-        }
-    }, { passive: false });
 
     // ---------------------------------------------------------
     // KONTEXTMENÜ
