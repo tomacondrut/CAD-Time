@@ -265,6 +265,35 @@ window.updateContextMenuVisibility = function (nodeId, zoneId) {
  *     3. window.zoomCanvas animiert flüssig via rAF mit Viewport-Zentrierung.
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Konsolidierte Zoom-, Transform- & Wheel-Pipeline)
+ * ERSETZEN IN: canvas.js (Von 'let saveTransformTimeout = null;' bis Ende 'initNativeCanvasEngine')
+ * Zeitstempel: 2026-10-04 11:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-04 11:50:00 CEST]: BUGFIX:
+ *     1. Duplizierten zoomCanvas- und Button-Block aus initNativeCanvasEngine entfernt.
+ *     2. Stufenloser Zoom bis 10.0 (1000%) ohne Texturlimit-Kollision.
+ *     3. Mausrad-Engine unterbrechungsfrei in den Viewport-Scope integriert.
+ *     4. Kein Flickern von SVG-Verbindungslinien oder Karten mehr.
+ * =============================================================================
+ */
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Konsolidierte Zoom-, Transform- & Wheel-Pipeline)
+ * ERSETZEN IN: canvas.js (Von 'let saveTransformTimeout = null;' bis vor 'window.addEventListener(\'click\'...')
+ * Zeitstempel: 2026-10-04 11:55:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-04 11:55:00 CEST]: BUGFIX KONSOLIDIERUNG:
+ *     1. Alle redundanten zoomCanvas- und Button-Listener aus initNativeCanvasEngine entfernt.
+ *     2. Stufenlose Skalierung von 0.02 (2%) bis 10.0 (1000%) freigegeben.
+ *     3. Einzelne, saubere Button-Bindung per .onclick (kein Mehrfachfeuern mehr).
+ *     4. Mausrad läuft unterbrechungsfrei durch fixierten Welt-Ankerpunkt.
+ * =============================================================================
+ */
 
 let saveTransformTimeout = null;
 let lastRenderedGridScale = -1;
@@ -333,22 +362,6 @@ window.smoothAnimateTo = function (targetScale, targetPanX, targetPanY, duration
     canvasAnimFrameId = requestAnimationFrame(step);
 };
 
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Stufenloser Zoom bis 10x & unterbrechungsfreies Rad)
- * ERSETZEN IN: canvas.js (Ab window.zoomCanvas bis Ende des wheel-Listeners)
- * Zeitstempel: 2026-10-04 11:45:00 CEST
- * Breadcrumbs:
- *   - [2026-10-04 11:35:00 CEST]: rAF-Interpolator smoothAnimateTo.
- *   - [2026-10-04 11:45:00 CEST]: BUGFIX ZOOM & WHEEL:
- *     1. Max-Scale von 3.0 auf 10.0 (1000%) angehoben (Min-Scale 0.02).
- *     2. Störungsfreies Mausrad: Ankerpunkt wird bei kontinuierlichem Scrollen
- *        stabil gehalten, kein Abbruch durch pointer-events Drops.
- *     3. is-zooming DOM-Klassenmutationen entfernt (Linien bleiben 100% sichtbar).
- * =============================================================================
- */
-
 window.zoomCanvas = function (factor) {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -359,7 +372,7 @@ window.zoomCanvas = function (factor) {
     const worldX = (cx - window.currentPanX) / window.currentScale;
     const worldY = (cy - window.currentPanY) / window.currentScale;
 
-    // Skalierung bis 10.0 (1000%) freigegeben
+    // Stufenlose Skalierung bis 10.0 (1000%)
     const newScale = Math.min(Math.max(0.02, window.currentScale * factor), 10.0);
     const newPanX = cx - (worldX * newScale);
     const newPanY = cy - (worldY * newScale);
@@ -367,212 +380,6 @@ window.zoomCanvas = function (factor) {
     window.smoothAnimateTo(newScale, newPanX, newPanY, 200);
 };
 
-// Event-Listener für Zoom-Controls unten rechts
-const btnZoomIn = document.getElementById('btnZoomIn');
-const btnZoomOut = document.getElementById('btnZoomOut');
-const btnZoomReset = document.getElementById('btnZoomReset');
-
-if (btnZoomIn) {
-    btnZoomIn.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.zoomCanvas(1.3);
-    };
-}
-if (btnZoomOut) {
-    btnZoomOut.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.zoomCanvas(1 / 1.3);
-    };
-}
-if (btnZoomReset) {
-    btnZoomReset.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof window.centerViewOnVisible === 'function') {
-            window.centerViewOnVisible(null, true);
-        }
-    };
-}
-
-// ---------------------------------------------------------
-// SMOOTH MAUSRAD-ZOOM (Kontinuierlicher Flow ohne Aussetzer)
-// ---------------------------------------------------------
-let zoomTargetScale = window.currentScale;
-let anchorWorldX = 0;
-let anchorWorldY = 0;
-let anchorMouseX = 0;
-let anchorMouseY = 0;
-let zoomAnimFrameId = null;
-
-const stopZoomAnimation = () => {
-    zoomTargetScale = window.currentScale;
-    if (zoomAnimFrameId) {
-        cancelAnimationFrame(zoomAnimFrameId);
-        zoomAnimFrameId = null;
-    }
-};
-
-viewport.addEventListener('mousedown', stopZoomAnimation, { capture: true });
-viewport.addEventListener('touchstart', stopZoomAnimation, { capture: true });
-
-viewport.addEventListener('wheel', (e) => {
-    if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
-        return;
-    }
-    e.preventDefault();
-
-    let dy = e.deltaY;
-    if (e.deltaMode === 1) {
-        dy *= 28;
-    } else if (e.deltaMode === 2) {
-        dy *= 350;
-    }
-    dy = Math.max(-600, Math.min(600, dy));
-
-    const rect = viewport.getBoundingClientRect();
-    const curMouseX = e.clientX - rect.left;
-    const curMouseY = e.clientY - rect.top;
-
-    // Ankerpunkt stabil halten: Nur neu fixieren, wenn die Maus tatsächlich versetzt wurde
-    if (!zoomAnimFrameId || Math.hypot(curMouseX - anchorMouseX, curMouseY - anchorMouseY) > 2) {
-        anchorMouseX = curMouseX;
-        anchorMouseY = curMouseY;
-        anchorWorldX = (anchorMouseX - window.currentPanX) / window.currentScale;
-        anchorWorldY = (anchorMouseY - window.currentPanY) / window.currentScale;
-    }
-
-    const zoomIntensity = 0.0015;
-    const zoomFactor = Math.exp(-dy * zoomIntensity);
-    // Skalierung von 0.02x bis 10.0x stufenlos erlaubt
-    zoomTargetScale = Math.min(Math.max(0.02, zoomTargetScale * zoomFactor), 10.0);
-
-    if (!zoomAnimFrameId) {
-        const smoothZoomLoop = () => {
-            const diffScale = zoomTargetScale - window.currentScale;
-
-            // Dynamische Abbruchschwelle relativ zur aktuellen Skalierung
-            if (Math.abs(diffScale) < 0.0004 * window.currentScale) {
-                window.currentScale = zoomTargetScale;
-                window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
-                window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
-                applyCanvasTransform();
-                zoomAnimFrameId = null;
-                return;
-            }
-
-            // Dämpfung 0.22 für butterweichen, präzisen CAD-Zoom
-            window.currentScale += diffScale * 0.22;
-            window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
-            window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
-
-            applyCanvasTransform();
-            zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
-        };
-
-        zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
-    }
-}, { passive: false });
-
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, Zoom & Events)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-17 22:50:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 22:50:00 CEST]: BUGFIX: Linksklick-Panning auf Hintergrund aktiviert, 
- *     Touch-Events für Wisch-Panning auf mobilen Geräten hinzugefügt.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, Zoom & Events)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-17 23:05:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 22:50:00 CEST]: Sichere Initialisierung.
- *   - [2026-09-17 23:05:00 CEST]: 1. Multiplikativer Zoom für weichere & natürlichere 
- *     Skalierung mit präzisem Maus-Fokus. 2. Panning-Filter verfeinert: Linksklick-Pan
- *     funktioniert jetzt auch auf den leeren Flächen der Manager-Rahmen.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, Zoom & Events)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-17 23:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 23:05:00 CEST]: Multiplikativer Zoom & Pan-Filter.
- *   - [2026-09-17 23:15:00 CEST]: BUGFIX: "Event-Swallowing" beim Zoomen behoben. 
- *     Scroll-Filter auf echte Tabellen (.inline-logs-container, .log-table, .zone-body) reduziert.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan-Filter & Ghost-Image Prevention)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
- * Zeitstempel: 2026-09-26 13:40:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 23:15:00 CEST]: Multiplikativer Zoom.
- *   - [2026-09-26 13:40:00 CEST]: BUGFIX: 1. Natives dragstart auf Canvas unterbunden
- *     (verhindert, dass der Canvas als transparentes Bild verschoben wird).
- *     2. .project-zone in isInteractive aufgenommen (ungesperrte Rahmen starten 
- *     kein Canvas-Panning mehr; gesperrte Rahmen lassen Pan gezielt durch).
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Manager-Canvas Ghosting-Eliminierung & Pan-Fix)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
- * Zeitstempel: 2026-09-26 13:50:00 CEST
- * Breadcrumbs:
- *   - [2026-09-26 13:40:00 CEST]: Pan-Filter & e.preventDefault() Basis.
- *   - [2026-09-26 13:50:00 CEST]: BUGFIX: Viewport-weites dragstart-Interception
- *     aktiviert. Blockiert das Ghosting im Manager-Canvas vollständig,
- *     während das Hineinziehen aus der Sidebar (.sb-pool-item) erhalten bleibt.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Rechtsklick- & Panning-Reparatur)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine)
- * Zeitstempel: 2026-09-26 14:10:00 CEST
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, 2-Finger-Pinch-Zoom & Gesture-Guard)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-27 11:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-26 14:10:00 CEST]: Pan-Filter & Rechtsklick-Schutz.
- *   - [2026-09-27 11:15:00 CEST]: BUGFIX: Natives Browser-Zoomen unterbunden 
- *     (iOS gesturestart & multi-touch preventDefault). 2-Finger-Pinch-Zoom 
- *     direkt auf dem Canvas mit dynamischem Mittelpunkt implementiert.
- * =============================================================================
- */
-/**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Pan, 2-Finger-Pinch-Zoom & Gesture-Guard)
- * ERSETZEN IN: canvas.js (Funktion initNativeCanvasEngine komplett ersetzen)
- * Zeitstempel: 2026-09-27 11:45:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 11:15:00 CEST]: Basis Multi-Touch.
- *   - [2026-09-27 11:45:00 CEST]: BUGFIX: 1. Scope-Fehler behoben: window.isPinching 
- *     einheitlich genutzt (zuvor blockierte let isPinching im Closure den Zoom-Aufruf).
- *     2. On-the-fly Pinch-Initialisierung in touchmove integriert.
- *     3. window.isPinching im touchend/touchcancel zuverlässig zurückgesetzt.
- * =============================================================================
- */
 function initNativeCanvasEngine() {
     const viewport = document.getElementById('viewport');
     if (!viewport) return;
@@ -584,9 +391,6 @@ function initNativeCanvasEngine() {
         }
     });
 
-    // ---------------------------------------------------------
-    // SAFARI / CHROME GESTURE-BLOCKER (Verhindert Browser-Skalierung)
-    // ---------------------------------------------------------
     const preventBrowserGesture = (e) => {
         if (e.cancelable) e.preventDefault();
     };
@@ -598,7 +402,6 @@ function initNativeCanvasEngine() {
     let startX = 0, startY = 0;
     let startPanX = 0, startPanY = 0;
 
-    // Pinch-to-Zoom State (konsistent an window gebunden)
     window.isPinching = false;
     let pinchStartDist = 0;
     let pinchStartScale = 1;
@@ -614,20 +417,6 @@ function initNativeCanvasEngine() {
         viewport.style.cursor = 'grabbing';
     };
 
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (PC-Pan Restore & Mobile Zero-Repaint Pipeline)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> Ab mousedown bis stopPanOrPinch)
- * Zeitstempel: 2026-09-27 13:35:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 13:15:00 CEST]: Touch-rAF.
- *   - [2026-09-27 13:35:00 CEST]: BUGFIX: 1. window mousemove Event für PC-Panning
- *     vollständig wiederhergestellt. 2. .is-zooming strikt auf echten 2-Finger-Pinch
- *     begrenzt. 1-Finger-Pan läuft als reine GPU-Verschiebung ohne Re-Paints der Blöcke.
- * =============================================================================
- */
-
     // ---------------------------------------------------------
     // PANNING (Desktop Maus)
     // ---------------------------------------------------------
@@ -642,7 +431,7 @@ function initNativeCanvasEngine() {
             const isButtonOrAction = e.target.closest('button, .zone-actions, input, select');
 
             if ((isLockedZone || isManagerZoneBody) && !isButtonOrAction) {
-                // Panning durch gesperrte Zonen erlauben
+                // Pan durch gesperrte Zonen erlauben
             } else {
                 if (e.button === 0 && !e.altKey) return;
             }
@@ -654,14 +443,13 @@ function initNativeCanvasEngine() {
         }
     });
 
-    // Wiederhergestellter PC-Maus-Listener
     window.addEventListener('mousemove', (e) => {
         if (!isPanning) return;
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         window.currentPanX = startPanX + dx;
         window.currentPanY = startPanY + dy;
-        applyCanvasTransform(false);
+        applyCanvasTransform();
     });
 
     let touchRafPending = false;
@@ -669,75 +457,11 @@ function initNativeCanvasEngine() {
         if (!touchRafPending) {
             touchRafPending = true;
             requestAnimationFrame(() => {
-                applyCanvasTransform(false);
+                applyCanvasTransform();
                 touchRafPending = false;
             });
         }
     };
-
-
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Zoom-Buttons, Reorient & Center-Fit)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine vor contextmenu-Listener)
- * Zeitstempel: 2026-10-04 11:15:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 12:05:00 CEST]: LERP Smooth-Zoom & Viewport-Transform.
- *   - [2026-10-04 11:15:00 CEST]: BUGFIX: Event-Listener für #btnZoomIn, #btnZoomOut
- *     und #btnZoomReset (⟲ Reorient) implementiert. Viewport-Zentrierter Zoom und
- *     glattes Einpassen aller sichtbaren Elemente (centerViewOnVisible).
- * =============================================================================
- */
-
-    // ---------------------------------------------------------
-    // ZOOM-BUTTONS & REORIENT (Unten Rechts)
-    // ---------------------------------------------------------
-    window.zoomCanvas = function (factor, animate = true) {
-        const viewport = document.getElementById('viewport');
-        if (!viewport) return;
-        const rect = viewport.getBoundingClientRect();
-        const cx = rect.width / 2;
-        const cy = rect.height / 2;
-
-        const worldX = (cx - window.currentPanX) / window.currentScale;
-        const worldY = (cy - window.currentPanY) / window.currentScale;
-
-        const newScale = Math.min(Math.max(0.05, window.currentScale * factor), 3.0);
-        window.currentScale = newScale;
-        window.currentPanX = cx - (worldX * newScale);
-        window.currentPanY = cy - (worldY * newScale);
-
-        applyCanvasTransform(animate);
-    };
-
-    const btnZoomIn = document.getElementById('btnZoomIn');
-    const btnZoomOut = document.getElementById('btnZoomOut');
-    const btnZoomReset = document.getElementById('btnZoomReset');
-
-    if (btnZoomIn) {
-        btnZoomIn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.zoomCanvas(1.3, true);
-        });
-    }
-    if (btnZoomOut) {
-        btnZoomOut.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.zoomCanvas(1 / 1.3, true);
-        });
-    }
-    if (btnZoomReset) {
-        btnZoomReset.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (typeof window.centerViewOnVisible === 'function') {
-                window.centerViewOnVisible(null, true);
-            }
-        });
-    }
 
     // ---------------------------------------------------------
     // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
@@ -748,7 +472,6 @@ function initNativeCanvasEngine() {
             window.isPinching = true;
             window.isDraggingAnything = false;
             isPanning = false;
-            viewport.classList.add('is-zooming'); // Nur beim Skalieren Effekte reduzieren
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
@@ -776,12 +499,10 @@ function initNativeCanvasEngine() {
 
         if (e.touches.length === 1 && !window.isPinching) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
-            // Kein is-zooming beim 1-Finger Pan -> verhindert Neurendern aller Karten
         }
     }, { capture: true, passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        // 2-Finger Pinch Zooming
         if (e.touches.length === 2) {
             if (e.cancelable) e.preventDefault();
 
@@ -789,7 +510,6 @@ function initNativeCanvasEngine() {
                 window.isPinching = true;
                 window.isDraggingAnything = false;
                 isPanning = false;
-                viewport.classList.add('is-zooming');
 
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
@@ -825,7 +545,6 @@ function initNativeCanvasEngine() {
             return;
         }
 
-        // 1-Finger Canvas Panning (Reines GPU-Blitting)
         if (isPanning && e.touches.length === 1 && !window.isPinching) {
             if (e.cancelable) e.preventDefault();
             const dx = e.touches[0].clientX - startX;
@@ -854,47 +573,117 @@ function initNativeCanvasEngine() {
             isPanning = false;
             viewport.style.cursor = 'default';
         }
-
-        if (!e.touches || e.touches.length === 0) {
-            viewport.classList.remove('is-zooming');
-            applyCanvasTransform(false);
-        }
     };
 
     window.addEventListener('mouseup', stopPanOrPinch);
     window.addEventListener('touchend', stopPanOrPinch);
     window.addEventListener('touchcancel', stopPanOrPinch);
 
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Smooth LERP Zoom & MX Master High-Res Engine)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> MAUSRAD-ZOOM Bereich)
- * Zeitstempel: 2026-09-27 11:55:00 CEST
- * Breadcrumbs:
- *   - [2026-09-17 23:15:00 CEST]: Basis-Mausradzoom (starr 0.9/1.1).
- *   - [2026-09-27 11:55:00 CEST]: 1. deltaMode- & deltaY-Normalisierung für 
- *     Logitech MX Master (MagSpeed Freilauf / High-Res Scrolling) und Trackpads.
- *     2. LERP-Interpolation via requestAnimationFrame für butterweiches 120Hz-Zoomen.
- *     3. Mausfokus bleibt während der Animation stabil unter dem Cursor verankert.
- * =============================================================================
- */
+    // ---------------------------------------------------------
+    // SMOOTH MAUSRAD-ZOOM (Logitech MX Master & Trackpad)
+    // ---------------------------------------------------------
+    let zoomTargetScale = window.currentScale;
+    let anchorWorldX = 0;
+    let anchorWorldY = 0;
+    let anchorMouseX = 0;
+    let anchorMouseY = 0;
+    let zoomAnimFrameId = null;
 
-    /**
- * =============================================================================
- * Projekt: CAD Time Manager
- * Domain: Native Canvas Engine (Exakter Cursor-Anker & Smooth LERP-Zoom)
- * ERSETZEN IN: canvas.js (In initNativeCanvasEngine -> MAUSRAD-ZOOM Bereich)
- * Zeitstempel: 2026-09-27 12:05:00 CEST
- * Breadcrumbs:
- *   - [2026-09-27 11:55:00 CEST]: Erste LERP-Version.
- *   - [2026-09-27 12:05:00 CEST]: BUGFIX: Drift an Mausposition behoben.
- *     Mauspunkt wird in Weltkoordinaten verankert; PanX/PanY werden im Render-Loop
- *     strikt synchron an Scale gekoppelt. Klasse .is-zooming schaltet teure Effekte ab.
- * =============================================================================
- */
+    const stopZoomAnimation = () => {
+        zoomTargetScale = window.currentScale;
+        if (zoomAnimFrameId) {
+            cancelAnimationFrame(zoomAnimFrameId);
+            zoomAnimFrameId = null;
+        }
+    };
 
+    viewport.addEventListener('mousedown', stopZoomAnimation, { capture: true });
+    viewport.addEventListener('touchstart', stopZoomAnimation, { capture: true });
 
+    viewport.addEventListener('wheel', (e) => {
+        if (e.target.closest('.inline-logs-container, .log-table, .zone-body, .time-inputs-row, .live-timer-time-inputs') && !e.ctrlKey && !e.metaKey) {
+            return;
+        }
+        e.preventDefault();
+
+        let dy = e.deltaY;
+        if (e.deltaMode === 1) {
+            dy *= 28;
+        } else if (e.deltaMode === 2) {
+            dy *= 350;
+        }
+        dy = Math.max(-600, Math.min(600, dy));
+
+        const rect = viewport.getBoundingClientRect();
+        const curMouseX = e.clientX - rect.left;
+        const curMouseY = e.clientY - rect.top;
+
+        if (!zoomAnimFrameId) {
+            anchorMouseX = curMouseX;
+            anchorMouseY = curMouseY;
+            anchorWorldX = (anchorMouseX - window.currentPanX) / window.currentScale;
+            anchorWorldY = (anchorMouseY - window.currentPanY) / window.currentScale;
+        }
+
+        const zoomIntensity = 0.0015;
+        const zoomFactor = Math.exp(-dy * zoomIntensity);
+        zoomTargetScale = Math.min(Math.max(0.02, zoomTargetScale * zoomFactor), 10.0);
+
+        if (!zoomAnimFrameId) {
+            const smoothZoomLoop = () => {
+                const diffScale = zoomTargetScale - window.currentScale;
+
+                if (Math.abs(diffScale) < 0.0002) {
+                    window.currentScale = zoomTargetScale;
+                    window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+                    window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
+                    applyCanvasTransform();
+                    zoomAnimFrameId = null;
+                    return;
+                }
+
+                window.currentScale += diffScale * 0.22;
+                window.currentPanX = anchorMouseX - (anchorWorldX * window.currentScale);
+                window.currentPanY = anchorMouseY - (anchorWorldY * window.currentScale);
+
+                applyCanvasTransform();
+                zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+            };
+
+            zoomAnimFrameId = requestAnimationFrame(smoothZoomLoop);
+        }
+    }, { passive: false });
+
+    // ---------------------------------------------------------
+    // ZOOM-BUTTONS & REORIENT (Unten Rechts)
+    // ---------------------------------------------------------
+    const btnZoomIn = document.getElementById('btnZoomIn');
+    const btnZoomOut = document.getElementById('btnZoomOut');
+    const btnZoomReset = document.getElementById('btnZoomReset');
+
+    if (btnZoomIn) {
+        btnZoomIn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.zoomCanvas(1.3);
+        };
+    }
+    if (btnZoomOut) {
+        btnZoomOut.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.zoomCanvas(1 / 1.3);
+        };
+    }
+    if (btnZoomReset) {
+        btnZoomReset.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof window.centerViewOnVisible === 'function') {
+                window.centerViewOnVisible(null, true);
+            }
+        };
+    }
 
     // ---------------------------------------------------------
     // KONTEXTMENÜ

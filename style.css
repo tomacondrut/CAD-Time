@@ -288,6 +288,18 @@ html, body {
  * =============================================================================
  */
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (GPU-Stabilität & Vektor-Klarheit)
+ * ERSETZEN IN: style.css (Zeilen 120–135)
+ * Zeitstempel: 2026-10-04 11:50:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-04 11:35:00 CEST]: will-change: transform entfernt, um das 
+ *     Überschreiten des GPU-Texturlimits (8192px) und Linien-Aussetzer zu stoppen.
+ * =============================================================================
+ */
+
 #canvas {
     width: 3000px;
     height: 3000px;
@@ -297,7 +309,6 @@ html, body {
     background: transparent;
     transform-origin: 0 0;
     touch-action: none !important;
-    will-change: transform;
 }
 
 
