@@ -274,6 +274,20 @@ html, body {
     user-select: none;
 }
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Stylesheet (GPU Layer Promotion & Zero-Thrashing Zoom)
+ * ERSETZEN IN: style.css (Block #canvas und Block #viewport.is-zooming)
+ * Zeitstempel: 2026-10-04 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:05:00 CEST]: Basis Canvas.
+ *   - [2026-10-04 11:35:00 CEST]: will-change: transform auf #canvas fixiert.
+ *     Zyklisches Entfernen von box-shadow und Opacity-Wechseln unter .is-zooming
+ *     eliminiert, um Render-Jank und Frame-Drops bei Mausrad-Zoom zu beheben.
+ * =============================================================================
+ */
+
 #canvas {
     width: 3000px;
     height: 3000px;
@@ -283,6 +297,12 @@ html, body {
     background: transparent;
     transform-origin: 0 0;
     touch-action: none !important;
+    will-change: transform;
+}
+
+/* Deaktiviert während schneller Mausradfahrten lediglich die Pointer-Events zur Entlastung */
+#viewport.is-zooming {
+    pointer-events: none;
 }
 
 
@@ -1766,21 +1786,6 @@ html, body {
  * Zeitstempel: 2026-09-27 13:20:00 CEST
  * =============================================================================
  */
-#viewport.is-zooming .assembly-card,
-#viewport.is-zooming .project-zone {
-    box-shadow: none !important;
-}
-
-/* Verhindert ständiges Re-Rasterisieren der animierten SVG-Striche */
-#viewport.is-zooming #flow-layer {
-    opacity: 0.2;
-    pointer-events: none;
-}
-
-#viewport.is-zooming #connections-layer {
-    opacity: 0.5;
-}
-
 /* Info Modal Tabs */
 .info-tabs-header {
     display: flex;

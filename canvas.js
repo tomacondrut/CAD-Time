@@ -249,29 +249,35 @@ window.updateContextMenuVisibility = function (nodeId, zoneId) {
  *     2. Beim Pannen bleibt backgroundSize unberührt (Scale ändert sich nicht, 0% CPU-Last).
  * =============================================================================
  */
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Jitter- & Flickerfreie GPU-Transform Pipeline)
+ * ERSETZEN IN: canvas.js (Funktion applyCanvasTransform bis vor initNativeCanvasEngine)
+ * Zeitstempel: 2026-10-04 11:35:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 13:50:00 CEST]: Viewport-Grid-Sync.
+ *   - [2026-10-04 11:35:00 CEST]: BUGFIX FLICKER & FPS:
+ *     1. CSS-Transitions auf #canvas und #viewport restlos entfernt (behebt
+ *        Texture-Dropping, weiße Aussetzer und Ruckler bei Button-Klicks).
+ *     2. window.smoothAnimateTo implementiert: 60-144Hz rAF-Interpolator mit
+ *        Cubic-Ease-Out für Buttons, Reorient und Kamera-Fokus.
+ *     3. window.zoomCanvas animiert flüssig via rAF mit Viewport-Zentrierung.
+ * =============================================================================
+ */
+
 let saveTransformTimeout = null;
 let lastRenderedGridScale = -1;
+let canvasAnimFrameId = null;
 
-function applyCanvasTransform(animate = false) {
+function applyCanvasTransform() {
     const canvasEl = document.getElementById('canvas');
     const viewportEl = document.getElementById('viewport');
     if (!canvasEl) return;
 
-    if (animate) {
-        canvasEl.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-        if (viewportEl) {
-            viewportEl.style.transition = 'background-position 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-size 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-        }
-        setTimeout(() => {
-            canvasEl.style.transition = 'none';
-            if (viewportEl) viewportEl.style.transition = 'none';
-        }, 200);
-    }
-
     canvasEl.style.transform = `translate3d(${window.currentPanX}px, ${window.currentPanY}px, 0) scale(${window.currentScale})`;
 
     if (viewportEl) {
-        // Exakter Sync beim Zoomen; keine Neuberechnung beim reinen Pannen
         if (lastRenderedGridScale !== window.currentScale) {
             const scaledGridSize = 24 * window.currentScale;
             viewportEl.style.backgroundSize = `${scaledGridSize}px ${scaledGridSize}px`;
@@ -286,6 +292,91 @@ function applyCanvasTransform(animate = false) {
         localStorage.setItem('cad_tm_panY', window.currentPanY);
         localStorage.setItem('cad_tm_scale', window.currentScale);
     }, 300);
+}
+
+// Zentraler rAF-Interpolator für Buttons, Reorient und Fokus-Fahrten
+window.smoothAnimateTo = function (targetScale, targetPanX, targetPanY, duration = 200) {
+    if (canvasAnimFrameId) {
+        cancelAnimationFrame(canvasAnimFrameId);
+        canvasAnimFrameId = null;
+    }
+
+    const startScale = window.currentScale;
+    const startPanX = window.currentPanX;
+    const startPanY = window.currentPanY;
+    const startTime = performance.now();
+
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const ease = easeOutCubic(progress);
+
+        window.currentScale = startScale + (targetScale - startScale) * ease;
+        window.currentPanX = startPanX + (targetPanX - startPanX) * ease;
+        window.currentPanY = startPanY + (targetPanY - startPanY) * ease;
+
+        applyCanvasTransform();
+
+        if (progress < 1) {
+            canvasAnimFrameId = requestAnimationFrame(step);
+        } else {
+            window.currentScale = targetScale;
+            window.currentPanX = targetPanX;
+            window.currentPanY = targetPanY;
+            applyCanvasTransform();
+            canvasAnimFrameId = null;
+        }
+    };
+
+    canvasAnimFrameId = requestAnimationFrame(step);
+};
+
+window.zoomCanvas = function (factor) {
+    const viewport = document.getElementById('viewport');
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    const worldX = (cx - window.currentPanX) / window.currentScale;
+    const worldY = (cy - window.currentPanY) / window.currentScale;
+
+    const newScale = Math.min(Math.max(0.05, window.currentScale * factor), 3.0);
+    const newPanX = cx - (worldX * newScale);
+    const newPanY = cy - (worldY * newScale);
+
+    window.smoothAnimateTo(newScale, newPanX, newPanY, 200);
+};
+
+// Event-Listener für Zoom-Controls unten rechts
+const btnZoomIn = document.getElementById('btnZoomIn');
+const btnZoomOut = document.getElementById('btnZoomOut');
+const btnZoomReset = document.getElementById('btnZoomReset');
+
+if (btnZoomIn) {
+    btnZoomIn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.zoomCanvas(1.3);
+    };
+}
+if (btnZoomOut) {
+    btnZoomOut.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.zoomCanvas(1 / 1.3);
+    };
+}
+if (btnZoomReset) {
+    btnZoomReset.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.centerViewOnVisible === 'function') {
+            window.centerViewOnVisible(null, true);
+        }
+    };
 }
 
 /**
@@ -3538,11 +3629,23 @@ window.centerViewOnVisible = function (targetZoneId = null, animate = false) {
         }
     }
 
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Reorient-Glättung über smoothAnimateTo)
+ * ERSETZEN IN: canvas.js (Am Ende von window.centerViewOnVisible)
+ * Zeitstempel: 2026-10-04 11:35:00 CEST
+ * =============================================================================
+ */
     if (!hasElements || !isFinite(minX) || !isFinite(minY)) {
-        window.currentScale = 1;
-        window.currentPanX = 50;
-        window.currentPanY = 50;
-        applyCanvasTransform(animate);
+        if (animate && typeof window.smoothAnimateTo === 'function') {
+            window.smoothAnimateTo(1, 50, 50, 250);
+        } else {
+            window.currentScale = 1;
+            window.currentPanX = 50;
+            window.currentPanY = 50;
+            applyCanvasTransform();
+        }
         return;
     }
 
@@ -3563,11 +3666,17 @@ window.centerViewOnVisible = function (targetZoneId = null, animate = false) {
     let targetScale = Math.min(scaleX, scaleY);
     targetScale = Math.max(0.05, Math.min(targetScale, 2.5));
 
-    window.currentScale = targetScale;
-    window.currentPanX = (vw / 2) - (centerX * window.currentScale);
-    window.currentPanY = (vh / 2) - (centerY * window.currentScale);
+    const targetPanX = (vw / 2) - (centerX * targetScale);
+    const targetPanY = (vh / 2) - (centerY * targetScale);
 
-    applyCanvasTransform(animate);
+    if (animate && typeof window.smoothAnimateTo === 'function') {
+        window.smoothAnimateTo(targetScale, targetPanX, targetPanY, 260);
+    } else {
+        window.currentScale = targetScale;
+        window.currentPanX = targetPanX;
+        window.currentPanY = targetPanY;
+        applyCanvasTransform();
+    }
 };
 window.adjustCanvasBounds = function () {
     let maxX = 0, maxY = 0;
@@ -3859,6 +3968,14 @@ window.handlePasteNodes = async function () {
 * =============================================================================
 */
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Manager-Zonen-Fokus via smoothAnimateTo)
+ * ERSETZEN IN: canvas.js (Funktion window.centerOnManagerZone)
+ * Zeitstempel: 2026-10-04 11:35:00 CEST
+ * =============================================================================
+ */
 window.centerOnManagerZone = function (zoneId) {
     const layout = (typeof getManagerLayout === 'function') ? getManagerLayout() : null;
     if (!layout || !Array.isArray(layout.zones)) return;
@@ -3877,11 +3994,17 @@ window.centerOnManagerZone = function (zoneId) {
     const padding = 80;
     const targetScale = Math.max(0.2, Math.min(1.5, Math.min((vw - padding * 2) / zW, (vh - padding * 2) / zH)));
 
-    window.currentScale = targetScale;
-    window.currentPanX = (vw / 2) - ((zone.pos_x + (zW / 2)) * targetScale);
-    window.currentPanY = (vh / 2) - ((zone.pos_y + (zH / 2)) * targetScale);
+    const targetPanX = (vw / 2) - ((zone.pos_x + (zW / 2)) * targetScale);
+    const targetPanY = (vh / 2) - ((zone.pos_y + (zH / 2)) * targetScale);
 
-    if (typeof applyCanvasTransform === 'function') applyCanvasTransform(true);
+    if (typeof window.smoothAnimateTo === 'function') {
+        window.smoothAnimateTo(targetScale, targetPanX, targetPanY, 240);
+    } else {
+        window.currentScale = targetScale;
+        window.currentPanX = targetPanX;
+        window.currentPanY = targetPanY;
+        applyCanvasTransform();
+    }
 
     const el = document.getElementById(zoneId);
     if (el) {
