@@ -488,6 +488,70 @@ function initNativeCanvasEngine() {
         }
     };
 
+
+    /**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Native Canvas Engine (Zoom-Buttons, Reorient & Center-Fit)
+ * ERSETZEN IN: canvas.js (In initNativeCanvasEngine vor contextmenu-Listener)
+ * Zeitstempel: 2026-10-04 11:15:00 CEST
+ * Breadcrumbs:
+ *   - [2026-09-27 12:05:00 CEST]: LERP Smooth-Zoom & Viewport-Transform.
+ *   - [2026-10-04 11:15:00 CEST]: BUGFIX: Event-Listener für #btnZoomIn, #btnZoomOut
+ *     und #btnZoomReset (⟲ Reorient) implementiert. Viewport-Zentrierter Zoom und
+ *     glattes Einpassen aller sichtbaren Elemente (centerViewOnVisible).
+ * =============================================================================
+ */
+
+    // ---------------------------------------------------------
+    // ZOOM-BUTTONS & REORIENT (Unten Rechts)
+    // ---------------------------------------------------------
+    window.zoomCanvas = function (factor, animate = true) {
+        const viewport = document.getElementById('viewport');
+        if (!viewport) return;
+        const rect = viewport.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+
+        const worldX = (cx - window.currentPanX) / window.currentScale;
+        const worldY = (cy - window.currentPanY) / window.currentScale;
+
+        const newScale = Math.min(Math.max(0.05, window.currentScale * factor), 3.0);
+        window.currentScale = newScale;
+        window.currentPanX = cx - (worldX * newScale);
+        window.currentPanY = cy - (worldY * newScale);
+
+        applyCanvasTransform(animate);
+    };
+
+    const btnZoomIn = document.getElementById('btnZoomIn');
+    const btnZoomOut = document.getElementById('btnZoomOut');
+    const btnZoomReset = document.getElementById('btnZoomReset');
+
+    if (btnZoomIn) {
+        btnZoomIn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.zoomCanvas(1.3, true);
+        });
+    }
+    if (btnZoomOut) {
+        btnZoomOut.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.zoomCanvas(1 / 1.3, true);
+        });
+    }
+    if (btnZoomReset) {
+        btnZoomReset.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof window.centerViewOnVisible === 'function') {
+                window.centerViewOnVisible(null, true);
+            }
+        });
+    }
+
     // ---------------------------------------------------------
     // TOUCH EVENTS (Mobile 1-Finger Pan & 2-Finger Pinch-Zoom)
     // ---------------------------------------------------------
@@ -3411,8 +3475,15 @@ function renderConnections(mouseCoords = null) {
  * =============================================================================
  */
 
-// In window.centerViewOnVisible() den Manager-Modus Zweig aktualisieren:
-window.centerViewOnVisible = function (targetZoneId = null) {
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Canvas Engine (Kamera-Fokus mit optionaler Animations-Fahrt)
+ * ERSETZEN IN: canvas.js (Funktion window.centerViewOnVisible)
+ * Zeitstempel: 2026-10-04 11:15:00 CEST
+ * =============================================================================
+ */
+window.centerViewOnVisible = function (targetZoneId = null, animate = false) {
     if (!window.hiddenTopZoneIds) window.hiddenTopZoneIds = new Set();
     if (!window.hiddenMgrZoneIds) window.hiddenMgrZoneIds = new Set();
 
@@ -3471,7 +3542,7 @@ window.centerViewOnVisible = function (targetZoneId = null) {
         window.currentScale = 1;
         window.currentPanX = 50;
         window.currentPanY = 50;
-        applyCanvasTransform(false);
+        applyCanvasTransform(animate);
         return;
     }
 
@@ -3496,7 +3567,7 @@ window.centerViewOnVisible = function (targetZoneId = null) {
     window.currentPanX = (vw / 2) - (centerX * window.currentScale);
     window.currentPanY = (vh / 2) - (centerY * window.currentScale);
 
-    applyCanvasTransform(false);
+    applyCanvasTransform(animate);
 };
 window.adjustCanvasBounds = function () {
     let maxX = 0, maxY = 0;

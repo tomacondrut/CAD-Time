@@ -339,6 +339,38 @@ window.saveColorCategories = async function (categories) {
 // Genau ein initialer Abruf beim Laden
 window.fetchColorCategories();
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Rollenverwaltung & Projektleiter (PM) Status
+ * EINFÜGEN IN: db.js (Nach fetchColorCategories)
+ * Zeitstempel: 2026-10-04 11:20:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-04 11:20:00 CEST]: window.projectManagerCodes & fetchProjectManagers
+ *     angelegt. Persistiert PM-Kürzel in app_config und lokalem Cache.
+ * =============================================================================
+ */
+window.projectManagerCodes = new Set(JSON.parse(localStorage.getItem('cad_tm_pm_codes') || '[]'));
+
+window.fetchProjectManagers = async function () {
+    try {
+        const client = (typeof realDb !== 'undefined' && realDb) ? realDb : db;
+        if (!client) return;
+        const { data, error } = await client.from('app_config').select('value').eq('key', 'project_managers').single();
+        if (!error && data && data.value) {
+            const list = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+            if (Array.isArray(list)) {
+                window.projectManagerCodes = new Set(list.map(c => String(c).toUpperCase()));
+                localStorage.setItem('cad_tm_pm_codes', JSON.stringify([...window.projectManagerCodes]));
+            }
+        }
+    } catch (e) {
+        console.warn("Projektleiter aus Cache geladen:", e);
+    }
+};
+
+window.fetchProjectManagers();
+
 // Globale State-Arrays
 window.currentProjects = [];
 window.currentNodes = [];

@@ -2425,16 +2425,89 @@ window.renderPendingLogsTable = function () {
     container.innerHTML = html;
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: UI Controller (Admin Benutzerliste mit Projektleiter-Toggle)
+ * ERSETZEN IN: ui.js (Funktion renderAdminUserList und Toggle-Funktion)
+ * Zeitstempel: 2026-10-04 11:22:00 CEST
+ * Breadcrumbs:
+ *   - [2026-08-31 18:35:00 CEST]: Basis-Kürzelliste.
+ *   - [2026-10-04 11:22:00 CEST]: Admin kann Benutzern per Klick den Status 
+ *     '⭐ PM' (Projektleiter) zuweisen. PMs dürfen Auswertungen aller Benutzer sehen.
+ * =============================================================================
+ */
+window.isUserProjectManager = function (userCode) {
+    if (!userCode) return false;
+    const code = String(userCode).toUpperCase();
+    const u = (currentUsers || []).find(x => String(x.code).toUpperCase() === code);
+    if (u && (u.is_pm === true || u.role === 'pm' || u.role === 'project_manager')) return true;
+    if (window.projectManagerCodes && window.projectManagerCodes.has(code)) return true;
+    return false;
+};
+
+window.toggleUserProjectManager = async function (userId, code) {
+    if (!isAdmin) {
+        showToast('Nur Admins dürfen Projektleiter-Status zuweisen.', 'error');
+        return;
+    }
+    const targetCode = String(code).toUpperCase();
+    const willBePM = !window.isUserProjectManager(targetCode);
+
+    const user = (currentUsers || []).find(u => u.id === userId || String(u.code).toUpperCase() === targetCode);
+    if (user) user.is_pm = willBePM;
+
+    if (willBePM) {
+        window.projectManagerCodes.add(targetCode);
+    } else {
+        window.projectManagerCodes.delete(targetCode);
+    }
+    localStorage.setItem('cad_tm_pm_codes', JSON.stringify([...window.projectManagerCodes]));
+
+    try {
+        if (user && user.id && !String(user.id).startsWith('loc_')) {
+            await db.from('app_users').update({ is_pm: willBePM }).eq('id', user.id);
+        }
+    } catch (e) {
+        // Fallback falls app_users keine is_pm Spalte hat
+    }
+
+    try {
+        const client = (typeof realDb !== 'undefined' && realDb) ? realDb : db;
+        if (client) {
+            await client.from('app_config').upsert({
+                key: 'project_managers',
+                value: JSON.stringify([...window.projectManagerCodes]),
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'key' });
+        }
+    } catch (e) {
+        console.warn("Konnte app_config nicht aktualisieren:", e);
+    }
+
+    showToast(`Projektleiter-Status für ${targetCode} ${willBePM ? 'erteilt ⭐' : 'entzogen'}`, 'success');
+    window.renderAdminUserList();
+    if (typeof window.populateReportFilters === 'function') window.populateReportFilters();
+};
+
 window.renderAdminUserList = function () {
     const container = document.getElementById('userListContainer');
+    if (!container) return;
     container.innerHTML = '';
+
     currentUsers.forEach(u => {
+        const isPM = window.isUserProjectManager(u.code);
         const tag = document.createElement('div');
         tag.style.cssText = 'background:#edf2f7; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold; display:flex; align-items:center; gap:6px;';
         tag.innerHTML = `
-      <span>${u.code}</span>
-      <span style="color:#e53e3e; cursor:pointer;" onclick="handleDeleteUserCode('${u.id}')">&times;</span>
-    `;
+            <span>${escapeHtml(u.code)}</span>
+            <button type="button" onclick="window.toggleUserProjectManager('${u.id}', '${u.code}')" 
+                style="background:${isPM ? '#2b6cb0' : '#fff'}; color:${isPM ? '#fff' : '#718096'}; border:1px solid ${isPM ? '#2b6cb0' : '#cbd5e0'}; border-radius:3px; padding:1px 5px; font-size:9px; font-weight:bold; cursor:pointer;" 
+                title="${isPM ? 'Projektleiter-Status entziehen' : 'Als Projektleiter (PM) ernennen (darf alle Mitarbeiter auswerten)'}">
+                ${isPM ? '⭐ PM' : '☆ PM'}
+            </button>
+            <span style="color:#e53e3e; cursor:pointer; font-size:13px; margin-left:2px;" title="Kürzel löschen" onclick="handleDeleteUserCode('${u.id}')">&times;</span>
+        `;
         container.appendChild(tag);
     });
 };

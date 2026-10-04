@@ -84,16 +84,33 @@ window.openReportModal = function () {
     openModal('reportModal');
 };
 
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Projektleiter-Berechtigung für Mitarbeiterfilter)
+ * ERSETZEN IN: report.js (Funktion window.populateReportFilters)
+ * Zeitstempel: 2026-10-04 11:25:00 CEST
+ * Breadcrumbs:
+ *   - [2026-10-03 09:45:00 CEST]: Filter-Befüllung.
+ *   - [2026-10-04 11:25:00 CEST]: Neben Admins dürfen nun auch Benutzer mit
+ *     Projektleiter-Status (isUserProjectManager) 'Alle Mitarbeiter' auswerten.
+ * =============================================================================
+ */
 window.populateReportFilters = function () {
     const selUser = document.getElementById('repFilterUser');
     const selZone = document.getElementById('repFilterZone');
     const selStatus = document.getElementById('repFilterStatus');
 
+    const canSelectAllUsers = isAdmin || (typeof window.isUserProjectManager === 'function' && window.isUserProjectManager(activeUserCode));
+
     if (selUser) {
         selUser.innerHTML = '';
-        if (isAdmin) {
+        if (canSelectAllUsers) {
             selUser.add(new Option('Alle Mitarbeiter', 'all'));
-            (currentUsers || []).forEach(u => selUser.add(new Option(u.code, u.code)));
+            (currentUsers || []).forEach(u => {
+                const uIsPM = (typeof window.isUserProjectManager === 'function' && window.isUserProjectManager(u.code));
+                selUser.add(new Option(uIsPM ? `${u.code} (PM)` : u.code, u.code));
+            });
             selUser.disabled = false;
             selUser.value = 'all';
         } else {
@@ -114,20 +131,17 @@ window.populateReportFilters = function () {
             });
         };
 
-        // Ebene 0: Oberste Rahmen (Hauptbereiche / Standorte)
         const topZones = sortZonesByOrder((currentZones || []).filter(z => !z.parent_zone_id));
 
         topZones.forEach(tz => {
             const tzDoc = tz.doc_number ? `[${tz.doc_number}] ` : '';
             selZone.add(new Option(`🚩 ${tzDoc}${tz.title}`, tz.id));
 
-            // Ebene 1: Direkte Kinder des obersten Rahmens (Unterbaugruppen / Abschnitte)
             const childZones = sortZonesByOrder((currentZones || []).filter(z => z.parent_zone_id === tz.id));
             childZones.forEach(cz => {
                 const czDoc = cz.doc_number ? `[${cz.doc_number}] ` : '';
                 selZone.add(new Option(`\u00A0\u00A0\u00A0\u00A0└── 📦 ${czDoc}${cz.title}`, cz.id));
             });
-            // Ebenen > 1 werden im Dropdown bewusst ignoriert
         });
     }
 
@@ -135,7 +149,6 @@ window.populateReportFilters = function () {
         selStatus.value = 'all';
     }
 
-    // Checklisten-Zustand initialisieren
     window.handleZoneFilterChange();
 };
 
@@ -632,6 +645,93 @@ window.updateReportData = function () {
 // 4. REVIEW-SNAPSHOT VERGLEICHS-REPORT (MIT STATUS & HIERARCHIE)
 // =============================================================================
 
+
+/**
+ * =============================================================================
+ * Projekt: CAD Time Manager
+ * Domain: Reporting (Mitarbeiter-Aufwand: CAD, Zeichnung & Prozentbalken)
+ * EINFÜGEN IN: report.js (Vor renderSnapshotReviewReport)
+ * Zeitstempel: 2026-10-04 11:28:00 CEST
+ * =============================================================================
+ */
+function renderMemberBreakdownHtml(logs, totalIntervalHours) {
+    if (!logs || logs.length === 0 || totalIntervalHours <= 0) return '';
+
+    const memberStats = {};
+    logs.forEach(log => {
+        const user = (log.user_code || 'Unbekannt').toUpperCase();
+        const hrs = parseFloat(log.hours) || 0;
+        if (hrs <= 0) return;
+
+        if (!memberStats[user]) {
+            memberStats[user] = { cad: 0, draft: 0, total: 0 };
+        }
+        if (log.task_type === 'design') {
+            memberStats[user].cad += hrs;
+        } else if (log.task_type === 'drafting') {
+            memberStats[user].draft += hrs;
+        }
+        memberStats[user].total += hrs;
+    });
+
+    const members = Object.keys(memberStats).map(user => ({
+        user,
+        ...memberStats[user]
+    })).filter(m => m.total > 0);
+
+    if (members.length === 0) return '';
+
+    members.sort((a, b) => b.total - a.total);
+
+    const rowsHtml = members.map(m => {
+        const pctOfTotal = (m.total / totalIntervalHours) * 100;
+        const cadBarPct = (m.cad / totalIntervalHours) * 100;
+        const draftBarPct = (m.draft / totalIntervalHours) * 100;
+        const pctFormatted = pctOfTotal >= 0.5 ? Math.round(pctOfTotal) : pctOfTotal.toFixed(1);
+
+        const isPM = (typeof window.isUserProjectManager === 'function' && window.isUserProjectManager(m.user));
+        const pmBadge = isPM ? '<span style="font-size:9px; background:#ebf8ff; color:#2b6cb0; border:1px solid #bee3f8; border-radius:3px; padding:0 3px; font-weight:bold; margin-left:4px;">PM</span>' : '';
+
+        return `
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 11px; margin-bottom: 7px;">
+                <div style="width: 140px; display: flex; align-items: center; flex-shrink: 0;">
+                    <span class="user-tag" style="padding: 2px 7px; font-size: 10px; font-family: monospace; font-weight: bold; background: #2d3748; color: #fff;">${escapeHtml(m.user)}</span>
+                    ${pmBadge}
+                </div>
+                <div style="flex: 1; height: 16px; background: #edf2f7; border-radius: 4px; display: flex; overflow: hidden; position: relative;" title="${escapeHtml(m.user)}: ${formatHoursToHM(m.total)} (${pctFormatted}% der Gesamtzeit)">
+                    <div style="width: ${cadBarPct}%; background: #3182ce; transition: width 0.3s ease;" title="CAD: ${formatHoursToHM(m.cad)}"></div>
+                    <div style="width: ${draftBarPct}%; background: #38a169; transition: width 0.3s ease;" title="Zeichnung: ${formatHoursToHM(m.draft)}"></div>
+                </div>
+                <div style="width: 90px; text-align: right; font-family: monospace; font-size: 11px; color: #2b6cb0;" title="CAD-Stunden">
+                    📐 ${formatHoursToHM(m.cad)}
+                </div>
+                <div style="width: 90px; text-align: right; font-family: monospace; font-size: 11px; color: #38a169;" title="Zeichnungs-Stunden">
+                    📄 ${formatHoursToHM(m.draft)}
+                </div>
+                <div style="width: 120px; text-align: right; font-family: monospace; font-size: 11px; font-weight: bold; color: #2d3748;" title="Gesamtstunden und Anteil">
+                    ${formatHoursToHM(m.total)} <span style="font-size: 10px; font-weight: normal; color: #718096;">(${pctFormatted}%)</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div style="margin-top: 12px; background: #f8fafc; border: 1px solid #edf2f7; border-radius: 6px; padding: 12px 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: bold; color: #718096;">
+                    👥 Mitarbeiter-Aufwand &amp; Zeitanteile (Im Intervall)
+                </div>
+                <div style="display: flex; gap: 12px; font-size: 10px; color: #718096;">
+                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#3182ce; border-radius:2px;"></span> CAD</span>
+                    <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#38a169; border-radius:2px;"></span> Zeichnung</span>
+                </div>
+            </div>
+            ${rowsHtml}
+        </div>
+    `;
+}
+
+
 function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDate) {
     const summaryContainer = document.getElementById('repSummaryContainer');
     const detailsContainer = document.getElementById('repDetailsContainer');
@@ -769,8 +869,9 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
     const sADateStr = new Date(snapA.review_date).toLocaleDateString('de-DE');
     const sBDateStr = snapB ? new Date(snapB.review_date).toLocaleDateString('de-DE') : 'Heute (Live)';
     const sBTitle = snapB ? snapB.title : 'Live-Stand';
+    const memberBreakdownHtml = renderMemberBreakdownHtml(intervalLogs, totalCAD + totalDraft);
 
-    // 4. Header-Kacheln mit KPI
+    // 4. Header-Kacheln mit KPI & Mitarbeiter-Aufwand
     summaryContainer.innerHTML = `
         <div style="background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
             <div style="font-size: 11px; font-weight: bold; color: #2b6cb0;">
@@ -783,8 +884,8 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                 <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliches CAD</div>
                 <div style="font-size: 16px; font-weight: bold; color: #2b6cb0; margin-top: 2px;">+${formatHoursToHM(totalCAD)}</div>
             </div>
-            <div style="background: #edf2f7; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px; border: 1px solid #e2e8f0;">
-                <div style="font-size: 10px; color: #4a5568; text-transform: uppercase; font-weight: bold;">Zusätzliche Zeichn.</div>
+            <div style="background: #edf2f7; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px; border: 1px solid #c6f6d5;">
+                <div style="font-size: 10px; color: #2f855a; text-transform: uppercase; font-weight: bold;">Zusätzliche Zeichn.</div>
                 <div style="font-size: 16px; font-weight: bold; color: #38a169; margin-top: 2px;">+${formatHoursToHM(totalDraft)}</div>
             </div>
             <div style="background: #2d3748; padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
@@ -798,6 +899,7 @@ function renderSnapshotReviewReport(snapA, snapB, intervalLogs, startDate, endDa
                 </div>
             </div>
         </div>
+        ${memberBreakdownHtml}
     `;
 
     // 5. Strukturierte Tabelle
@@ -1187,10 +1289,13 @@ function renderReportSummary(logs, timeframe) {
         weekBreakdownHtml += `</tbody></table></div>`;
     }
 
+    const memberBreakdownHtml = renderMemberBreakdownHtml(logs, totalCAD + totalDraft);
+
     container.innerHTML = `
         <div style="display: flex; flex-direction: column; width: 100%; gap: 6px;">
             ${cardsHtml}
             ${visualChartHtml}
+            ${memberBreakdownHtml}
             ${weekBreakdownHtml}
         </div>
     `;
